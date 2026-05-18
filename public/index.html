@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VoidFaction</title>
+  <style>
+    body { margin: 0; background: #04060a; font-family: 'Consolas', monospace; color: #fff; overflow: hidden; }
+    #hud {
+      position: fixed; top: 12px; left: 12px; z-index: 10;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .line {
+      background: rgba(0, 20, 40, 0.7);
+      padding: 8px 12px;
+      border: 1px solid #4af;
+      border-radius: 4px;
+      font-size: 14px;
+      box-shadow: 0 0 12px rgba(74, 175, 255, 0.3);
+      pointer-events: none;
+    }
+    .line strong { color: #4af; }
+    #cooldown.ready { border-color: #4f8; color: #4f8; }
+    #cooldown.locked { border-color: #f84; color: #f84; }
+    #userLine { display: flex; align-items: center; gap: 10px; pointer-events: auto; }
+    #userLine button {
+      background: transparent; border: 1px solid #4af; color: #4af;
+      font-family: inherit; font-size: 12px; padding: 2px 8px; cursor: pointer; border-radius: 3px;
+    }
+    #userLine button:hover { background: #4af; color: #000; }
+    #userLine.anon { border-color: #888; color: #aaa; }
+    #userLine.anon strong { color: #aaa; }
+    #game { width: 100vw; height: 100vh; }
+    #hint {
+      position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
+      background: rgba(0, 20, 40, 0.7); padding: 6px 12px; border: 1px solid #4af;
+      border-radius: 4px; font-size: 12px; opacity: 0.7; pointer-events: none;
+    }
+
+    /* Auth modal */
+    #authModal {
+      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
+      display: flex; align-items: center; justify-content: center; z-index: 200;
+    }
+    #authModal.hidden { display: none; }
+    .modal-box {
+      background: #0a1424; border: 1px solid #4af; border-radius: 6px;
+      box-shadow: 0 0 32px rgba(74, 175, 255, 0.4);
+      padding: 24px 28px; min-width: 320px; position: relative;
+    }
+    .modal-box h2 { margin: 0 0 6px 0; color: #4af; font-size: 16px; }
+    .modal-box .subtitle { margin: 0 0 16px 0; font-size: 12px; opacity: 0.7; }
+    .tabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid #1a3050; }
+    .tab {
+      flex: 1; background: transparent; border: 0; color: #aaa;
+      font-family: inherit; font-size: 13px; padding: 8px; cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+    .tab.active { color: #4af; border-bottom-color: #4af; }
+    .modal-box form { display: flex; flex-direction: column; gap: 10px; }
+    .modal-box form.hidden { display: none; }
+    .modal-box input {
+      background: #000; color: #fff; border: 1px solid #4af; padding: 8px 10px;
+      font-family: monospace; font-size: 13px; border-radius: 3px;
+    }
+    .modal-box input:focus { outline: none; border-color: #6cf; }
+    .modal-box button[type="submit"] {
+      background: #4af; color: #000; border: 0; padding: 8px 16px;
+      font-family: monospace; cursor: pointer; font-weight: bold; border-radius: 3px;
+      margin-top: 4px;
+    }
+    .modal-box button[type="submit"]:hover { background: #6cf; }
+    .modal-box button[type="submit"]:disabled { opacity: 0.5; cursor: not-allowed; }
+    #authError { color: #f44; font-size: 12px; min-height: 16px; margin: 0; }
+    #authClose {
+      position: absolute; top: 8px; right: 12px; background: transparent;
+      border: 0; color: #888; font-size: 20px; cursor: pointer;
+    }
+    #authClose:hover { color: #fff; }
+  </style>
+</head>
+<body>
+  <div id="hud">
+    <div class="line" id="userLine">
+      <span>👤 <strong id="userLabel">Visiteur</strong></span>
+      <button id="authBtn">Se connecter</button>
+    </div>
+    <div class="line">Ressource de faction : <strong id="resource">0</strong></div>
+    <div class="line" id="cooldown">—</div>
+  </div>
+  <div id="hint">Clique sur le cristal pour contribuer (1 fois toutes les 6h)</div>
+  <div id="game"></div>
+
+  <div id="authModal" class="hidden">
+    <div class="modal-box">
+      <button id="authClose" aria-label="Fermer">×</button>
+      <h2>Rejoins la faction</h2>
+      <p class="subtitle">Connecte-toi ou crée un compte pour contribuer.</p>
+      <div class="tabs">
+        <button class="tab active" data-tab="login" type="button">Connexion</button>
+        <button class="tab" data-tab="signup" type="button">Inscription</button>
+      </div>
+      <form id="loginForm">
+        <input name="username" placeholder="Pseudo" autocomplete="username" required />
+        <input name="password" type="password" placeholder="Mot de passe" autocomplete="current-password" required />
+        <button type="submit">Se connecter</button>
+      </form>
+      <form id="signupForm" class="hidden">
+        <input name="username" placeholder="Pseudo (3-20 caractères)" autocomplete="username" required />
+        <input name="password" type="password" placeholder="Mot de passe (6 min)" autocomplete="new-password" required />
+        <button type="submit">Créer un compte</button>
+      </form>
+      <p id="authError"></p>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/player.js"></script>
+</body>
+</html>

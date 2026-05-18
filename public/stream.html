@@ -1,0 +1,61 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>VoidFaction — Cockpit Streameur</title>
+  <style>
+    body { margin: 0; background: #04060a; font-family: 'Consolas', monospace; color: #fff; overflow: hidden; }
+    #login {
+      position: fixed; inset: 0; display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.92); z-index: 100;
+    }
+    #login form {
+      background: #0a1424; border: 1px solid #4af; padding: 24px 28px; border-radius: 6px;
+      box-shadow: 0 0 32px rgba(74, 175, 255, 0.4); min-width: 280px;
+    }
+    #login h2 { margin: 0 0 12px 0; color: #4af; font-size: 16px; }
+    #login p { margin: 8px 0; font-size: 13px; }
+    #login input {
+      background: #000; color: #fff; border: 1px solid #4af; padding: 8px;
+      font-family: monospace; width: 100%; box-sizing: border-box; margin-bottom: 12px;
+    }
+    #login button {
+      background: #4af; color: #000; border: 0; padding: 8px 16px;
+      font-family: monospace; cursor: pointer; font-weight: bold;
+    }
+    #login button:hover { background: #6cf; }
+    #loginError { color: #f44; min-height: 16px; font-size: 12px; }
+    #hud {
+      position: fixed; top: 12px; left: 12px; z-index: 10; pointer-events: none;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    .line {
+      background: rgba(0, 20, 40, 0.7); padding: 8px 12px; border: 1px solid #f84;
+      border-radius: 4px; font-size: 14px; box-shadow: 0 0 12px rgba(255, 136, 68, 0.3);
+    }
+    .line strong { color: #f84; }
+    .hidden { display: none !important; }
+    #game { width: 100vw; height: 100vh; }
+  </style>
+</head>
+<body>
+  <div id="login">
+    <form id="loginForm">
+      <h2>&gt; ACCÈS COCKPIT</h2>
+      <p>Mot de passe streameur :</p>
+      <input type="password" id="password" autocomplete="off" autofocus />
+      <button type="submit">Connexion</button>
+      <p id="loginError"></p>
+    </form>
+  </div>
+  <div id="hud" class="hidden">
+    <div class="line">Ressource de faction : <strong id="resource">0</strong></div>
+    <div class="line">ZQSD — déplacement &nbsp;|&nbsp; Souris — visée</div>
+  </div>
+  <div id="game"></div>
+  <script src="https://cdn.jsdelivr.net/npm/phaser@3.80.1/dist/phaser.min.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="js/streamer.js"></script>
+</body>
+</html>

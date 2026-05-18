@@ -1,0 +1,13 @@
+Package Name: 2D Spaceships - Pack 3
+Package Version: v2025.11.6.a
+Number of Assets: 5
+Description: This pack contains 5 unique modern pixel art spaceships assets designed for 2D games. These assets can be used in various game genres, from top-down and sideways shooters games to strategy and sci-fi titles.
+Image Specifications: -
+Image Dimensions: 400x400 pixels
+Color Depth: 32 bits
+Transparency: Supported (Alpha Channel included)
+File Format: PNG
+Average File Size: ~99.6 KB per image
+Total Package Size: ~498 KB
+Usage: These assets are designed for use in 2D environments and are optimized for performance across platforms. Each asset has been carefully crafted with attention to detail to provide a consistent and visually appealing aesthetic for your game projects.
+Key Features: 5 unique modern pixel art spaceships designs. High-quality PNG images with transparent backgrounds. Compatible with all Unity versions that support 2D projects
