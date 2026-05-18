@@ -1,3 +1,5 @@
+console.log('[player.js] chargé (build diagnostic)');
+
 const WORLD_W = 1280;
 const WORLD_H = 720;
 
@@ -208,14 +210,23 @@ tabs.forEach((tab) => {
 
 async function submitAuth(endpoint, data) {
   authError.textContent = '';
-  const res = await fetch(endpoint, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  });
-  const body = await res.json().catch(() => ({}));
+  console.log('[auth] POST', endpoint, { username: data.username });
+  let res;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    });
+  } catch (e) {
+    console.error('[auth] fetch a échoué:', e);
+    authError.textContent = 'Erreur réseau: ' + (e?.message || 'inconnue');
+    return false;
+  }
+  const body = await res.json().catch((e) => { console.error('[auth] JSON parse:', e); return {}; });
+  console.log('[auth] réponse', res.status, body);
   if (!res.ok || !body.ok) {
-    authError.textContent = body.error || 'Erreur';
+    authError.textContent = body.error || `Erreur ${res.status}`;
     return false;
   }
   token = body.token;

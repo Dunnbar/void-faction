@@ -124,7 +124,8 @@ app.post('/api/signup', (req, res) => {
     stmtInsertSession.run(token, info.lastInsertRowid, Date.now());
     res.json({ ok: true, token, username });
   } catch (e) {
-    res.status(500).json({ ok: false, error: 'Erreur serveur' });
+    console.error('[signup] erreur:', e?.code || '', e?.message || e);
+    res.status(500).json({ ok: false, error: 'Erreur serveur: ' + (e?.code || e?.message || 'inconnue') });
   }
 });
 
@@ -230,4 +231,13 @@ server.listen(PORT, () => {
   console.log(`VoidFaction écoute sur le port ${PORT}`);
   const fromEnv = !!process.env.STREAMER_PASSWORD;
   console.log(`Streameur : STREAMER_PASSWORD source=${fromEnv ? 'env' : 'défaut'}, longueur=${STREAMER_PASSWORD.length}`);
+  // Diagnostic accès fichier
+  try {
+    const testFile = path.join(dataDir, '.write-test');
+    fs.writeFileSync(testFile, String(Date.now()));
+    fs.unlinkSync(testFile);
+    console.log(`DB : dataDir=${dataDir} (écriture OK)`);
+  } catch (e) {
+    console.error(`DB : dataDir=${dataDir} ÉCHEC ÉCRITURE:`, e?.code || e?.message);
+  }
 });

@@ -1,3 +1,5 @@
+console.log('[streamer.js] chargé (build diagnostic)');
+
 const WORLD_W = 1280;
 const WORLD_H = 720;
 
@@ -16,14 +18,20 @@ const pwdEye = document.getElementById('pwdEye');
 if (pwdToggle && pwdEye) {
   const eyeOpen = pwdEye.querySelector('.eye-open');
   const eyeClosed = pwdEye.querySelector('.eye-closed');
-  pwdToggle.addEventListener('click', () => {
+  console.log('[oeil] handler attaché', { eyeOpen: !!eyeOpen, eyeClosed: !!eyeClosed });
+  pwdToggle.addEventListener('click', (e) => {
+    e.preventDefault();
+    e.stopPropagation();
     const isHidden = passwordInput.type === 'password';
+    console.log('[oeil] click — type avant:', passwordInput.type);
     passwordInput.type = isHidden ? 'text' : 'password';
     if (eyeOpen) eyeOpen.style.display = isHidden ? 'none' : '';
     if (eyeClosed) eyeClosed.style.display = isHidden ? '' : 'none';
     pwdToggle.setAttribute('aria-label', isHidden ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
     passwordInput.focus();
   });
+} else {
+  console.warn('[oeil] elements introuvables:', { pwdToggle: !!pwdToggle, pwdEye: !!pwdEye });
 }
 
 loginForm.addEventListener('submit', (e) => {
