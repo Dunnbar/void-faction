@@ -6,7 +6,7 @@ const express = require('express');
 const { Server } = require('socket.io');
 const Database = require('better-sqlite3');
 
-const STREAMER_PASSWORD = process.env.STREAMER_PASSWORD || 'changeme';
+const STREAMER_PASSWORD = process.env.STREAMER_PASSWORD || 'satelitteOrion';
 const PORT = Number(process.env.PORT) || 3000;
 const CLICK_COOLDOWN_MS = 6 * 60 * 60 * 1000;
 const WORLD_W = 1280;

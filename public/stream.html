@@ -17,14 +17,22 @@
     #login h2 { margin: 0 0 12px 0; color: #4af; font-size: 16px; }
     #login p { margin: 8px 0; font-size: 13px; }
     #login input {
-      background: #000; color: #fff; border: 1px solid #4af; padding: 8px;
-      font-family: monospace; width: 100%; box-sizing: border-box; margin-bottom: 12px;
+      background: #000; color: #fff; border: 1px solid #4af; padding: 8px 40px 8px 8px;
+      font-family: monospace; width: 100%; box-sizing: border-box;
     }
-    #login button {
+    .pwd-wrap { position: relative; margin-bottom: 12px; }
+    .pwd-toggle {
+      position: absolute; right: 4px; top: 50%; transform: translateY(-50%);
+      background: transparent; border: 0; color: #4af; cursor: pointer;
+      padding: 4px; display: flex; align-items: center; justify-content: center;
+    }
+    .pwd-toggle:hover { color: #6cf; }
+    .pwd-toggle svg { display: block; width: 18px; height: 18px; }
+    #login > form > button[type="submit"] {
       background: #4af; color: #000; border: 0; padding: 8px 16px;
       font-family: monospace; cursor: pointer; font-weight: bold;
     }
-    #login button:hover { background: #6cf; }
+    #login > form > button[type="submit"]:hover { background: #6cf; }
     #loginError { color: #f44; min-height: 16px; font-size: 12px; }
     #hud {
       position: fixed; top: 12px; left: 12px; z-index: 10; pointer-events: none;
@@ -44,7 +52,15 @@
     <form id="loginForm">
       <h2>&gt; ACCÈS COCKPIT</h2>
       <p>Mot de passe streameur :</p>
-      <input type="password" id="password" autocomplete="off" autofocus />
+      <div class="pwd-wrap">
+        <input type="password" id="password" autocomplete="off" autofocus />
+        <button type="button" class="pwd-toggle" id="pwdToggle" aria-label="Afficher le mot de passe" title="Afficher / masquer">
+          <svg id="pwdEye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
+            <circle cx="12" cy="12" r="3"/>
+          </svg>
+        </button>
+      </div>
       <button type="submit">Connexion</button>
       <p id="loginError"></p>
     </form>

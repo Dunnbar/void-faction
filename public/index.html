@@ -130,13 +130,13 @@
         <button class="tab active" data-tab="login" type="button">Connexion</button>
         <button class="tab" data-tab="signup" type="button">Inscription</button>
       </div>
-      <form id="loginForm">
-        <input name="username" placeholder="Pseudo" autocomplete="username" required />
+      <form id="loginForm" autocomplete="off">
+        <input name="username" placeholder="Pseudo" autocomplete="off" required />
         <input name="password" type="password" placeholder="Mot de passe" autocomplete="current-password" required />
         <button type="submit">Se connecter</button>
       </form>
-      <form id="signupForm" class="hidden">
-        <input name="username" placeholder="Pseudo (3-20 caractères)" autocomplete="username" required />
+      <form id="signupForm" class="hidden" autocomplete="off">
+        <input name="username" placeholder="Pseudo (3-20 caractères)" autocomplete="off" required />
         <input name="password" type="password" placeholder="Mot de passe (6 min)" autocomplete="new-password" required />
         <button type="submit">Créer un compte</button>
       </form>
