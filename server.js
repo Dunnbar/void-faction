@@ -36,6 +36,13 @@ db.exec(`
     last_click INTEGER NOT NULL,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
+  CREATE TABLE IF NOT EXISTS click_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL,
+    username TEXT NOT NULL,
+    clicked_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_click_log_time ON click_log (clicked_at DESC);
 `);
 db.prepare("INSERT OR IGNORE INTO state (key, value) VALUES ('resource', '0')").run();
 
@@ -52,6 +59,11 @@ const stmtUpsertClick = db.prepare(`
   INSERT INTO clicks (user_id, last_click) VALUES (?, ?)
   ON CONFLICT(user_id) DO UPDATE SET last_click = excluded.last_click
 `);
+const stmtInsertLog = db.prepare('INSERT INTO click_log (user_id, username, clicked_at) VALUES (?, ?, ?)');
+const stmtRecentLog = db.prepare('SELECT username, clicked_at FROM click_log ORDER BY clicked_at DESC LIMIT ?');
+
+const HISTORY_LIMIT = 10;
+const getRecentHistory = () => stmtRecentLog.all(HISTORY_LIMIT);
 
 const getResource = () => parseInt(stmtGetState.get('resource').value, 10);
 const setResource = (n) => stmtSetState.run(String(n), 'resource');
@@ -145,7 +157,8 @@ io.on('connection', (socket) => {
   socket.emit('init', {
     resource: getResource(),
     ship,
-    user: socket.data.userId ? { username: socket.data.username } : null
+    user: socket.data.userId ? { username: socket.data.username } : null,
+    history: getRecentHistory()
   });
   if (socket.data.userId) {
     socket.emit('cooldown', { lastClick: getLastClick(socket.data.userId), cooldownMs: CLICK_COOLDOWN_MS });
@@ -164,9 +177,11 @@ io.on('connection', (socket) => {
       return;
     }
     setLastClick(uid, now);
+    stmtInsertLog.run(uid, socket.data.username, now);
     const newRes = getResource() + 1;
     setResource(newRes);
     io.emit('resource', { resource: newRes });
+    io.emit('history:new', { username: socket.data.username, clicked_at: now });
     socket.emit('cooldown', { lastClick: now, cooldownMs: CLICK_COOLDOWN_MS });
   });
 

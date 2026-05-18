@@ -45,7 +45,7 @@ socket.on('streamer:kicked', () => {
 });
 
 const SHIP_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spaceships%20-%20Pack%201/(24).png';
-const SHIP_SPRITE_OFFSET = Math.PI / 2; // l'asset pointe vers le haut, on compense
+const SHIP_SPRITE_OFFSET = -Math.PI / 2; // l'asset pointe vers le bas, on compense
 
 class MainScene extends Phaser.Scene {
   constructor() { super({ key: 'main', active: false }); }

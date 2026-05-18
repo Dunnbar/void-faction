@@ -10,6 +10,7 @@ const cooldownEl = document.getElementById('cooldown');
 const userLineEl = document.getElementById('userLine');
 const userLabelEl = document.getElementById('userLabel');
 const authBtn = document.getElementById('authBtn');
+const historyListEl = document.getElementById('historyList');
 
 const authModal = document.getElementById('authModal');
 const authClose = document.getElementById('authClose');
@@ -21,8 +22,39 @@ const tabs = document.querySelectorAll('.tab');
 let lastClick = 0;
 let cooldownMs = 6 * 60 * 60 * 1000;
 let authenticated = false;
+let history = [];
 
 let socket = null;
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function formatAgo(ts) {
+  const diff = Date.now() - ts;
+  if (diff < 0) return 'à l\'instant';
+  const s = Math.floor(diff / 1000);
+  if (s < 60) return 'à l\'instant';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `il y a ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `il y a ${h}h`;
+  const d = Math.floor(h / 24);
+  return `il y a ${d}j`;
+}
+
+function renderHistory(freshTimestamp) {
+  if (!history.length) {
+    historyListEl.innerHTML = '<li class="empty">Aucun clic pour le moment</li>';
+    return;
+  }
+  historyListEl.innerHTML = history.map((h) => {
+    const fresh = (h.clicked_at === freshTimestamp) ? ' class="fresh"' : '';
+    return `<li${fresh}><span class="hu">${escapeHtml(h.username)}</span><span class="ht">${formatAgo(h.clicked_at)}</span></li>`;
+  }).join('');
+}
+
+setInterval(() => { if (history.length) renderHistory(); }, 30000);
 
 function connectSocket() {
   if (socket) socket.disconnect();
@@ -41,10 +73,19 @@ function connectSocket() {
       localStorage.removeItem('voidfaction:username');
       username = null;
     }
+    history = Array.isArray(data.history) ? data.history.slice(0, 10) : [];
+    renderHistory();
     updateUserLine();
     refreshCooldownUi();
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) scene.setShipState(data.ship);
+  });
+
+  socket.on('history:new', (entry) => {
+    if (!entry || typeof entry.username !== 'string') return;
+    history.unshift(entry);
+    if (history.length > 10) history.pop();
+    renderHistory(entry.clicked_at);
   });
 
   socket.on('resource', (data) => {
