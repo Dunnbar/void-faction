@@ -98,7 +98,15 @@ let streamerSocketId = null;
 
 const app = express();
 app.use(express.json());
-app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(path.join(__dirname, 'public'), {
+  etag: true,
+  lastModified: true,
+  setHeaders: (res, filePath) => {
+    if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
+      res.setHeader('Cache-Control', 'no-cache');
+    }
+  }
+}));
 
 app.post('/api/signup', (req, res) => {
   const { username, password } = req.body || {};
@@ -219,6 +227,7 @@ io.on('connection', (socket) => {
 });
 
 server.listen(PORT, () => {
-  console.log(`VoidFaction écoute sur http://localhost:${PORT}`);
-  console.log(`Streameur : http://localhost:${PORT}/stream.html (mot de passe : ${STREAMER_PASSWORD})`);
+  console.log(`VoidFaction écoute sur le port ${PORT}`);
+  const fromEnv = !!process.env.STREAMER_PASSWORD;
+  console.log(`Streameur : STREAMER_PASSWORD source=${fromEnv ? 'env' : 'défaut'}, longueur=${STREAMER_PASSWORD.length}`);
 });
