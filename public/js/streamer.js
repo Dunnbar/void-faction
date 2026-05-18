@@ -45,7 +45,7 @@ loginForm.addEventListener('submit', (e) => {
         authenticated = true;
         loginEl.classList.add('hidden');
         hudEl.classList.remove('hidden');
-        game.scene.start('main');
+        startGame();
       } else {
         loginError.textContent = 'Mot de passe incorrect';
         socket.disconnect();
@@ -71,7 +71,7 @@ const SHIP_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spacesh
 const SHIP_SPRITE_OFFSET = -Math.PI / 2; // l'asset pointe vers le bas, on compense
 
 class MainScene extends Phaser.Scene {
-  constructor() { super({ key: 'main', active: false }); }
+  constructor() { super('main'); }
 
   preload() {
     this.load.image('ship', SHIP_ASSET);
@@ -179,13 +179,17 @@ class MainScene extends Phaser.Scene {
   }
 }
 
-const game = new Phaser.Game({
-  type: Phaser.AUTO,
-  parent: 'game',
-  width: WORLD_W,
-  height: WORLD_H,
-  backgroundColor: '#04060a',
-  physics: { default: 'arcade', arcade: { gravity: { y: 0 } } },
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
-  scene: MainScene
-});
+let game = null;
+function startGame() {
+  if (game) return;
+  game = new Phaser.Game({
+    type: Phaser.AUTO,
+    parent: 'game',
+    width: WORLD_W,
+    height: WORLD_H,
+    backgroundColor: '#04060a',
+    physics: { default: 'arcade', arcade: { gravity: { y: 0 } } },
+    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    scene: MainScene
+  });
+}
