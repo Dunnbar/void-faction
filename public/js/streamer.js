@@ -68,13 +68,26 @@ socket.on('streamer:kicked', () => {
 });
 
 const SHIP_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spaceships%20-%20Pack%201/(24).png';
+const ASTEROID_ASSET = '/assets/Foozle_2DS0015_Void_EnvironmentPack/Foozle_2DS0015_Void_EnvironmentPack/Asteroids/PNGs/Asteroid%2001%20-%20Base.png';
 const SHIP_SPRITE_OFFSET = -Math.PI / 2; // l'asset pointe vers le bas, on compense
+
+const ASTEROIDS = [
+  { x: 180,  y: 140, scale: 2.4, rot:  0.3 },
+  { x: 1090, y: 170, scale: 1.8, rot:  1.1 },
+  { x: 200,  y: 580, scale: 3.0, rot: -0.4 },
+  { x: 1100, y: 590, scale: 1.6, rot:  0.7 },
+  { x: 420,  y: 90,  scale: 1.4, rot:  2.0 },
+  { x: 860,  y: 80,  scale: 2.0, rot:  1.5 },
+  { x: 340,  y: 640, scale: 1.9, rot: -1.0 },
+  { x: 940,  y: 630, scale: 2.6, rot:  0.5 }
+];
 
 class MainScene extends Phaser.Scene {
   constructor() { super('main'); }
 
   preload() {
     this.load.image('ship', SHIP_ASSET);
+    this.load.image('asteroid', ASTEROID_ASSET);
   }
 
   create() {
@@ -85,6 +98,19 @@ class MainScene extends Phaser.Scene {
       sg.fillStyle(0xffffff, Phaser.Math.FloatBetween(0.25, 1));
       sg.fillCircle(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(0, WORLD_H), Phaser.Math.FloatBetween(0.4, 1.8));
     }
+
+    // Asteroides decoratifs
+    this.textures.get('asteroid').setFilter(Phaser.Textures.FilterMode.NEAREST);
+    ASTEROIDS.forEach((a, i) => {
+      const sprite = this.add.image(a.x, a.y, 'asteroid').setScale(a.scale).setRotation(a.rot);
+      const dir = (i % 2 === 0) ? 1 : -1;
+      this.tweens.add({
+        targets: sprite,
+        rotation: a.rot + dir * Math.PI * 2,
+        duration: 22000 + (i * 3500),
+        repeat: -1
+      });
+    });
 
     // Crystal texture
     const cg = this.make.graphics({ x: 0, y: 0, add: false });
