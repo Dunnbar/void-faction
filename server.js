@@ -8,6 +8,7 @@ const Database = require('better-sqlite3');
 
 const STREAMER_PASSWORD = process.env.STREAMER_PASSWORD || 'satelitteOrion';
 const PORT = Number(process.env.PORT) || 3000;
+const BUILD_TIME = new Date().toISOString();
 const WORLD_W = 1280;
 const WORLD_H = 720;
 const USERNAME_RE = /^[a-zA-Z0-9_-]{3,20}$/;
@@ -271,7 +272,8 @@ io.on('connection', (socket) => {
     actionDurationMs: ACTION_MAX_DURATION_MS,
     actionTickMs: ACTION_TICK_MS,
     progress: userProgress,
-    activeElements: getAllActiveElementStates()
+    activeElements: getAllActiveElementStates(),
+    buildTime: BUILD_TIME
   });
 
   socket.on('action:activate', (data, cb) => {

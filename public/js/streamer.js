@@ -1,5 +1,3 @@
-console.log('[streamer.js] chargé (build diagnostic)');
-
 const WORLD_W = 1280;
 const WORLD_H = 720;
 
@@ -18,20 +16,16 @@ const pwdEye = document.getElementById('pwdEye');
 if (pwdToggle && pwdEye) {
   const eyeOpen = pwdEye.querySelector('.eye-open');
   const eyeClosed = pwdEye.querySelector('.eye-closed');
-  console.log('[oeil] handler attaché', { eyeOpen: !!eyeOpen, eyeClosed: !!eyeClosed });
   pwdToggle.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
     const isHidden = passwordInput.type === 'password';
-    console.log('[oeil] click — type avant:', passwordInput.type);
     passwordInput.type = isHidden ? 'text' : 'password';
     if (eyeOpen) eyeOpen.style.display = isHidden ? 'none' : '';
     if (eyeClosed) eyeClosed.style.display = isHidden ? '' : 'none';
     pwdToggle.setAttribute('aria-label', isHidden ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
     passwordInput.focus();
   });
-} else {
-  console.warn('[oeil] elements introuvables:', { pwdToggle: !!pwdToggle, pwdEye: !!pwdEye });
 }
 
 loginForm.addEventListener('submit', (e) => {
@@ -59,6 +53,11 @@ loginForm.addEventListener('submit', (e) => {
 let lastActiveElements = [];
 
 socket.on('init', (data) => {
+  if (data.buildTime) {
+    const d = new Date(data.buildTime);
+    console.log(`%c[VoidFaction Amiral] dernière MAJ : ${d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })}`,
+      'color:#ff8044; font-weight:bold');
+  }
   resourceEl.textContent = data.resource;
   lastActiveElements = data.activeElements || [];
   const scene = game?.scene.getScene('main');

@@ -341,6 +341,11 @@ function connectSocket() {
   socket = io({ auth: token ? { token } : {} });
 
   socket.on('init', (data) => {
+    if (data.buildTime) {
+      const d = new Date(data.buildTime);
+      console.log(`%c[VoidFaction] dernière MAJ : ${d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })}`,
+        'color:#4af; font-weight:bold');
+    }
     resourceEl.textContent = data.resource;
     authenticated = !!data.user;
     if (data.user) {
