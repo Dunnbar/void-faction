@@ -58,6 +58,16 @@ loginForm.addEventListener('submit', (e) => {
 });
 
 let lastActiveElements = [];
+let knownBuildTime = null;
+
+function triggerVersionReload() {
+  console.log('%c[VoidFaction Amiral] Nouvelle version détectée — rechargement…', 'color:#f80; font-weight:bold; font-size:14px');
+  const notif = document.createElement('div');
+  notif.style.cssText = 'position:fixed;top:0;left:0;right:0;z-index:9999;background:#f80;color:#000;padding:10px;text-align:center;font-family:Consolas,monospace;font-weight:bold;letter-spacing:1px;box-shadow:0 2px 12px rgba(0,0,0,0.5)';
+  notif.textContent = 'Nouvelle version disponible — rechargement automatique…';
+  document.body.appendChild(notif);
+  setTimeout(() => location.reload(), 900);
+}
 let waveBannerInterval = null;
 function showWaveBanner(wave) {
   const banner = document.getElementById('waveBanner');
@@ -87,6 +97,11 @@ function showWaveBanner(wave) {
 
 socket.on('init', (data) => {
   if (data.buildTime) {
+    if (knownBuildTime && knownBuildTime !== data.buildTime) {
+      triggerVersionReload();
+      return;
+    }
+    knownBuildTime = data.buildTime;
     const d = new Date(data.buildTime);
     console.log(`%c[VoidFaction Amiral] dernière MAJ : ${d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })}`,
       'color:#ff8044; font-weight:bold');
