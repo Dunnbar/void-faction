@@ -242,18 +242,33 @@ class MainScene extends Phaser.Scene {
   update(time) {
     if (!this.ship) return;
 
-    // Déplacement vers la destination (clic droit)
+    // Déplacement vers la destination : contrôleur proportionnel.
+    // Le vaisseau accélère pour rejoindre une "vitesse cible" qui décroît
+    // en sqrt(2·a·d) à l'approche, ce qui le fait freiner avant d'arriver.
+    const MAX_SPEED = 280;           // px/s
+    const APPROACH_DECEL = 300;      // px/s² (force de freinage théorique)
+    const STIFFNESS = 6;             // raideur du correcteur vitesse
+    const STOP_DIST = 4;             // px : on s'arrête net si proche ET lent
+    const STOP_SPEED = 20;           // px/s
+
     let moving = false;
     if (this.destination) {
       const dx = this.destination.x - this.ship.x;
       const dy = this.destination.y - this.ship.y;
       const dist = Math.hypot(dx, dy);
-      if (dist < 10) {
+      const v = this.ship.body.velocity;
+      const speed = Math.hypot(v.x, v.y);
+
+      if (dist < STOP_DIST && speed < STOP_SPEED) {
         this.destination = null;
         this.ship.setAcceleration(0, 0);
+        this.ship.setVelocity(0, 0);
         this.destMarker.setFillStyle(0x4f8aff, 0);
       } else {
-        this.ship.setAcceleration((dx / dist) * 450, (dy / dist) * 450);
+        const targetSpeed = Math.min(MAX_SPEED, Math.sqrt(2 * APPROACH_DECEL * dist));
+        const desiredVx = (dx / dist) * targetSpeed;
+        const desiredVy = (dy / dist) * targetSpeed;
+        this.ship.setAcceleration((desiredVx - v.x) * STIFFNESS, (desiredVy - v.y) * STIFFNESS);
         moving = true;
       }
     } else {
