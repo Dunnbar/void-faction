@@ -14,6 +14,7 @@ let serverElements = [];
 let activeElementsByElement = new Map(); // element_id -> { action_id, category, username }
 let activeAction = null; // { element_id, action_id, category, started_at, last_settled_at }
 let progress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
+let previousProgress = null;
 let actionDurationMs = ACTION_MAX_DURATION_MS_DEFAULT;
 let history = [];
 let socket = null;
@@ -87,6 +88,16 @@ function updateUserLine() {
     userLineEl.classList.add('anon');
     authBtn.textContent = 'Se connecter';
   }
+}
+
+function animateBarPlus(cat, delta) {
+  const bar = document.querySelector(`.bar.${cat}`);
+  if (!bar) return;
+  const float = document.createElement('span');
+  float.className = 'float-plus';
+  float.textContent = `+${delta}`;
+  bar.appendChild(float);
+  setTimeout(() => float.remove(), 1600);
 }
 
 function renderBars() {
@@ -344,6 +355,7 @@ function connectSocket() {
     serverElements = Array.isArray(data.elements) ? data.elements : [];
     activeAction = data.activeAction || null;
     progress = data.progress || { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
+    previousProgress = { ...progress };
     actionDurationMs = data.actionDurationMs || ACTION_MAX_DURATION_MS_DEFAULT;
     history = Array.isArray(data.history) ? data.history : [];
     rebuildActiveElementsMap(data.activeElements);
@@ -366,8 +378,29 @@ function connectSocket() {
   });
 
   socket.on('action:state', (data) => {
+    const oldProgress = previousProgress;
     activeAction = data.activeAction || null;
     progress = data.progress || progress;
+    // Anim +N pour chaque catégorie qui a gagné des points depuis le dernier état
+    if (oldProgress) {
+      const deltas = {
+        PUISSANCE:  (progress.puissance  || 0) - (oldProgress.puissance  || 0),
+        DEFENSIF:   (progress.defensif   || 0) - (oldProgress.defensif   || 0),
+        UTILITAIRE: (progress.utilitaire || 0) - (oldProgress.utilitaire || 0)
+      };
+      for (const cat of ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE']) {
+        if (deltas[cat] > 0) animateBarPlus(cat, deltas[cat]);
+      }
+      // +N sur l'élément activé (catégorie de l'action active si elle existe)
+      const cat = activeAction?.category;
+      if (cat && deltas[cat] > 0) {
+        const scene = game.scene.getScene('main');
+        if (scene && scene.scene.isActive()) {
+          scene.flashElementPlus(activeAction.element_id, deltas[cat], cat);
+        }
+      }
+    }
+    previousProgress = { ...progress };
     renderActiveAction();
     renderBars();
   });
@@ -533,6 +566,32 @@ class MainScene extends Phaser.Scene {
     this.ship.x = s.x;
     this.ship.y = s.y;
     this.ship.rotation = s.rotation;
+  }
+
+  flashElementPlus(elementId, n, category) {
+    const sprite = this.elementSprites?.get(elementId);
+    if (!sprite) return;
+    const color = category === 'PUISSANCE'  ? '#ff4f6d' :
+                  category === 'DEFENSIF'   ? '#4fa3ff' :
+                  category === 'UTILITAIRE' ? '#ffd24f' :
+                                              '#ffffff';
+    const txt = this.add.text(sprite.x, sprite.y - 30, `+${n}`, {
+      fontFamily: 'Consolas, monospace',
+      fontSize: '22px',
+      color,
+      stroke: '#000000',
+      strokeThickness: 4,
+      fontStyle: 'bold'
+    }).setOrigin(0.5);
+    this.tweens.add({
+      targets: txt,
+      y: txt.y - 48,
+      alpha: { from: 1, to: 0 },
+      scale: { from: 0.7, to: 1.1 },
+      duration: 1500,
+      ease: 'Cubic.easeOut',
+      onComplete: () => txt.destroy()
+    });
   }
 }
 

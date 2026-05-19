@@ -11,7 +11,23 @@
       --c-utilitaire: #ffd24f;
       --c-frame: #4af;
     }
-    body { margin: 0; background: #04060a; font-family: 'Consolas', monospace; color: #fff; overflow: hidden; }
+    body {
+      margin: 0; color: #fff; font-family: 'Consolas', 'Courier New', monospace; overflow: hidden;
+      background-color: #04060a;
+      background-image:
+        linear-gradient(rgba(74, 175, 255, 0.025) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(74, 175, 255, 0.025) 1px, transparent 1px);
+      background-size: 32px 32px;
+    }
+    .icon { width: 14px; height: 14px; flex-shrink: 0; vertical-align: -2px; }
+    .icon.lg { width: 18px; height: 18px; }
+    .scan { position: relative; }
+    .scan::before {
+      content: ''; position: absolute; inset: 0; pointer-events: none; border-radius: inherit;
+      background: repeating-linear-gradient(
+        0deg, transparent 0, transparent 2px,
+        rgba(255,255,255,0.02) 2px, rgba(255,255,255,0.02) 3px);
+    }
     #hud {
       position: fixed; top: 12px; left: 12px; z-index: 10;
       display: flex; flex-direction: column; gap: 6px; width: 320px;
@@ -30,6 +46,10 @@
       display: flex; align-items: center; gap: 10px;
       pointer-events: auto; justify-content: space-between;
     }
+    #userLine > span { display: inline-flex; align-items: center; gap: 6px; }
+    .line .icon { vertical-align: -3px; color: var(--c-frame); }
+    #activeAction .label { display: inline-flex; align-items: center; gap: 6px; }
+    #activeAction .label .icon { color: var(--c-frame); }
     #userLine button {
       background: transparent; border: 1px solid var(--c-frame); color: var(--c-frame);
       font-family: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer; border-radius: 3px;
@@ -43,6 +63,15 @@
       display: flex; flex-direction: column; gap: 4px;
       padding: 10px 12px;
       pointer-events: auto;
+      transition: box-shadow 0.4s;
+    }
+    #activeAction:not(.idle) {
+      box-shadow: 0 0 16px rgba(74, 175, 255, 0.5), inset 0 0 12px rgba(74, 175, 255, 0.08);
+      animation: actionPulse 2.4s ease-in-out infinite;
+    }
+    @keyframes actionPulse {
+      0%, 100% { box-shadow: 0 0 14px rgba(74, 175, 255, 0.35), inset 0 0 10px rgba(74, 175, 255, 0.06); }
+      50%      { box-shadow: 0 0 22px rgba(74, 175, 255, 0.7),  inset 0 0 14px rgba(74, 175, 255, 0.12); }
     }
     #activeAction.idle .deactivate-btn { display: none; }
     #activeAction .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
@@ -65,20 +94,44 @@
     /* Barres de progression par catégorie */
     .bars { display: flex; flex-direction: column; gap: 5px; }
     .bar {
-      display: flex; flex-direction: column; gap: 2px;
+      display: flex; flex-direction: column; gap: 3px;
       padding: 6px 10px; pointer-events: none;
+      position: relative;
     }
-    .bar .head { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 1px; }
+    .bar .head { display: flex; align-items: center; gap: 8px; font-size: 11px; letter-spacing: 1px; }
+    .bar .head .name { flex: 1; }
+    .bar .head .val { font-variant-numeric: tabular-nums; }
     .bar .track {
       height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden;
+      box-shadow: inset 0 0 4px rgba(0,0,0,0.5);
     }
-    .bar .fill { height: 100%; width: 0%; transition: width 0.4s ease; }
+    .bar .fill { height: 100%; width: 0%; transition: width 0.4s ease; box-shadow: 0 0 6px currentColor; }
+    .bar.PUISSANCE  .fill { color: var(--c-puissance); }
+    .bar.DEFENSIF   .fill { color: var(--c-defensif); }
+    .bar.UTILITAIRE .fill { color: var(--c-utilitaire); }
+
+    /* +N animé qui flotte sur la barre quand un tick passe */
+    .float-plus {
+      position: absolute; right: 12px; top: 4px;
+      font-weight: bold; font-size: 14px;
+      pointer-events: none;
+      animation: floatPlus 1.5s ease-out forwards;
+      text-shadow: 0 0 10px currentColor;
+    }
+    .bar.PUISSANCE  .float-plus { color: var(--c-puissance); }
+    .bar.DEFENSIF   .float-plus { color: var(--c-defensif); }
+    .bar.UTILITAIRE .float-plus { color: var(--c-utilitaire); }
+    @keyframes floatPlus {
+      0%   { opacity: 0; transform: translateY(0); }
+      15%  { opacity: 1; }
+      100% { opacity: 0; transform: translateY(-34px); }
+    }
     .bar.PUISSANCE  .fill  { background: var(--c-puissance); }
     .bar.DEFENSIF   .fill  { background: var(--c-defensif); }
     .bar.UTILITAIRE .fill  { background: var(--c-utilitaire); }
-    .bar.PUISSANCE  .head .name  { color: var(--c-puissance); }
-    .bar.DEFENSIF   .head .name  { color: var(--c-defensif); }
-    .bar.UTILITAIRE .head .name  { color: var(--c-utilitaire); }
+    .bar.PUISSANCE  .head .name, .bar.PUISSANCE  .head .icon  { color: var(--c-puissance); }
+    .bar.DEFENSIF   .head .name, .bar.DEFENSIF   .head .icon  { color: var(--c-defensif); }
+    .bar.UTILITAIRE .head .name, .bar.UTILITAIRE .head .icon  { color: var(--c-utilitaire); }
 
     /* Historique d'activité (droite) */
     #historyPanel {
@@ -193,15 +246,53 @@
   </style>
 </head>
 <body>
+  <!-- Définitions des icônes SVG réutilisables -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <defs>
+      <symbol id="ic-user" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="8" r="4"/>
+        <path d="M4 21a8 8 0 0 1 16 0"/>
+      </symbol>
+      <symbol id="ic-resource" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+        <path d="M12 2l8 5v10l-8 5-8-5V7z"/>
+        <path d="M12 7v10M4 7l8 5 8-5"/>
+      </symbol>
+      <symbol id="ic-power" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/>
+        <line x1="12" y1="2" x2="12" y2="12"/>
+      </symbol>
+      <symbol id="ic-puissance" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M13 2L3 14h7l-1 8 11-14h-8z"/>
+      </symbol>
+      <symbol id="ic-defensif" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+        <path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/>
+      </symbol>
+      <symbol id="ic-utilitaire" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="3"/>
+        <path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/>
+      </symbol>
+      <symbol id="ic-clock" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <circle cx="12" cy="12" r="10"/>
+        <path d="M12 6v6l4 2"/>
+      </symbol>
+      <symbol id="ic-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+      </symbol>
+    </defs>
+  </svg>
+
   <div id="hud">
     <div class="line" id="userLine">
-      <span>👤 <strong id="userLabel">Visiteur</strong></span>
+      <span><svg class="icon"><use href="#ic-user"/></svg> <strong id="userLabel">Visiteur</strong></span>
       <button id="authBtn">Se connecter</button>
     </div>
-    <div class="line">Ressource de faction : <strong id="resource">0</strong></div>
+    <div class="line">
+      <svg class="icon"><use href="#ic-resource"/></svg>
+      Ressource de faction : <strong id="resource">0</strong>
+    </div>
     <div class="line idle" id="activeAction">
       <div class="row">
-        <span class="label">ACTION ACTIVE</span>
+        <span class="label"><svg class="icon"><use href="#ic-power"/></svg> ACTION ACTIVE</span>
         <button class="deactivate-btn" id="deactivateBtn">Désactiver</button>
       </div>
       <div class="row">
@@ -213,15 +304,27 @@
     </div>
     <div class="line bars">
       <div class="bar PUISSANCE">
-        <div class="head"><span class="name">PUISSANCE</span><span class="val" id="barPuissanceVal">0</span></div>
+        <div class="head">
+          <svg class="icon"><use href="#ic-puissance"/></svg>
+          <span class="name">PUISSANCE</span>
+          <span class="val" id="barPuissanceVal">0</span>
+        </div>
         <div class="track"><div class="fill" id="barPuissanceFill"></div></div>
       </div>
       <div class="bar DEFENSIF">
-        <div class="head"><span class="name">DÉFENSIF</span><span class="val" id="barDefensifVal">0</span></div>
+        <div class="head">
+          <svg class="icon"><use href="#ic-defensif"/></svg>
+          <span class="name">DÉFENSIF</span>
+          <span class="val" id="barDefensifVal">0</span>
+        </div>
         <div class="track"><div class="fill" id="barDefensifFill"></div></div>
       </div>
       <div class="bar UTILITAIRE">
-        <div class="head"><span class="name">UTILITAIRE</span><span class="val" id="barUtilitaireVal">0</span></div>
+        <div class="head">
+          <svg class="icon"><use href="#ic-utilitaire"/></svg>
+          <span class="name">UTILITAIRE</span>
+          <span class="val" id="barUtilitaireVal">0</span>
+        </div>
         <div class="track"><div class="fill" id="barUtilitaireFill"></div></div>
       </div>
     </div>

@@ -432,7 +432,14 @@ server.listen(PORT, () => {
     const testFile = path.join(dataDir, '.write-test');
     fs.writeFileSync(testFile, String(Date.now()));
     fs.unlinkSync(testFile);
-    console.log(`DB : dataDir=${dataDir} (écriture OK)`);
+    const fromEnvDir = !!process.env.DATA_DIR;
+    const userCount = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+    if (!fromEnvDir) {
+      console.warn(`⚠️  DB : dataDir=${dataDir} (DATA_DIR non défini → stockage ÉPHÉMÈRE, perdu à chaque déploiement)`);
+    } else {
+      console.log(`DB : dataDir=${dataDir} (DATA_DIR=env, écriture OK)`);
+    }
+    console.log(`DB : ${userCount} utilisateur(s) existant(s) au démarrage`);
   } catch (e) {
     console.error(`DB : dataDir=${dataDir} ÉCHEC ÉCRITURE:`, e?.code || e?.message);
   }
