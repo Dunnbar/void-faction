@@ -9,36 +9,47 @@ const Database = require('better-sqlite3');
 const STREAMER_PASSWORD = process.env.STREAMER_PASSWORD || 'satelitteOrion';
 const PORT = Number(process.env.PORT) || 3000;
 const BUILD_TIME = new Date().toISOString();
-const WORLD_W = 1280;
-const WORLD_H = 720;
+const WORLD_W = 2400;
+const WORLD_H = 1350;
+const TURRET_X = 1200;
+const TURRET_Y = 1000;
 const USERNAME_RE = /^[a-zA-Z0-9_-]{3,20}$/;
 
 const ACTION_TICK_MS = 10 * 1000;          // +1 toutes les 10 secondes
 const ACTION_MAX_DURATION_MS = 60 * 60 * 1000; // 1 heure max par activation
 const HISTORY_LIMIT = 10;
 
+// Système de vagues d'ennemis
+const WAVE_CHECK_INTERVAL_MS = 60 * 1000;  // check toutes les minutes
+const WAVE_PROBABILITY = 0.35;             // 35% de chance par check
+const WAVE_WARNING_MS = 10 * 1000;         // 10s d'alerte avant le spawn
+const ENEMY_SPEED = 70;                    // px/s
+const ENEMY_MIN = 3;
+const ENEMY_MAX = 6;
+
 const CATEGORIES = ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE'];
 const CATEGORY_TO_COLUMN = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILITAIRE: 'utilitaire' };
 
 // Configuration des éléments interactifs (positions partagées avec le client)
+const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }];
 const ELEMENTS = [
   {
-    id: 'turret-1', type: 'turret', x: WORLD_W / 2, y: 540,
+    id: 'turret-1', type: 'turret', x: TURRET_X, y: TURRET_Y,
     label: 'TOURELLE',
     actions: [
       { id: 'tir',        label: 'Tir',        category: 'PUISSANCE' },
       { id: 'reparation', label: 'Réparation', category: 'DEFENSIF'  }
     ]
   },
-  // Astéroïdes : mêmes positions que côté client (player.js / streamer.js)
-  { id: 'asteroid-0', type: 'asteroid', x: 180,  y: 140, label: 'ASTÉROÏDE', actions: [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }] },
-  { id: 'asteroid-1', type: 'asteroid', x: 1090, y: 170, label: 'ASTÉROÏDE', actions: [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }] },
-  { id: 'asteroid-2', type: 'asteroid', x: 200,  y: 580, label: 'ASTÉROÏDE', actions: [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }] },
-  { id: 'asteroid-3', type: 'asteroid', x: 1100, y: 590, label: 'ASTÉROÏDE', actions: [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }] },
-  { id: 'asteroid-4', type: 'asteroid', x: 420,  y: 90,  label: 'ASTÉROÏDE', actions: [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }] },
-  { id: 'asteroid-5', type: 'asteroid', x: 860,  y: 80,  label: 'ASTÉROÏDE', actions: [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }] },
-  { id: 'asteroid-6', type: 'asteroid', x: 340,  y: 640, label: 'ASTÉROÏDE', actions: [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }] },
-  { id: 'asteroid-7', type: 'asteroid', x: 940,  y: 630, label: 'ASTÉROÏDE', actions: [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }] }
+  // Astéroïdes répartis sur la nouvelle carte 2400x1350 (mêmes positions côté client)
+  { id: 'asteroid-0', type: 'asteroid', x: 250,  y: 200,  scale: 2.8, label: 'ASTÉROÏDE', actions: MINING_ACTION },
+  { id: 'asteroid-1', type: 'asteroid', x: 700,  y: 350,  scale: 2.0, label: 'ASTÉROÏDE', actions: MINING_ACTION },
+  { id: 'asteroid-2', type: 'asteroid', x: 1700, y: 350,  scale: 2.4, label: 'ASTÉROÏDE', actions: MINING_ACTION },
+  { id: 'asteroid-3', type: 'asteroid', x: 2150, y: 230,  scale: 1.8, label: 'ASTÉROÏDE', actions: MINING_ACTION },
+  { id: 'asteroid-4', type: 'asteroid', x: 250,  y: 1130, scale: 3.2, label: 'ASTÉROÏDE', actions: MINING_ACTION },
+  { id: 'asteroid-5', type: 'asteroid', x: 650,  y: 1080, scale: 1.9, label: 'ASTÉROÏDE', actions: MINING_ACTION },
+  { id: 'asteroid-6', type: 'asteroid', x: 1750, y: 1100, scale: 2.2, label: 'ASTÉROÏDE', actions: MINING_ACTION },
+  { id: 'asteroid-7', type: 'asteroid', x: 2180, y: 1220, scale: 2.6, label: 'ASTÉROÏDE', actions: MINING_ACTION }
 ];
 const ELEMENT_BY_ID = Object.fromEntries(ELEMENTS.map(e => [e.id, e]));
 
@@ -179,8 +190,9 @@ function userFromToken(token) {
   return stmtGetUserById.get(row.user_id) || null;
 }
 
-const ship = { x: WORLD_W / 2, y: WORLD_H / 2 + 120, rotation: 0 };
+const ship = { x: WORLD_W / 2, y: WORLD_H / 2, rotation: 0 };
 let streamerSocketId = null;
+let currentWave = null;  // wave en cours (null si aucune)
 
 const app = express();
 app.use(express.json());
@@ -273,6 +285,8 @@ io.on('connection', (socket) => {
     actionTickMs: ACTION_TICK_MS,
     progress: userProgress,
     activeElements: getAllActiveElementStates(),
+    world: { width: WORLD_W, height: WORLD_H, turretX: TURRET_X, turretY: TURRET_Y },
+    currentWave: currentWave && currentWave.endsAt > Date.now() ? currentWave : null,
     buildTime: BUILD_TIME
   });
 
@@ -425,6 +439,69 @@ function tickActions() {
 }
 
 setInterval(tickActions, ACTION_TICK_MS);
+
+// ============ Vagues d'ennemis ============
+
+function rollWave() {
+  // Si une vague est encore en cours (warning ou ennemis en vol), on saute
+  if (currentWave && currentWave.endsAt > Date.now()) return;
+  if (Math.random() > WAVE_PROBABILITY) return;
+
+  const count = ENEMY_MIN + Math.floor(Math.random() * (ENEMY_MAX - ENEMY_MIN + 1));
+  const baseAngle = Math.random() * Math.PI * 2;
+  const spread = 0.5;
+
+  // Cible : tourelle (40%) ou astéroïde (60%)
+  const asteroids = ELEMENTS.filter(e => e.type === 'asteroid');
+  const target = Math.random() < 0.4
+    ? ELEMENT_BY_ID['turret-1']
+    : asteroids[Math.floor(Math.random() * asteroids.length)];
+
+  const cx = WORLD_W / 2;
+  const cy = WORLD_H / 2;
+  const r = Math.max(WORLD_W, WORLD_H) * 1.2; // au-delà du bord
+  const margin = 80;
+
+  const now = Date.now();
+  const spawnAt = now + WAVE_WARNING_MS;
+  const enemies = [];
+  let maxTravel = 0;
+  for (let i = 0; i < count; i++) {
+    const a = baseAngle + (Math.random() - 0.5) * spread;
+    const rawX = cx + Math.cos(a) * r;
+    const rawY = cy + Math.sin(a) * r;
+    const spawnX = Math.max(-margin, Math.min(WORLD_W + margin, rawX));
+    const spawnY = Math.max(-margin, Math.min(WORLD_H + margin, rawY));
+    const dist = Math.hypot(target.x - spawnX, target.y - spawnY);
+    const travelMs = (dist / ENEMY_SPEED) * 1000;
+    if (travelMs > maxTravel) maxTravel = travelMs;
+    enemies.push({
+      id: `e-${now}-${i}`,
+      spawnX, spawnY,
+      targetX: target.x, targetY: target.y,
+      travelMs: Math.round(travelMs),
+      // léger décalage de spawn entre ennemis pour les espacer
+      spawnOffsetMs: Math.floor(Math.random() * 800)
+    });
+  }
+
+  currentWave = {
+    id: `w-${now}`,
+    startedAt: now,
+    warningEndsAt: spawnAt,
+    spawnAt,
+    targetId: target.id,
+    targetLabel: target.label,
+    edgeAngle: baseAngle,
+    enemies,
+    endsAt: spawnAt + Math.ceil(maxTravel) + 2000
+  };
+  io.emit('wave:incoming', currentWave);
+  console.log(`[wave] ${currentWave.id} — ${count} ennemis vers ${target.id} (angle ${baseAngle.toFixed(2)} rad)`);
+}
+
+setInterval(rollWave, WAVE_CHECK_INTERVAL_MS);
+
 
 server.listen(PORT, () => {
   console.log(`VoidFaction écoute sur le port ${PORT}`);

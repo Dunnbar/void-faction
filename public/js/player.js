@@ -1,9 +1,18 @@
-const WORLD_W = 1280;
-const WORLD_H = 720;
+const CANVAS_W = 1280;
+const CANVAS_H = 720;
+let WORLD_W = 2400;
+let WORLD_H = 1350;
+let TURRET_X = 1200;
+let TURRET_Y = 1000;
+const FIT_ZOOM = CANVAS_W / WORLD_W;       // ~0.533 : tout le monde tient dans le canvas
+const MIN_ZOOM = FIT_ZOOM * 0.85;          // un peu plus loin que le strict ajustement
+const MAX_ZOOM = 1.2;                       // zoom in pour voir les détails
+const DEFAULT_ZOOM = FIT_ZOOM;             // démarre dézoomé
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
 const SHIP_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spaceships%20-%20Pack%201/(24).png';
 const ASTEROID_ASSET = '/assets/Foozle_2DS0015_Void_EnvironmentPack/Foozle_2DS0015_Void_EnvironmentPack/Asteroids/PNGs/Asteroid%2001%20-%20Base.png';
+const ENEMY_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spaceships%20-%20Pack%201/(22).png';
 
 let token = localStorage.getItem('voidfaction:token') || null;
 let username = localStorage.getItem('voidfaction:username') || null;
@@ -88,6 +97,39 @@ function updateUserLine() {
     userLineEl.classList.add('anon');
     authBtn.textContent = 'Se connecter';
   }
+}
+
+let waveBannerInterval = null;
+function showWaveBanner(wave, warningRemainingMs) {
+  const banner = document.getElementById('waveBanner');
+  if (!banner) return;
+  const labelEl = banner.querySelector('.target');
+  const cdEl = banner.querySelector('.countdown');
+  if (labelEl) labelEl.textContent = wave.targetLabel || '';
+  banner.classList.remove('hidden');
+  banner.classList.add('warning');
+
+  if (waveBannerInterval) clearInterval(waveBannerInterval);
+  const update = () => {
+    const now = Date.now();
+    const remaining = wave.warningEndsAt - now;
+    if (remaining > 0) {
+      cdEl.textContent = `${Math.ceil(remaining / 1000)}s`;
+      banner.classList.add('warning');
+      banner.classList.remove('active');
+    } else if (now < wave.endsAt) {
+      cdEl.textContent = 'EN COURS';
+      banner.classList.remove('warning');
+      banner.classList.add('active');
+    } else {
+      banner.classList.add('hidden');
+      banner.classList.remove('warning', 'active');
+      clearInterval(waveBannerInterval);
+      waveBannerInterval = null;
+    }
+  };
+  update();
+  waveBannerInterval = setInterval(update, 250);
 }
 
 function animateBarPlus(cat, delta) {
@@ -364,6 +406,12 @@ function connectSocket() {
     actionDurationMs = data.actionDurationMs || ACTION_MAX_DURATION_MS_DEFAULT;
     history = Array.isArray(data.history) ? data.history : [];
     rebuildActiveElementsMap(data.activeElements);
+    if (data.world) {
+      WORLD_W = data.world.width;
+      WORLD_H = data.world.height;
+      TURRET_X = data.world.turretX;
+      TURRET_Y = data.world.turretY;
+    }
     updateUserLine();
     renderActiveAction();
     renderBars();
@@ -371,7 +419,8 @@ function connectSocket() {
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) {
       scene.setShipState(data.ship);
-      scene.refreshElementHighlights();
+      scene.setupElements(serverElements);
+      if (data.currentWave) scene.handleWaveIncoming(data.currentWave);
     }
   });
 
@@ -422,6 +471,11 @@ function connectSocket() {
     if (history.length > 10) history.pop();
     renderHistory(entry.at);
   });
+
+  socket.on('wave:incoming', (wave) => {
+    const scene = game.scene.getScene('main');
+    if (scene && scene.scene.isActive()) scene.handleWaveIncoming(wave);
+  });
 }
 
 function rebuildActiveElementsMap(list) {
@@ -434,84 +488,197 @@ function rebuildActiveElementsMap(list) {
 
 // ============ Phaser Scene ============
 
-const ASTEROID_LAYOUT = [
-  { id: 'asteroid-0', x: 180,  y: 140, scale: 2.4, rot:  0.3 },
-  { id: 'asteroid-1', x: 1090, y: 170, scale: 1.8, rot:  1.1 },
-  { id: 'asteroid-2', x: 200,  y: 580, scale: 3.0, rot: -0.4 },
-  { id: 'asteroid-3', x: 1100, y: 590, scale: 1.6, rot:  0.7 },
-  { id: 'asteroid-4', x: 420,  y: 90,  scale: 1.4, rot:  2.0 },
-  { id: 'asteroid-5', x: 860,  y: 80,  scale: 2.0, rot:  1.5 },
-  { id: 'asteroid-6', x: 340,  y: 640, scale: 1.9, rot: -1.0 },
-  { id: 'asteroid-7', x: 940,  y: 630, scale: 2.6, rot:  0.5 }
-];
-
 class MainScene extends Phaser.Scene {
   constructor() { super('main'); }
 
   preload() {
     this.load.image('ship', SHIP_ASSET);
     this.load.image('asteroid', ASTEROID_ASSET);
+    this.load.image('enemy_ship', ENEMY_ASSET);
   }
 
   create() {
     this.cameras.main.setBackgroundColor('#04060a');
+    this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+    this.cameras.main.centerOn(WORLD_W / 2, WORLD_H / 2);
+    this.cameras.main.setZoom(DEFAULT_ZOOM);
 
-    // Starfield
+    // Starfield à la taille du monde
     const sg = this.add.graphics();
-    for (let i = 0; i < 240; i++) {
+    for (let i = 0; i < 600; i++) {
       sg.fillStyle(0xffffff, Phaser.Math.FloatBetween(0.25, 1));
       sg.fillCircle(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(0, WORLD_H), Phaser.Math.FloatBetween(0.4, 1.8));
     }
 
-    // Astéroïdes interactifs
+    // Maps des éléments (peuplées par setupElements)
     this.textures.get('asteroid').setFilter(Phaser.Textures.FilterMode.NEAREST);
-    this.elementSprites = new Map();         // element_id -> sprite
-    this.elementHighlights = new Map();      // element_id -> highlight circle
-
-    ASTEROID_LAYOUT.forEach((a, i) => {
-      const highlight = this.add.circle(a.x, a.y, 36 * a.scale * 0.5, 0xffd24f, 0.0)
-        .setStrokeStyle(2, 0xffd24f, 0.0);
-      const sprite = this.add.image(a.x, a.y, 'asteroid')
-        .setScale(a.scale).setRotation(a.rot)
-        .setInteractive({ useHandCursor: true });
-      const dir = (i % 2 === 0) ? 1 : -1;
-      this.tweens.add({
-        targets: sprite,
-        rotation: a.rot + dir * Math.PI * 2,
-        duration: 22000 + (i * 3500),
-        repeat: -1
-      });
-      sprite.on('pointerdown', (pointer) => {
-        if (pointer.button !== 0) return; // clic gauche uniquement
-        openActionMenu(a.id, pointer.event);
-      });
-      this.elementSprites.set(a.id, sprite);
-      this.elementHighlights.set(a.id, highlight);
-    });
-
-    // Tourelle (sprite procédural)
+    this.elementSprites = new Map();
+    this.elementHighlights = new Map();
     this.createTurretTexture();
-    const turretX = WORLD_W / 2;
-    const turretY = 540;
-    const turretHighlight = this.add.circle(turretX, turretY, 48, 0xff4f6d, 0.0)
-      .setStrokeStyle(2, 0xff4f6d, 0.0);
-    const turret = this.add.image(turretX, turretY, 'turret')
-      .setInteractive({ useHandCursor: true });
-    turret.on('pointerdown', (pointer) => {
-      if (pointer.button !== 0) return;
-      openActionMenu('turret-1', pointer.event);
+    this.createExplosionTexture();
+
+    // Vaisseau (positionné via socket)
+    this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2, 'ship').setScale(0.16);
+
+    // Conteneur pour les ennemis
+    this.enemies = new Set();
+    this.waveWarnIcon = null;
+
+    // Zoom à la molette
+    this.input.on('wheel', (_pointer, _gos, _dx, deltaY) => {
+      const cam = this.cameras.main;
+      const newZoom = Phaser.Math.Clamp(cam.zoom - deltaY * 0.0008, MIN_ZOOM, MAX_ZOOM);
+      cam.setZoom(newZoom);
     });
-    this.elementSprites.set('turret-1', turret);
-    this.elementHighlights.set('turret-1', turretHighlight);
+  }
 
-    this.add.text(turretX, turretY + 50, 'TOURELLE', {
-      fontFamily: 'Consolas, monospace', fontSize: '11px', color: '#ff4f6d'
-    }).setOrigin(0.5);
+  setupElements(elements) {
+    if (!Array.isArray(elements)) return;
+    for (const s of this.elementSprites.values()) s.destroy();
+    for (const h of this.elementHighlights.values()) h.destroy();
+    this.elementSprites.clear();
+    this.elementHighlights.clear();
 
-    // Vaisseau
-    this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2 + 120, 'ship').setScale(0.16);
-
+    elements.forEach((el, i) => {
+      if (el.type === 'asteroid') {
+        const scale = el.scale || 2.0;
+        const highlight = this.add.circle(el.x, el.y, 36 * scale * 0.5, 0xffd24f, 0)
+          .setStrokeStyle(2, 0xffd24f, 0);
+        const sprite = this.add.image(el.x, el.y, 'asteroid')
+          .setScale(scale)
+          .setRotation(Math.random() * Math.PI * 2)
+          .setInteractive({ useHandCursor: true });
+        const dir = (i % 2 === 0) ? 1 : -1;
+        this.tweens.add({
+          targets: sprite,
+          rotation: sprite.rotation + dir * Math.PI * 2,
+          duration: 22000 + (i * 3500),
+          repeat: -1
+        });
+        sprite.on('pointerdown', (pointer) => {
+          if (pointer.button !== 0) return;
+          openActionMenu(el.id, pointer.event);
+        });
+        this.elementSprites.set(el.id, sprite);
+        this.elementHighlights.set(el.id, highlight);
+      } else if (el.type === 'turret') {
+        const highlight = this.add.circle(el.x, el.y, 48, 0xff4f6d, 0)
+          .setStrokeStyle(2, 0xff4f6d, 0);
+        const sprite = this.add.image(el.x, el.y, 'turret')
+          .setInteractive({ useHandCursor: true });
+        sprite.on('pointerdown', (pointer) => {
+          if (pointer.button !== 0) return;
+          openActionMenu(el.id, pointer.event);
+        });
+        this.add.text(el.x, el.y + 50, el.label, {
+          fontFamily: 'Consolas, monospace', fontSize: '12px', color: '#ff4f6d'
+        }).setOrigin(0.5);
+        this.elementSprites.set(el.id, sprite);
+        this.elementHighlights.set(el.id, highlight);
+      }
+    });
     this.refreshElementHighlights();
+  }
+
+  createExplosionTexture() {
+    if (this.textures.exists('explosion-dot')) return;
+    const g = this.make.graphics({ x: 0, y: 0, add: false });
+    g.fillStyle(0xff6644, 1);
+    g.fillCircle(4, 4, 4);
+    g.generateTexture('explosion-dot', 8, 8);
+    g.destroy();
+  }
+
+  handleWaveIncoming(wave) {
+    if (!wave) return;
+    const now = Date.now();
+    const warningRemaining = Math.max(0, wave.warningEndsAt - now);
+    // UI bannière
+    showWaveBanner(wave, warningRemaining);
+    // Icône d'alerte dans le monde, près du point d'arrivée des ennemis
+    this.showWaveWarnIcon(wave);
+    // Programmer le spawn des ennemis
+    for (const enemy of wave.enemies) {
+      const delay = warningRemaining + (enemy.spawnOffsetMs || 0);
+      this.time.delayedCall(delay, () => this.spawnEnemy(enemy));
+    }
+    // Nettoyage du marqueur de bord après le warning
+    this.time.delayedCall(warningRemaining + 600, () => this.hideWaveWarnIcon());
+  }
+
+  showWaveWarnIcon(wave) {
+    this.hideWaveWarnIcon();
+    // Position moyenne des spawns
+    const avgX = wave.enemies.reduce((s, e) => s + e.spawnX, 0) / wave.enemies.length;
+    const avgY = wave.enemies.reduce((s, e) => s + e.spawnY, 0) / wave.enemies.length;
+    // Ramener vers le bord du monde
+    const clampedX = Math.max(40, Math.min(WORLD_W - 40, avgX));
+    const clampedY = Math.max(40, Math.min(WORLD_H - 40, avgY));
+    const icon = this.add.text(clampedX, clampedY, '⚠', {
+      fontFamily: 'Consolas, monospace', fontSize: '64px', color: '#ff4444',
+      stroke: '#000000', strokeThickness: 4
+    }).setOrigin(0.5).setAlpha(0);
+    this.tweens.add({
+      targets: icon,
+      alpha: { from: 0, to: 1 },
+      scale: { from: 0.5, to: 1.2 },
+      duration: 400,
+      ease: 'Back.easeOut'
+    });
+    this.tweens.add({
+      targets: icon,
+      scale: { from: 1.0, to: 1.3 },
+      yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut'
+    });
+    this.waveWarnIcon = icon;
+  }
+
+  hideWaveWarnIcon() {
+    if (this.waveWarnIcon) {
+      this.tweens.killTweensOf(this.waveWarnIcon);
+      this.tweens.add({
+        targets: this.waveWarnIcon,
+        alpha: 0,
+        duration: 300,
+        onComplete: () => this.waveWarnIcon?.destroy()
+      });
+      this.waveWarnIcon = null;
+    }
+  }
+
+  spawnEnemy(e) {
+    const sprite = this.add.image(e.spawnX, e.spawnY, 'enemy_ship').setScale(0.10);
+    sprite.setTint(0xff6677);
+    // Orientation vers la cible (asset pointe vers le bas comme le ship player)
+    const angle = Math.atan2(e.targetY - e.spawnY, e.targetX - e.spawnX);
+    sprite.rotation = angle - Math.PI / 2;
+    this.enemies.add(sprite);
+    this.tweens.add({
+      targets: sprite,
+      x: e.targetX,
+      y: e.targetY,
+      duration: e.travelMs,
+      ease: 'Linear',
+      onComplete: () => {
+        this.explodeAt(sprite.x, sprite.y);
+        this.enemies.delete(sprite);
+        sprite.destroy();
+      }
+    });
+  }
+
+  explodeAt(x, y) {
+    const particles = this.add.particles(x, y, 'explosion-dot', {
+      speed: { min: 80, max: 220 },
+      scale: { start: 1.5, end: 0 },
+      alpha: { start: 1, end: 0 },
+      lifespan: 700,
+      blendMode: 'ADD',
+      quantity: 18,
+      emitting: false
+    });
+    particles.explode(18);
+    this.time.delayedCall(900, () => particles.destroy());
   }
 
   createTurretTexture() {
@@ -603,8 +770,8 @@ class MainScene extends Phaser.Scene {
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: WORLD_W,
-  height: WORLD_H,
+  width: CANVAS_W,
+  height: CANVAS_H,
   backgroundColor: '#04060a',
   scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
   scene: MainScene
