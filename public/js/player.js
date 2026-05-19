@@ -1,19 +1,45 @@
-console.log('[player.js] chargé (build diagnostic)');
-
 const WORLD_W = 1280;
 const WORLD_H = 720;
+const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
+
+const SHIP_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spaceships%20-%20Pack%201/(24).png';
+const ASTEROID_ASSET = '/assets/Foozle_2DS0015_Void_EnvironmentPack/Foozle_2DS0015_Void_EnvironmentPack/Asteroids/PNGs/Asteroid%2001%20-%20Base.png';
 
 let token = localStorage.getItem('voidfaction:token') || null;
 let username = localStorage.getItem('voidfaction:username') || null;
-let pendingClickAfterAuth = false;
+let pendingElementId = null; // id de l'élément cliqué quand non-auth, à rouvrir après auth
 
+// État courant fourni par le serveur
+let serverElements = [];
+let activeElementsByElement = new Map(); // element_id -> { action_id, category, username }
+let activeAction = null; // { element_id, action_id, category, started_at, last_settled_at }
+let progress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
+let actionDurationMs = ACTION_MAX_DURATION_MS_DEFAULT;
+let history = [];
+let socket = null;
+let authenticated = false;
+
+// DOM refs
 const resourceEl = document.getElementById('resource');
-const cooldownEl = document.getElementById('cooldown');
 const userLineEl = document.getElementById('userLine');
 const userLabelEl = document.getElementById('userLabel');
 const authBtn = document.getElementById('authBtn');
 const historyListEl = document.getElementById('historyList');
-
+const activeActionRow = document.getElementById('activeAction');
+const activeActionName = document.getElementById('activeActionName');
+const activeActionTimer = document.getElementById('activeActionTimer');
+const deactivateBtn = document.getElementById('deactivateBtn');
+const barEls = {
+  PUISSANCE:  { val: document.getElementById('barPuissanceVal'),  fill: document.getElementById('barPuissanceFill') },
+  DEFENSIF:   { val: document.getElementById('barDefensifVal'),   fill: document.getElementById('barDefensifFill') },
+  UTILITAIRE: { val: document.getElementById('barUtilitaireVal'), fill: document.getElementById('barUtilitaireFill') }
+};
+const actionMenu = document.getElementById('actionMenu');
+const actionMenuTitle = document.getElementById('actionMenuTitle');
+const actionMenuActions = document.getElementById('actionMenuActions');
+const actionMenuClose = document.getElementById('actionMenuClose');
+const actionMenuDeact = document.getElementById('actionMenuDeact');
+const actionMenuNote = document.getElementById('actionMenuNote');
 const authModal = document.getElementById('authModal');
 const authClose = document.getElementById('authClose');
 const authError = document.getElementById('authError');
@@ -21,12 +47,7 @@ const loginForm = document.getElementById('loginForm');
 const signupForm = document.getElementById('signupForm');
 const tabs = document.querySelectorAll('.tab');
 
-let lastClick = 0;
-let cooldownMs = 6 * 60 * 60 * 1000;
-let authenticated = false;
-let history = [];
-
-let socket = null;
+// ============ Helpers ============
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -34,93 +55,27 @@ function escapeHtml(s) {
 
 function formatAgo(ts) {
   const diff = Date.now() - ts;
-  if (diff < 0) return 'à l\'instant';
-  const s = Math.floor(diff / 1000);
-  if (s < 60) return 'à l\'instant';
-  const m = Math.floor(s / 60);
+  if (diff < 0 || diff < 60000) return 'à l\'instant';
+  const m = Math.floor(diff / 60000);
   if (m < 60) return `il y a ${m} min`;
   const h = Math.floor(m / 60);
   if (h < 24) return `il y a ${h}h`;
-  const d = Math.floor(h / 24);
-  return `il y a ${d}j`;
+  return `il y a ${Math.floor(h / 24)}j`;
 }
 
-function renderHistory(freshTimestamp) {
-  if (!history.length) {
-    historyListEl.innerHTML = '<li class="empty">Aucun clic pour le moment</li>';
-    return;
-  }
-  historyListEl.innerHTML = history.map((h) => {
-    const fresh = (h.clicked_at === freshTimestamp) ? ' class="fresh"' : '';
-    return `<li${fresh}><span class="hu">${escapeHtml(h.username)}</span><span class="ht">${formatAgo(h.clicked_at)}</span></li>`;
-  }).join('');
+function formatDuration(ms) {
+  if (ms <= 0) return '00:00';
+  const s = Math.floor(ms / 1000);
+  const m = Math.floor(s / 60);
+  const sec = s % 60;
+  return `${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }
 
-setInterval(() => { if (history.length) renderHistory(); }, 30000);
-
-function connectSocket() {
-  if (socket) socket.disconnect();
-  socket = io({ auth: token ? { token } : {} });
-
-  socket.on('init', (data) => {
-    resourceEl.textContent = data.resource;
-    authenticated = !!data.user;
-    if (data.user) {
-      username = data.user.username;
-      localStorage.setItem('voidfaction:username', username);
-    } else if (token) {
-      // Token was rejected (expired/invalid) — clear it
-      token = null;
-      localStorage.removeItem('voidfaction:token');
-      localStorage.removeItem('voidfaction:username');
-      username = null;
-    }
-    history = Array.isArray(data.history) ? data.history.slice(0, 10) : [];
-    renderHistory();
-    updateUserLine();
-    refreshCooldownUi();
-    const scene = game.scene.getScene('main');
-    if (scene && scene.scene.isActive()) scene.setShipState(data.ship);
-  });
-
-  socket.on('history:new', (entry) => {
-    if (!entry || typeof entry.username !== 'string') return;
-    history.unshift(entry);
-    if (history.length > 10) history.pop();
-    renderHistory(entry.clicked_at);
-  });
-
-  socket.on('resource', (data) => {
-    resourceEl.textContent = data.resource;
-    const scene = game.scene.getScene('main');
-    if (scene && scene.scene.isActive()) scene.flashCrystal();
-  });
-
-  socket.on('ship', (data) => {
-    const scene = game.scene.getScene('main');
-    if (scene && scene.scene.isActive()) scene.setShipState(data);
-  });
-
-  socket.on('cooldown', (data) => {
-    lastClick = data.lastClick;
-    cooldownMs = data.cooldownMs;
-    refreshCooldownUi();
-  });
-
-  socket.on('click:reject', (data) => {
-    if (data?.reason === 'auth') {
-      openAuthModal();
-      return;
-    }
-    if (data?.reason === 'cooldown') {
-      lastClick = data.lastClick;
-      cooldownMs = data.cooldownMs;
-      refreshCooldownUi();
-    }
-    const scene = game.scene.getScene('main');
-    if (scene && scene.scene.isActive()) scene.cameras.main.shake(180, 0.004);
-  });
+function getElement(id) {
+  return serverElements.find(e => e.id === id);
 }
+
+// ============ Rendu HUD ============
 
 function updateUserLine() {
   if (authenticated && username) {
@@ -134,30 +89,148 @@ function updateUserLine() {
   }
 }
 
-function formatRemaining(ms) {
-  const s = Math.ceil(ms / 1000);
-  const h = Math.floor(s / 3600);
-  const m = Math.floor((s % 3600) / 60);
-  const sec = s % 60;
-  return `${String(h).padStart(2, '0')}h ${String(m).padStart(2, '0')}m ${String(sec).padStart(2, '0')}s`;
+function renderBars() {
+  const cats = ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE'];
+  const keys = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILITAIRE: 'utilitaire' };
+  // % par rapport au max théorique d'1h (360 ticks). On ne dépasse pas 100% visuellement,
+  // mais on continue à incrémenter le compteur.
+  const max = Math.floor(actionDurationMs / 10000);
+  for (const c of cats) {
+    const v = progress[keys[c]] || 0;
+    barEls[c].val.textContent = v;
+    const pct = Math.min(100, (v / max) * 100);
+    barEls[c].fill.style.width = pct + '%';
+  }
 }
 
-function refreshCooldownUi() {
+function renderActiveAction() {
   if (!authenticated) {
-    cooldownEl.textContent = '🔒 Connecte-toi pour contribuer';
-    cooldownEl.className = 'line';
+    activeActionRow.classList.add('idle');
+    activeActionName.innerHTML = '<span style="opacity:0.5">connecte-toi pour agir</span>';
+    activeActionTimer.textContent = '';
     return;
   }
-  const remaining = (lastClick + cooldownMs) - Date.now();
-  if (remaining <= 0) {
-    cooldownEl.textContent = '✓ Clic disponible';
-    cooldownEl.className = 'line ready';
-  } else {
-    cooldownEl.textContent = `⏳ Prochain clic dans ${formatRemaining(remaining)}`;
-    cooldownEl.className = 'line locked';
+  if (!activeAction) {
+    activeActionRow.classList.add('idle');
+    activeActionName.textContent = '— aucune —';
+    activeActionTimer.textContent = '';
+    return;
   }
+  activeActionRow.classList.remove('idle');
+  const el = getElement(activeAction.element_id);
+  const actionDef = el?.actions.find(a => a.id === activeAction.action_id);
+  const cat = activeAction.category;
+  const label = actionDef ? actionDef.label : activeAction.action_id;
+  const target = el ? el.label : activeAction.element_id;
+  activeActionName.innerHTML = `<span class="cat-tag ${cat}">${cat}</span> <strong>${escapeHtml(label)}</strong> sur ${escapeHtml(target)}`;
+  refreshActiveActionTimer();
 }
-setInterval(refreshCooldownUi, 1000);
+
+function refreshActiveActionTimer() {
+  if (!activeAction) { activeActionTimer.textContent = ''; return; }
+  const remaining = (activeAction.started_at + actionDurationMs) - Date.now();
+  activeActionTimer.textContent = remaining > 0 ? `⏳ ${formatDuration(remaining)} restant` : 'Expiration imminente…';
+}
+
+function renderHistory(freshTimestamp) {
+  if (!history.length) {
+    historyListEl.innerHTML = '<li class="empty">Aucune action pour le moment</li>';
+    return;
+  }
+  historyListEl.innerHTML = history.map((h) => {
+    const fresh = (h.at === freshTimestamp) ? ' class="fresh"' : '';
+    const el = getElement(h.element_id);
+    const actionDef = el?.actions.find(a => a.id === h.action_id);
+    const label = actionDef ? actionDef.label : h.action_id;
+    const target = el ? el.label : h.element_id;
+    return `<li${fresh}><span class="hu">${escapeHtml(h.username)}</span><span class="hev"><span class="cat-tag ${h.category}">${h.category[0]}</span> ${escapeHtml(label)} sur ${escapeHtml(target)}</span><span class="ht">${formatAgo(h.at)}</span></li>`;
+  }).join('');
+}
+
+setInterval(() => {
+  refreshActiveActionTimer();
+  if (history.length) renderHistory();
+}, 1000);
+
+// ============ Menu d'action ============
+
+let actionMenuElementId = null;
+
+function openActionMenu(elementId, anchor) {
+  if (!authenticated) {
+    pendingElementId = elementId;
+    openAuthModal();
+    return;
+  }
+  const el = getElement(elementId);
+  if (!el) return;
+  actionMenuElementId = elementId;
+  actionMenuTitle.textContent = el.label;
+  actionMenuActions.innerHTML = '';
+  for (const a of el.actions) {
+    const isActive = activeAction && activeAction.element_id === elementId && activeAction.action_id === a.id;
+    const btn = document.createElement('button');
+    btn.innerHTML = `<span class="tag cat-tag ${a.category}">${a.category}</span> ${escapeHtml(a.label)}`;
+    if (isActive) btn.classList.add('active');
+    btn.addEventListener('click', () => activateAction(elementId, a.id));
+    actionMenuActions.appendChild(btn);
+  }
+  const activeHere = activeAction && activeAction.element_id === elementId;
+  actionMenuDeact.classList.toggle('hidden', !activeHere);
+  if (activeAction && activeAction.element_id !== elementId) {
+    actionMenuNote.textContent = `Tu vas désactiver ton action en cours.`;
+    actionMenuNote.classList.remove('hidden');
+  } else {
+    actionMenuNote.classList.add('hidden');
+  }
+
+  // Positionnement: près du point cliqué, en restant dans le viewport
+  actionMenu.classList.remove('hidden');
+  const rect = actionMenu.getBoundingClientRect();
+  let x = (anchor?.clientX ?? window.innerWidth / 2) + 12;
+  let y = (anchor?.clientY ?? window.innerHeight / 2) - 10;
+  if (x + rect.width > window.innerWidth - 8) x = (anchor?.clientX ?? 0) - rect.width - 12;
+  if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
+  if (y < 8) y = 8;
+  if (x < 8) x = 8;
+  actionMenu.style.left = x + 'px';
+  actionMenu.style.top = y + 'px';
+}
+
+function closeActionMenu() {
+  actionMenu.classList.add('hidden');
+  actionMenuElementId = null;
+}
+
+actionMenuClose.addEventListener('click', closeActionMenu);
+actionMenuDeact.addEventListener('click', () => deactivateCurrent());
+
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeActionMenu(); });
+
+document.addEventListener('mousedown', (e) => {
+  if (actionMenu.classList.contains('hidden')) return;
+  if (!actionMenu.contains(e.target)) closeActionMenu();
+}, true);
+
+function activateAction(elementId, actionId) {
+  if (!socket || !authenticated) return;
+  socket.emit('action:activate', { elementId, actionId }, (resp) => {
+    if (resp?.ok) {
+      closeActionMenu();
+    } else {
+      console.warn('[action] échec activation:', resp?.error);
+    }
+  });
+}
+
+function deactivateCurrent() {
+  if (!socket || !authenticated || !activeAction) return;
+  socket.emit('action:deactivate', null, () => closeActionMenu());
+}
+
+deactivateBtn.addEventListener('click', deactivateCurrent);
+
+// ============ Auth ============
 
 function openAuthModal() {
   authError.textContent = '';
@@ -169,23 +242,25 @@ function openAuthModal() {
 }
 function closeAuthModal() {
   authModal.classList.add('hidden');
-  pendingClickAfterAuth = false;
+  pendingElementId = null;
 }
 
 authBtn.addEventListener('click', async () => {
   if (authenticated) {
     try {
       await fetch('/api/logout', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ token })
       });
     } catch {}
     token = null; username = null; authenticated = false;
     localStorage.removeItem('voidfaction:token');
     localStorage.removeItem('voidfaction:username');
-    lastClick = 0;
+    activeAction = null;
+    progress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
     updateUserLine();
+    renderActiveAction();
+    renderBars();
     connectSocket();
   } else {
     openAuthModal();
@@ -202,29 +277,23 @@ tabs.forEach((tab) => {
     loginForm.classList.toggle('hidden', !isLogin);
     signupForm.classList.toggle('hidden', isLogin);
     authError.textContent = '';
-    setTimeout(() => {
-      (isLogin ? loginForm : signupForm).querySelector('input')?.focus();
-    }, 30);
+    setTimeout(() => (isLogin ? loginForm : signupForm).querySelector('input')?.focus(), 30);
   });
 });
 
 async function submitAuth(endpoint, data) {
   authError.textContent = '';
-  console.log('[auth] POST', endpoint, { username: data.username });
   let res;
   try {
     res = await fetch(endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(data)
     });
   } catch (e) {
-    console.error('[auth] fetch a échoué:', e);
     authError.textContent = 'Erreur réseau: ' + (e?.message || 'inconnue');
     return false;
   }
-  const body = await res.json().catch((e) => { console.error('[auth] JSON parse:', e); return {}; });
-  console.log('[auth] réponse', res.status, body);
+  const body = await res.json().catch(() => ({}));
   if (!res.ok || !body.ok) {
     authError.textContent = body.error || `Erreur ${res.status}`;
     return false;
@@ -234,10 +303,11 @@ async function submitAuth(endpoint, data) {
   localStorage.setItem('voidfaction:token', token);
   localStorage.setItem('voidfaction:username', username);
   closeAuthModal();
+  const pending = pendingElementId;
+  pendingElementId = null;
   connectSocket();
-  if (pendingClickAfterAuth) {
-    pendingClickAfterAuth = false;
-    setTimeout(() => socket.emit('player:click'), 400);
+  if (pending) {
+    setTimeout(() => openActionMenu(pending, null), 400);
   }
   return true;
 }
@@ -253,18 +323,88 @@ signupForm.addEventListener('submit', (e) => {
   submitAuth('/api/signup', { username: fd.get('username'), password: fd.get('password') });
 });
 
-const SHIP_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spaceships%20-%20Pack%201/(24).png';
-const ASTEROID_ASSET = '/assets/Foozle_2DS0015_Void_EnvironmentPack/Foozle_2DS0015_Void_EnvironmentPack/Asteroids/PNGs/Asteroid%2001%20-%20Base.png';
+// ============ Socket ============
 
-const ASTEROIDS = [
-  { x: 180,  y: 140, scale: 2.4, rot:  0.3 },
-  { x: 1090, y: 170, scale: 1.8, rot:  1.1 },
-  { x: 200,  y: 580, scale: 3.0, rot: -0.4 },
-  { x: 1100, y: 590, scale: 1.6, rot:  0.7 },
-  { x: 420,  y: 90,  scale: 1.4, rot:  2.0 },
-  { x: 860,  y: 80,  scale: 2.0, rot:  1.5 },
-  { x: 340,  y: 640, scale: 1.9, rot: -1.0 },
-  { x: 940,  y: 630, scale: 2.6, rot:  0.5 }
+function connectSocket() {
+  if (socket) socket.disconnect();
+  socket = io({ auth: token ? { token } : {} });
+
+  socket.on('init', (data) => {
+    resourceEl.textContent = data.resource;
+    authenticated = !!data.user;
+    if (data.user) {
+      username = data.user.username;
+      localStorage.setItem('voidfaction:username', username);
+    } else if (token) {
+      token = null;
+      localStorage.removeItem('voidfaction:token');
+      localStorage.removeItem('voidfaction:username');
+      username = null;
+    }
+    serverElements = Array.isArray(data.elements) ? data.elements : [];
+    activeAction = data.activeAction || null;
+    progress = data.progress || { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
+    actionDurationMs = data.actionDurationMs || ACTION_MAX_DURATION_MS_DEFAULT;
+    history = Array.isArray(data.history) ? data.history : [];
+    rebuildActiveElementsMap(data.activeElements);
+    updateUserLine();
+    renderActiveAction();
+    renderBars();
+    renderHistory();
+    const scene = game.scene.getScene('main');
+    if (scene && scene.scene.isActive()) {
+      scene.setShipState(data.ship);
+      scene.refreshElementHighlights();
+    }
+  });
+
+  socket.on('resource', (data) => { resourceEl.textContent = data.resource; });
+
+  socket.on('ship', (data) => {
+    const scene = game.scene.getScene('main');
+    if (scene && scene.scene.isActive()) scene.setShipState(data);
+  });
+
+  socket.on('action:state', (data) => {
+    activeAction = data.activeAction || null;
+    progress = data.progress || progress;
+    renderActiveAction();
+    renderBars();
+  });
+
+  socket.on('elements:update', (data) => {
+    rebuildActiveElementsMap(data.activeElements);
+    const scene = game.scene.getScene('main');
+    if (scene && scene.scene.isActive()) scene.refreshElementHighlights();
+  });
+
+  socket.on('history:new', (entry) => {
+    if (!entry) return;
+    history.unshift(entry);
+    if (history.length > 10) history.pop();
+    renderHistory(entry.at);
+  });
+}
+
+function rebuildActiveElementsMap(list) {
+  activeElementsByElement = new Map();
+  if (!Array.isArray(list)) return;
+  for (const entry of list) {
+    activeElementsByElement.set(entry.element_id, entry);
+  }
+}
+
+// ============ Phaser Scene ============
+
+const ASTEROID_LAYOUT = [
+  { id: 'asteroid-0', x: 180,  y: 140, scale: 2.4, rot:  0.3 },
+  { id: 'asteroid-1', x: 1090, y: 170, scale: 1.8, rot:  1.1 },
+  { id: 'asteroid-2', x: 200,  y: 580, scale: 3.0, rot: -0.4 },
+  { id: 'asteroid-3', x: 1100, y: 590, scale: 1.6, rot:  0.7 },
+  { id: 'asteroid-4', x: 420,  y: 90,  scale: 1.4, rot:  2.0 },
+  { id: 'asteroid-5', x: 860,  y: 80,  scale: 2.0, rot:  1.5 },
+  { id: 'asteroid-6', x: 340,  y: 640, scale: 1.9, rot: -1.0 },
+  { id: 'asteroid-7', x: 940,  y: 630, scale: 2.6, rot:  0.5 }
 ];
 
 class MainScene extends Phaser.Scene {
@@ -278,16 +418,24 @@ class MainScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#04060a');
 
+    // Starfield
     const sg = this.add.graphics();
     for (let i = 0; i < 240; i++) {
       sg.fillStyle(0xffffff, Phaser.Math.FloatBetween(0.25, 1));
       sg.fillCircle(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(0, WORLD_H), Phaser.Math.FloatBetween(0.4, 1.8));
     }
 
-    // Asteroides decoratifs
+    // Astéroïdes interactifs
     this.textures.get('asteroid').setFilter(Phaser.Textures.FilterMode.NEAREST);
-    ASTEROIDS.forEach((a, i) => {
-      const sprite = this.add.image(a.x, a.y, 'asteroid').setScale(a.scale).setRotation(a.rot);
+    this.elementSprites = new Map();         // element_id -> sprite
+    this.elementHighlights = new Map();      // element_id -> highlight circle
+
+    ASTEROID_LAYOUT.forEach((a, i) => {
+      const highlight = this.add.circle(a.x, a.y, 36 * a.scale * 0.5, 0xffd24f, 0.0)
+        .setStrokeStyle(2, 0xffd24f, 0.0);
+      const sprite = this.add.image(a.x, a.y, 'asteroid')
+        .setScale(a.scale).setRotation(a.rot)
+        .setInteractive({ useHandCursor: true });
       const dir = (i % 2 === 0) ? 1 : -1;
       this.tweens.add({
         targets: sprite,
@@ -295,65 +443,89 @@ class MainScene extends Phaser.Scene {
         duration: 22000 + (i * 3500),
         repeat: -1
       });
-    });
-
-    const cg = this.make.graphics({ x: 0, y: 0, add: false });
-    cg.lineStyle(2, 0xffffff, 1);
-    cg.fillStyle(0x4afff8, 1);
-    cg.beginPath();
-    cg.moveTo(50, 4);
-    cg.lineTo(92, 50);
-    cg.lineTo(50, 96);
-    cg.lineTo(8, 50);
-    cg.closePath();
-    cg.fillPath();
-    cg.strokePath();
-    cg.lineStyle(1, 0xffffff, 0.5);
-    cg.beginPath();
-    cg.moveTo(50, 4); cg.lineTo(50, 96);
-    cg.moveTo(8, 50); cg.lineTo(92, 50);
-    cg.strokePath();
-    cg.generateTexture('crystal', 100, 100);
-    cg.destroy();
-
-    this.crystalGlow = this.add.circle(WORLD_W / 2, WORLD_H / 2, 80, 0x4afff8, 0.15);
-    this.tweens.add({
-      targets: this.crystalGlow,
-      radius: { from: 70, to: 95 },
-      alpha: { from: 0.1, to: 0.25 },
-      yoyo: true, repeat: -1, duration: 1600, ease: 'Sine.easeInOut'
-    });
-
-    this.crystal = this.add.sprite(WORLD_W / 2, WORLD_H / 2, 'crystal').setInteractive({ useHandCursor: true });
-    this.tweens.add({
-      targets: this.crystal,
-      scale: { from: 1, to: 1.08 },
-      yoyo: true, repeat: -1, duration: 1400, ease: 'Sine.easeInOut'
-    });
-    this.crystal.on('pointerdown', () => {
-      if (!authenticated) {
-        pendingClickAfterAuth = true;
-        openAuthModal();
-        return;
-      }
-      const remaining = (lastClick + cooldownMs) - Date.now();
-      if (remaining > 0) {
-        this.cameras.main.shake(180, 0.004);
-        return;
-      }
-      socket.emit('player:click');
-      this.tweens.add({
-        targets: this.crystal,
-        scale: { from: 1.3, to: 1 },
-        duration: 250, ease: 'Back.easeOut'
+      sprite.on('pointerdown', (pointer) => {
+        if (pointer.button !== 0) return; // clic gauche uniquement
+        openActionMenu(a.id, pointer.event);
       });
+      this.elementSprites.set(a.id, sprite);
+      this.elementHighlights.set(a.id, highlight);
     });
 
-    this.add.text(WORLD_W / 2, WORLD_H / 2 + 80, 'CRISTAL DE FACTION', {
-      fontFamily: 'Consolas, monospace', fontSize: '14px', color: '#4afff8'
+    // Tourelle (sprite procédural)
+    this.createTurretTexture();
+    const turretX = WORLD_W / 2;
+    const turretY = 540;
+    const turretHighlight = this.add.circle(turretX, turretY, 48, 0xff4f6d, 0.0)
+      .setStrokeStyle(2, 0xff4f6d, 0.0);
+    const turret = this.add.image(turretX, turretY, 'turret')
+      .setInteractive({ useHandCursor: true });
+    turret.on('pointerdown', (pointer) => {
+      if (pointer.button !== 0) return;
+      openActionMenu('turret-1', pointer.event);
+    });
+    this.elementSprites.set('turret-1', turret);
+    this.elementHighlights.set('turret-1', turretHighlight);
+
+    this.add.text(turretX, turretY + 50, 'TOURELLE', {
+      fontFamily: 'Consolas, monospace', fontSize: '11px', color: '#ff4f6d'
     }).setOrigin(0.5);
 
+    // Vaisseau
     this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2 + 120, 'ship').setScale(0.16);
+
+    this.refreshElementHighlights();
+  }
+
+  createTurretTexture() {
+    const g = this.make.graphics({ x: 0, y: 0, add: false });
+    // Base : disque foncé avec anneau
+    g.fillStyle(0x1a2335, 1);
+    g.fillCircle(40, 40, 30);
+    g.lineStyle(2, 0xff8044, 1);
+    g.strokeCircle(40, 40, 30);
+    // Cercle intérieur
+    g.fillStyle(0x2a3550, 1);
+    g.fillCircle(40, 40, 20);
+    g.lineStyle(1.5, 0xff4f6d, 0.8);
+    g.strokeCircle(40, 40, 20);
+    // Canon vertical
+    g.fillStyle(0x404a60, 1);
+    g.fillRect(34, 8, 12, 32);
+    g.lineStyle(1.5, 0xff8044, 1);
+    g.strokeRect(34, 8, 12, 32);
+    // Embout du canon
+    g.fillStyle(0xff4f6d, 1);
+    g.fillRect(33, 4, 14, 6);
+    // Point central
+    g.fillStyle(0xff4f6d, 1);
+    g.fillCircle(40, 40, 4);
+    g.generateTexture('turret', 80, 80);
+    g.destroy();
+  }
+
+  refreshElementHighlights() {
+    if (!this.elementHighlights) return;
+    for (const [elementId, highlight] of this.elementHighlights.entries()) {
+      const active = activeElementsByElement.get(elementId);
+      if (active) {
+        const color = active.category === 'PUISSANCE' ? 0xff4f6d :
+                      active.category === 'DEFENSIF'  ? 0x4fa3ff :
+                                                        0xffd24f;
+        highlight.setStrokeStyle(2, color, 0.9);
+        highlight.setFillStyle(color, 0.18);
+        this.tweens.killTweensOf(highlight);
+        this.tweens.add({
+          targets: highlight,
+          alpha: { from: 1, to: 0.5 },
+          yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut'
+        });
+      } else {
+        this.tweens.killTweensOf(highlight);
+        highlight.setStrokeStyle(2, 0xffffff, 0);
+        highlight.setFillStyle(0xffffff, 0);
+        highlight.alpha = 1;
+      }
+    }
   }
 
   setShipState(s) {
@@ -361,24 +533,6 @@ class MainScene extends Phaser.Scene {
     this.ship.x = s.x;
     this.ship.y = s.y;
     this.ship.rotation = s.rotation;
-  }
-
-  flashCrystal() {
-    this.tweens.add({
-      targets: this.crystalGlow,
-      alpha: { from: 0.7, to: 0.15 },
-      radius: { from: 130, to: 80 },
-      duration: 600, ease: 'Cubic.easeOut'
-    });
-    const burst = this.add.text(this.crystal.x, this.crystal.y - 30, '+1', {
-      fontFamily: 'Consolas, monospace', fontSize: '22px', color: '#4afff8'
-    }).setOrigin(0.5);
-    this.tweens.add({
-      targets: burst,
-      y: burst.y - 50, alpha: 0,
-      duration: 900,
-      onComplete: () => burst.destroy()
-    });
   }
 }
 
@@ -393,5 +547,6 @@ const game = new Phaser.Game({
 });
 
 updateUserLine();
-refreshCooldownUi();
+renderActiveAction();
+renderBars();
 connectSocket();

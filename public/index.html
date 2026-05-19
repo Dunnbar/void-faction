@@ -5,75 +5,127 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>VoidFaction</title>
   <style>
+    :root {
+      --c-puissance: #ff4f6d;
+      --c-defensif:  #4fa3ff;
+      --c-utilitaire: #ffd24f;
+      --c-frame: #4af;
+    }
     body { margin: 0; background: #04060a; font-family: 'Consolas', monospace; color: #fff; overflow: hidden; }
     #hud {
       position: fixed; top: 12px; left: 12px; z-index: 10;
-      display: flex; flex-direction: column; gap: 6px;
+      display: flex; flex-direction: column; gap: 6px; width: 320px;
     }
     .line {
       background: rgba(0, 20, 40, 0.7);
       padding: 8px 12px;
-      border: 1px solid #4af;
+      border: 1px solid var(--c-frame);
       border-radius: 4px;
-      font-size: 14px;
+      font-size: 13px;
       box-shadow: 0 0 12px rgba(74, 175, 255, 0.3);
       pointer-events: none;
     }
-    .line strong { color: #4af; }
-    #cooldown.ready { border-color: #4f8; color: #4f8; }
-    #cooldown.locked { border-color: #f84; color: #f84; }
-    #userLine { display: flex; align-items: center; gap: 10px; pointer-events: auto; }
-    #userLine button {
-      background: transparent; border: 1px solid #4af; color: #4af;
-      font-family: inherit; font-size: 12px; padding: 2px 8px; cursor: pointer; border-radius: 3px;
+    .line strong { color: var(--c-frame); }
+    #userLine {
+      display: flex; align-items: center; gap: 10px;
+      pointer-events: auto; justify-content: space-between;
     }
-    #userLine button:hover { background: #4af; color: #000; }
-    #userLine.anon { border-color: #888; color: #aaa; }
+    #userLine button {
+      background: transparent; border: 1px solid var(--c-frame); color: var(--c-frame);
+      font-family: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer; border-radius: 3px;
+    }
+    #userLine button:hover { background: var(--c-frame); color: #000; }
+    #userLine.anon { border-color: #888; }
     #userLine.anon strong { color: #aaa; }
+
+    /* Action active */
+    #activeAction {
+      display: flex; flex-direction: column; gap: 4px;
+      padding: 10px 12px;
+      pointer-events: auto;
+    }
+    #activeAction.idle .deactivate-btn { display: none; }
+    #activeAction .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+    #activeAction .label { font-size: 11px; opacity: 0.7; letter-spacing: 1px; }
+    #activeAction .name { font-size: 13px; }
+    #activeAction .name .cat-tag {
+      display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; margin-right: 6px;
+      vertical-align: 1px;
+    }
+    .cat-tag.PUISSANCE  { background: var(--c-puissance); color: #fff; }
+    .cat-tag.DEFENSIF   { background: var(--c-defensif); color: #fff; }
+    .cat-tag.UTILITAIRE { background: var(--c-utilitaire); color: #000; }
+    #activeAction .timer { font-size: 11px; opacity: 0.7; }
+    #activeAction .deactivate-btn {
+      background: transparent; border: 1px solid #f55; color: #f55;
+      font-family: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer; border-radius: 3px;
+    }
+    #activeAction .deactivate-btn:hover { background: #f55; color: #000; }
+
+    /* Barres de progression par catégorie */
+    .bars { display: flex; flex-direction: column; gap: 5px; }
+    .bar {
+      display: flex; flex-direction: column; gap: 2px;
+      padding: 6px 10px; pointer-events: none;
+    }
+    .bar .head { display: flex; justify-content: space-between; font-size: 11px; letter-spacing: 1px; }
+    .bar .track {
+      height: 6px; background: rgba(255,255,255,0.08); border-radius: 3px; overflow: hidden;
+    }
+    .bar .fill { height: 100%; width: 0%; transition: width 0.4s ease; }
+    .bar.PUISSANCE  .fill  { background: var(--c-puissance); }
+    .bar.DEFENSIF   .fill  { background: var(--c-defensif); }
+    .bar.UTILITAIRE .fill  { background: var(--c-utilitaire); }
+    .bar.PUISSANCE  .head .name  { color: var(--c-puissance); }
+    .bar.DEFENSIF   .head .name  { color: var(--c-defensif); }
+    .bar.UTILITAIRE .head .name  { color: var(--c-utilitaire); }
+
+    /* Historique d'activité (droite) */
     #historyPanel {
       position: fixed; top: 12px; right: 12px; z-index: 10;
-      background: rgba(0, 20, 40, 0.7); border: 1px solid #4af; border-radius: 4px;
+      background: rgba(0, 20, 40, 0.7); border: 1px solid var(--c-frame); border-radius: 4px;
       box-shadow: 0 0 12px rgba(74, 175, 255, 0.3);
-      font-size: 12px; min-width: 220px; max-width: 280px;
+      font-size: 12px; min-width: 260px; max-width: 320px;
       pointer-events: none;
     }
     #historyPanel .history-header {
-      color: #4af; padding: 6px 10px; border-bottom: 1px solid #1a3050;
+      color: var(--c-frame); padding: 6px 10px; border-bottom: 1px solid #1a3050;
       font-size: 11px; letter-spacing: 1px;
     }
-    #historyList { list-style: none; margin: 0; padding: 4px 0; max-height: 240px; overflow: hidden; }
+    #historyList { list-style: none; margin: 0; padding: 4px 0; max-height: 280px; overflow: hidden; }
     #historyList li {
-      display: flex; justify-content: space-between; align-items: baseline;
-      padding: 3px 10px; gap: 12px;
+      display: flex; align-items: baseline; gap: 8px; padding: 3px 10px;
     }
     #historyList li:nth-child(odd) { background: rgba(74, 175, 255, 0.05); }
-    #historyList .hu { color: #fff; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #historyList .ht { color: #4af; opacity: 0.8; font-size: 11px; white-space: nowrap; }
+    #historyList .hu { color: #fff; font-weight: bold; min-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #historyList .hev { color: #ccc; flex: 1; }
+    #historyList .ht { color: var(--c-frame); opacity: 0.8; font-size: 10px; white-space: nowrap; }
     #historyList .empty { color: #888; padding: 8px 10px; font-style: italic; }
     #historyList li.fresh { animation: flashIn 0.6s ease-out; }
     @keyframes flashIn {
       from { background: rgba(74, 255, 248, 0.4); }
       to { background: rgba(74, 175, 255, 0.05); }
     }
+
     #game { width: 100vw; height: 100vh; }
     #hint {
       position: fixed; bottom: 12px; left: 50%; transform: translateX(-50%);
-      background: rgba(0, 20, 40, 0.7); padding: 6px 12px; border: 1px solid #4af;
+      background: rgba(0, 20, 40, 0.7); padding: 6px 12px; border: 1px solid var(--c-frame);
       border-radius: 4px; font-size: 12px; opacity: 0.7; pointer-events: none;
     }
 
-    /* Auth modal */
+    /* Auth modal (inchangé) */
     #authModal {
       position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
       display: flex; align-items: center; justify-content: center; z-index: 200;
     }
     #authModal.hidden { display: none; }
     .modal-box {
-      background: #0a1424; border: 1px solid #4af; border-radius: 6px;
+      background: #0a1424; border: 1px solid var(--c-frame); border-radius: 6px;
       box-shadow: 0 0 32px rgba(74, 175, 255, 0.4);
       padding: 24px 28px; min-width: 320px; position: relative;
     }
-    .modal-box h2 { margin: 0 0 6px 0; color: #4af; font-size: 16px; }
+    .modal-box h2 { margin: 0 0 6px 0; color: var(--c-frame); font-size: 16px; }
     .modal-box .subtitle { margin: 0 0 16px 0; font-size: 12px; opacity: 0.7; }
     .tabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid #1a3050; }
     .tab {
@@ -81,27 +133,63 @@
       font-family: inherit; font-size: 13px; padding: 8px; cursor: pointer;
       border-bottom: 2px solid transparent;
     }
-    .tab.active { color: #4af; border-bottom-color: #4af; }
+    .tab.active { color: var(--c-frame); border-bottom-color: var(--c-frame); }
     .modal-box form { display: flex; flex-direction: column; gap: 10px; }
     .modal-box form.hidden { display: none; }
     .modal-box input {
-      background: #000; color: #fff; border: 1px solid #4af; padding: 8px 10px;
+      background: #000; color: #fff; border: 1px solid var(--c-frame); padding: 8px 10px;
       font-family: monospace; font-size: 13px; border-radius: 3px;
     }
     .modal-box input:focus { outline: none; border-color: #6cf; }
     .modal-box button[type="submit"] {
-      background: #4af; color: #000; border: 0; padding: 8px 16px;
+      background: var(--c-frame); color: #000; border: 0; padding: 8px 16px;
       font-family: monospace; cursor: pointer; font-weight: bold; border-radius: 3px;
       margin-top: 4px;
     }
     .modal-box button[type="submit"]:hover { background: #6cf; }
-    .modal-box button[type="submit"]:disabled { opacity: 0.5; cursor: not-allowed; }
     #authError { color: #f44; font-size: 12px; min-height: 16px; margin: 0; }
     #authClose {
       position: absolute; top: 8px; right: 12px; background: transparent;
       border: 0; color: #888; font-size: 20px; cursor: pointer;
     }
     #authClose:hover { color: #fff; }
+
+    /* Menu d'action (popup contextuel sur clic d'un élément) */
+    #actionMenu {
+      position: fixed; z-index: 150;
+      background: #0a1424; border: 1px solid var(--c-frame); border-radius: 6px;
+      box-shadow: 0 0 24px rgba(74, 175, 255, 0.5);
+      padding: 10px 12px; min-width: 200px;
+    }
+    #actionMenu.hidden { display: none; }
+    #actionMenu .head {
+      display: flex; justify-content: space-between; align-items: center; gap: 8px;
+      border-bottom: 1px solid #1a3050; padding-bottom: 6px; margin-bottom: 8px;
+    }
+    #actionMenu .head .title { color: var(--c-frame); font-size: 12px; letter-spacing: 1px; }
+    #actionMenu .head .close {
+      background: transparent; border: 0; color: #888; font-size: 16px; cursor: pointer;
+      padding: 0 4px;
+    }
+    #actionMenu .head .close:hover { color: #fff; }
+    #actionMenu .actions { display: flex; flex-direction: column; gap: 6px; }
+    #actionMenu .actions button {
+      background: rgba(255,255,255,0.05); border: 1px solid #2a3e58; color: #fff;
+      font-family: inherit; font-size: 12px; padding: 7px 10px; cursor: pointer; border-radius: 3px;
+      display: flex; align-items: center; gap: 8px; text-align: left;
+    }
+    #actionMenu .actions button:hover { border-color: var(--c-frame); background: rgba(74,175,255,0.1); }
+    #actionMenu .actions button.active { border-color: #4f8; }
+    #actionMenu .actions button .tag {
+      display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px;
+    }
+    #actionMenu .deact {
+      margin-top: 8px; width: 100%;
+      background: transparent; border: 1px solid #f55; color: #f55;
+      font-family: inherit; font-size: 11px; padding: 6px; cursor: pointer; border-radius: 3px;
+    }
+    #actionMenu .deact:hover { background: #f55; color: #000; }
+    #actionMenu .note { font-size: 10px; opacity: 0.6; margin-top: 6px; font-style: italic; }
   </style>
 </head>
 <body>
@@ -111,15 +199,51 @@
       <button id="authBtn">Se connecter</button>
     </div>
     <div class="line">Ressource de faction : <strong id="resource">0</strong></div>
-    <div class="line" id="cooldown">—</div>
+    <div class="line idle" id="activeAction">
+      <div class="row">
+        <span class="label">ACTION ACTIVE</span>
+        <button class="deactivate-btn" id="deactivateBtn">Désactiver</button>
+      </div>
+      <div class="row">
+        <span class="name" id="activeActionName">— aucune —</span>
+      </div>
+      <div class="row">
+        <span class="timer" id="activeActionTimer"></span>
+      </div>
+    </div>
+    <div class="line bars">
+      <div class="bar PUISSANCE">
+        <div class="head"><span class="name">PUISSANCE</span><span class="val" id="barPuissanceVal">0</span></div>
+        <div class="track"><div class="fill" id="barPuissanceFill"></div></div>
+      </div>
+      <div class="bar DEFENSIF">
+        <div class="head"><span class="name">DÉFENSIF</span><span class="val" id="barDefensifVal">0</span></div>
+        <div class="track"><div class="fill" id="barDefensifFill"></div></div>
+      </div>
+      <div class="bar UTILITAIRE">
+        <div class="head"><span class="name">UTILITAIRE</span><span class="val" id="barUtilitaireVal">0</span></div>
+        <div class="track"><div class="fill" id="barUtilitaireFill"></div></div>
+      </div>
+    </div>
   </div>
+
   <div id="historyPanel">
     <div class="history-header">▸ ACTIVITÉ RÉCENTE</div>
     <ul id="historyList"><li class="empty">Connexion…</li></ul>
   </div>
 
-  <div id="hint">Clique sur le cristal pour contribuer (1 fois toutes les 6h)</div>
+  <div id="hint">Clique sur la tourelle ou un astéroïde pour activer une action</div>
   <div id="game"></div>
+
+  <div id="actionMenu" class="hidden">
+    <div class="head">
+      <span class="title" id="actionMenuTitle">ÉLÉMENT</span>
+      <button class="close" id="actionMenuClose" aria-label="Fermer">×</button>
+    </div>
+    <div class="actions" id="actionMenuActions"></div>
+    <button class="deact hidden" id="actionMenuDeact">Désactiver</button>
+    <div class="note hidden" id="actionMenuNote"></div>
+  </div>
 
   <div id="authModal" class="hidden">
     <div class="modal-box">
