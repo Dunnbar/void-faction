@@ -63,7 +63,7 @@ socket.on('resource', (data) => {
   resourceEl.textContent = data.resource;
 });
 socket.on('streamer:kicked', () => {
-  alert('Un autre streameur s\'est connecté. Tu as perdu le contrôle.');
+  alert('Un autre Amiral s\'est connecté. Tu as perdu le contrôle.');
   location.reload();
 });
 
@@ -129,15 +129,25 @@ class MainScene extends Phaser.Scene {
       follow: this.ship
     });
 
-    this.keys = this.input.keyboard.addKeys({
-      up: Phaser.Input.Keyboard.KeyCodes.Z,
-      down: Phaser.Input.Keyboard.KeyCodes.S,
-      left: Phaser.Input.Keyboard.KeyCodes.Q,
-      right: Phaser.Input.Keyboard.KeyCodes.D,
-      upArrow: Phaser.Input.Keyboard.KeyCodes.UP,
-      downArrow: Phaser.Input.Keyboard.KeyCodes.DOWN,
-      leftArrow: Phaser.Input.Keyboard.KeyCodes.LEFT,
-      rightArrow: Phaser.Input.Keyboard.KeyCodes.RIGHT
+    // Marqueur visuel de destination (clic droit)
+    this.destMarker = this.add.circle(0, 0, 14, 0x4f8aff, 0.0).setStrokeStyle(2, 0x4f8aff, 0.9);
+    this.destination = null;
+
+    // Clic droit = définir la destination
+    this.input.mouse.disableContextMenu();
+    this.input.on('pointerdown', (pointer) => {
+      if (pointer.rightButtonDown()) {
+        this.destination = { x: pointer.worldX, y: pointer.worldY };
+        this.destMarker.setPosition(pointer.worldX, pointer.worldY);
+        this.destMarker.setFillStyle(0x4f8aff, 0.25);
+        this.tweens.killTweensOf(this.destMarker);
+        this.tweens.add({
+          targets: this.destMarker,
+          scale: { from: 1.6, to: 1 },
+          duration: 240,
+          ease: 'Back.easeOut'
+        });
+      }
     });
 
     this.lastSend = 0;
@@ -146,20 +156,26 @@ class MainScene extends Phaser.Scene {
   update(time) {
     if (!this.ship) return;
 
-    let ax = 0, ay = 0;
-    if (this.keys.up.isDown || this.keys.upArrow.isDown) ay -= 1;
-    if (this.keys.down.isDown || this.keys.downArrow.isDown) ay += 1;
-    if (this.keys.left.isDown || this.keys.leftArrow.isDown) ax -= 1;
-    if (this.keys.right.isDown || this.keys.rightArrow.isDown) ax += 1;
-    const moving = (ax !== 0 || ay !== 0);
-    if (moving) {
-      const len = Math.hypot(ax, ay);
-      this.ship.setAcceleration((ax / len) * 450, (ay / len) * 450);
+    // Déplacement vers la destination (clic droit)
+    let moving = false;
+    if (this.destination) {
+      const dx = this.destination.x - this.ship.x;
+      const dy = this.destination.y - this.ship.y;
+      const dist = Math.hypot(dx, dy);
+      if (dist < 10) {
+        this.destination = null;
+        this.ship.setAcceleration(0, 0);
+        this.destMarker.setFillStyle(0x4f8aff, 0);
+      } else {
+        this.ship.setAcceleration((dx / dist) * 450, (dy / dist) * 450);
+        moving = true;
+      }
     } else {
       this.ship.setAcceleration(0, 0);
     }
     this.thrust.emitting = moving;
 
+    // Orientation : on suit le curseur (visée indépendante du déplacement)
     const pointer = this.input.activePointer;
     this.ship.rotation = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, pointer.worldX, pointer.worldY) + SHIP_SPRITE_OFFSET;
 

@@ -230,7 +230,7 @@ io.on('connection', (socket) => {
 server.listen(PORT, () => {
   console.log(`VoidFaction écoute sur le port ${PORT}`);
   const fromEnv = !!process.env.STREAMER_PASSWORD;
-  console.log(`Streameur : STREAMER_PASSWORD source=${fromEnv ? 'env' : 'défaut'}, longueur=${STREAMER_PASSWORD.length}`);
+  console.log(`Amiral : STREAMER_PASSWORD source=${fromEnv ? 'env' : 'défaut'}, longueur=${STREAMER_PASSWORD.length}`);
   // Diagnostic accès fichier
   try {
     const testFile = path.join(dataDir, '.write-test');
