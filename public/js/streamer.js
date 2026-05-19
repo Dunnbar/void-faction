@@ -175,9 +175,11 @@ class MainScene extends Phaser.Scene {
     }
     this.thrust.emitting = moving;
 
-    // Orientation : on suit le curseur (visée indépendante du déplacement)
-    const pointer = this.input.activePointer;
-    this.ship.rotation = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, pointer.worldX, pointer.worldY) + SHIP_SPRITE_OFFSET;
+    // Orientation : on s'oriente vers la destination quand on se déplace,
+    // sinon on garde la rotation actuelle
+    if (this.destination) {
+      this.ship.rotation = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.destination.x, this.destination.y) + SHIP_SPRITE_OFFSET;
+    }
 
     if (this.ship.x < 0) this.ship.x = WORLD_W;
     else if (this.ship.x > WORLD_W) this.ship.x = 0;
