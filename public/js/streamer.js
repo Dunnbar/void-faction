@@ -62,6 +62,59 @@ let elementStates = new Map();
 let factionResources = { materiaux: 0, radius: 0 };
 let knownBuildTime = null;
 
+// ============ Commandant overlay HUD ============
+const CAPTAIN_FRAMES = (() => {
+  const arr = [];
+  for (let i = 0; i < 18; i++) arr.push(`/assets/PNG/CaptainTalk/Talk01/skeleton-LoopTalk_${i}.png`);
+  return arr;
+})();
+CAPTAIN_FRAMES.forEach((src) => { const img = new Image(); img.src = src; });
+let captainAnimInterval = null;
+let captainHideTimeout = null;
+function showCaptain(message, durationMs) {
+  const el = document.getElementById('captainAlert');
+  const img = document.getElementById('captainImg');
+  const msg = document.getElementById('captainMsg');
+  if (!el || !img || !msg) return;
+  msg.innerHTML = message;
+  el.classList.remove('hidden');
+  if (captainAnimInterval) clearInterval(captainAnimInterval);
+  if (captainHideTimeout) clearTimeout(captainHideTimeout);
+  let i = 0;
+  img.src = CAPTAIN_FRAMES[0];
+  captainAnimInterval = setInterval(() => {
+    i = (i + 1) % CAPTAIN_FRAMES.length;
+    img.src = CAPTAIN_FRAMES[i];
+  }, 70);
+  if (durationMs > 0) captainHideTimeout = setTimeout(hideCaptain, durationMs);
+}
+function hideCaptain() {
+  const el = document.getElementById('captainAlert');
+  if (el) el.classList.add('hidden');
+  if (captainAnimInterval) { clearInterval(captainAnimInterval); captainAnimInterval = null; }
+  if (captainHideTimeout) { clearTimeout(captainHideTimeout); captainHideTimeout = null; }
+}
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+function triggerCaptainForWave(wave) {
+  if (!wave) return;
+  const now = Date.now();
+  const target = escapeHtml(wave.targetLabel || 'la base');
+  const warnMs = Math.max(0, wave.warningEndsAt - now);
+  const totalRemaining = Math.max(0, wave.endsAt - now);
+  if (warnMs > 0) {
+    showCaptain(`<span class="danger">⚠ ENNEMIS DÉTECTÉS</span><br>Cible : ${target}<br>Tenez vos positions !`, warnMs + 800);
+    setTimeout(() => {
+      if (Date.now() < wave.endsAt - 1500) {
+        showCaptain(`<span class="danger">L'ENNEMI EST LÀ !</span><br>Tirez sur les hostiles !`, Math.max(1500, wave.endsAt - Date.now() - 600));
+      }
+    }, warnMs);
+  } else if (totalRemaining > 1500) {
+    showCaptain(`<span class="danger">L'ENNEMI EST LÀ !</span><br>Tirez sur les hostiles !`, totalRemaining - 600);
+  }
+}
+
 function triggerVersionReload() {
   console.log('%c[VoidFaction Amiral] Nouvelle version détectée — rechargement…', 'color:#f80; font-weight:bold; font-size:14px');
   const notif = document.createElement('div');
@@ -120,6 +173,7 @@ socket.on('init', (data) => {
     TURRET_Y = data.world.turretY;
   }
   pendingWave = data.currentWave && data.currentWave.endsAt > Date.now() ? data.currentWave : null;
+  if (pendingWave) triggerCaptainForWave(pendingWave);
   const scene = game?.scene.getScene('main');
   if (scene && scene.scene.isActive()) {
     scene.setupElements(serverElements);
@@ -161,6 +215,7 @@ socket.on('wave:incoming', (wave) => {
   const scene = game?.scene.getScene('main');
   if (scene && scene.scene.isActive()) scene.handleWaveIncoming(wave);
   else pendingWave = wave;
+  triggerCaptainForWave(wave);
 });
 socket.on('streamer:kicked', () => {
   alert('Un autre Amiral s\'est connecté. Tu as perdu le contrôle.');

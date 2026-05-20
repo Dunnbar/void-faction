@@ -166,6 +166,64 @@
       to { background: rgba(74, 175, 255, 0.05); }
     }
 
+    /* Commandant qui parle pendant les vagues */
+    #captainAlert {
+      position: fixed; bottom: 14px; left: 14px; z-index: 28;
+      display: flex; align-items: flex-end; gap: 10px;
+      pointer-events: none;
+      animation: captainSlideIn 0.4s ease-out;
+    }
+    #captainAlert.hidden { display: none; }
+    @keyframes captainSlideIn {
+      from { transform: translateX(-30px); opacity: 0; }
+      to { transform: translateX(0); opacity: 1; }
+    }
+    #captainAlert .portrait {
+      width: 140px; height: 130px;
+      border: 2px solid #4af;
+      border-radius: 6px;
+      background: rgba(0, 20, 40, 0.85);
+      box-shadow: 0 0 18px rgba(74, 175, 255, 0.55);
+      overflow: hidden;
+      display: flex; align-items: center; justify-content: center;
+      position: relative;
+    }
+    #captainAlert .portrait::before {
+      content: ''; position: absolute; inset: 0;
+      background: repeating-linear-gradient(0deg, transparent 0, transparent 2px, rgba(255,255,255,0.06) 2px, rgba(255,255,255,0.06) 3px);
+      pointer-events: none; z-index: 2;
+    }
+    #captainAlert .portrait img {
+      width: 100%; height: 100%; object-fit: contain;
+      image-rendering: -webkit-optimize-contrast;
+    }
+    #captainAlert .bubble {
+      position: relative;
+      background: rgba(0, 20, 40, 0.92);
+      border: 2px solid #4af;
+      border-radius: 6px;
+      padding: 10px 14px;
+      max-width: 320px;
+      font-size: 13px;
+      letter-spacing: 1px;
+      color: #fff;
+      box-shadow: 0 0 14px rgba(74, 175, 255, 0.4);
+      line-height: 1.4;
+    }
+    #captainAlert .bubble::before {
+      content: ''; position: absolute; left: -8px; top: 20px;
+      width: 0; height: 0;
+      border-top: 8px solid transparent;
+      border-bottom: 8px solid transparent;
+      border-right: 8px solid #4af;
+    }
+    #captainAlert .bubble .role {
+      display: block; font-size: 10px; color: #4af; opacity: 0.9; margin-bottom: 3px;
+      text-transform: uppercase; letter-spacing: 2px;
+    }
+    #captainAlert .bubble .msg { color: #fff; font-weight: bold; }
+    #captainAlert .bubble .msg .danger { color: #ff7a7a; }
+
     /* Bannière vague d'ennemis */
     #waveBanner {
       position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
@@ -400,6 +458,14 @@
     <span>VAGUE EN APPROCHE — CIBLE</span>
     <span class="target"></span>
     <span class="countdown"></span>
+  </div>
+
+  <div id="captainAlert" class="hidden">
+    <div class="portrait"><img id="captainImg" alt="Commandant" /></div>
+    <div class="bubble">
+      <span class="role">COMMANDANT</span>
+      <span class="msg" id="captainMsg"></span>
+    </div>
   </div>
 
   <div id="hint">Clique sur la tourelle ou un astéroïde pour activer une action — molette pour zoomer</div>
