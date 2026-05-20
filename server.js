@@ -11,8 +11,11 @@ const PORT = Number(process.env.PORT) || 3000;
 const BUILD_TIME = new Date().toISOString();
 const WORLD_W = 2400;
 const WORLD_H = 1350;
-const TURRET_X = 1200;
-const TURRET_Y = 1000;
+const BASE_X = WORLD_W / 2;
+const BASE_Y = WORLD_H / 2;
+const BASE_PERIMETER = 560; // rayon visuel de la "grande base" autour du centre
+const TURRET_X = BASE_X;     // legacy, gardé pour compat
+const TURRET_Y = BASE_Y;
 const USERNAME_RE = /^[a-zA-Z0-9_-]{3,20}$/;
 
 const ACTION_TICK_MS = 10 * 1000;          // +1 toutes les 10 secondes
@@ -50,27 +53,41 @@ const TURRET_HP_MAX       = 200;
 const BASE_HP_MAX         = 400;
 const BASE_ESSENCE_MAX    = 400;
 
-const ELEMENTS = [
-  // Base centrale
-  { id: 'base-1', type: 'base', x: WORLD_W / 2, y: WORLD_H / 2,
-    label: 'BASE', actions: BASE_ACTIONS },
-  // Tourelles autour de la base (formation triangulaire)
-  { id: 'turret-1', type: 'turret', x: 1200, y: 380,
-    label: 'TOURELLE NORD', actions: TURRET_ACTIONS },
-  { id: 'turret-2', type: 'turret', x: 1620, y: 970,
-    label: 'TOURELLE SE',  actions: TURRET_ACTIONS },
-  { id: 'turret-3', type: 'turret', x: 780,  y: 970,
-    label: 'TOURELLE SO',  actions: TURRET_ACTIONS },
-  // Astéroïdes : alternance matériaux / radius (variant aléatoire 01-15 attribué ci-dessous)
-  { id: 'asteroid-0', type: 'asteroid', subtype: 'materiaux', x: 250,  y: 200,  scale: 1.4, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
-  { id: 'asteroid-1', type: 'asteroid', subtype: 'radius',    x: 700,  y: 350,  scale: 1.0, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
-  { id: 'asteroid-2', type: 'asteroid', subtype: 'materiaux', x: 1700, y: 350,  scale: 1.2, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
-  { id: 'asteroid-3', type: 'asteroid', subtype: 'radius',    x: 2150, y: 230,  scale: 0.9, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
-  { id: 'asteroid-4', type: 'asteroid', subtype: 'materiaux', x: 250,  y: 1130, scale: 1.6, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
-  { id: 'asteroid-5', type: 'asteroid', subtype: 'radius',    x: 650,  y: 1080, scale: 0.95, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
-  { id: 'asteroid-6', type: 'asteroid', subtype: 'materiaux', x: 1750, y: 1100, scale: 1.1, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
-  { id: 'asteroid-7', type: 'asteroid', subtype: 'radius',    x: 2180, y: 1220, scale: 1.3, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION }
-];
+// Hélper polaire : place un élément à (angle radians, distance px) du centre.
+function poly(angleRad, dist) {
+  return { x: Math.round(BASE_X + Math.cos(angleRad) * dist), y: Math.round(BASE_Y + Math.sin(angleRad) * dist) };
+}
+const TURRET_D = 260;     // rayon des tourelles
+const ASTEROID_D = 470;   // rayon des astéroïdes
+const ELEMENTS = (() => {
+  const list = [
+    { id: 'base-1', type: 'base', x: BASE_X, y: BASE_Y, label: 'BASE', actions: BASE_ACTIONS },
+  ];
+  // 3 tourelles en triangle équilatéral (haut, bas-gauche, bas-droit)
+  const turretAngles = [-Math.PI/2, Math.PI*5/6, Math.PI/6];
+  const turretLabels = ['TOURELLE NORD', 'TOURELLE SO', 'TOURELLE SE'];
+  turretAngles.forEach((a, i) => {
+    const p = poly(a, TURRET_D);
+    list.push({ id: `turret-${i + 1}`, type: 'turret', x: p.x, y: p.y, label: turretLabels[i], actions: TURRET_ACTIONS });
+  });
+  // 8 astéroïdes répartis tous les 45° (alternance matériaux/radius)
+  const subtypes = ['materiaux', 'radius'];
+  const scales = [1.0, 1.1, 1.2, 0.9, 1.0, 0.95, 1.0, 1.05];
+  for (let i = 0; i < 8; i++) {
+    const angle = (i / 8) * Math.PI * 2;
+    const p = poly(angle, ASTEROID_D);
+    const subtype = subtypes[i % 2];
+    list.push({
+      id: `asteroid-${i}`,
+      type: 'asteroid',
+      subtype,
+      x: p.x, y: p.y, scale: scales[i],
+      label: `ASTÉROÏDE (${subtype})`,
+      actions: MINING_ACTION
+    });
+  }
+  return list;
+})();
 
 // Attribution d'un variant graphique aléatoire (1..15) à chaque astéroïde au démarrage
 const ASTEROID_VARIANT_COUNT = 15;
@@ -340,7 +357,7 @@ io.on('connection', (socket) => {
     actionTickMs: ACTION_TICK_MS,
     progress: userProgress,
     activeElements: getAllActiveElementStates(),
-    world: { width: WORLD_W, height: WORLD_H, turretX: TURRET_X, turretY: TURRET_Y },
+    world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y },
     currentWave: currentWave && currentWave.endsAt > Date.now() ? currentWave : null,
     buildTime: BUILD_TIME
   });

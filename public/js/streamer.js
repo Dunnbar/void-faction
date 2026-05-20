@@ -1,12 +1,12 @@
-const CANVAS_W = 1280;
-const CANVAS_H = 720;
 let WORLD_W = 2400;
 let WORLD_H = 1350;
-let TURRET_X = 1200;
-let TURRET_Y = 1000;
-const MIN_ZOOM = 0.45;
-const MAX_ZOOM = 1.4;
-const DEFAULT_ZOOM = 0.75;
+let BASE_X = WORLD_W / 2;
+let BASE_Y = WORLD_H / 2;
+let BASE_PERIMETER = 560;
+let TURRET_X = BASE_X;
+let TURRET_Y = BASE_Y;
+const ZOOM_FACTOR_MIN = 0.85;
+const ZOOM_FACTOR_MAX = 2.5;
 
 const socket = io({ autoConnect: false });
 const loginEl = document.getElementById('login');
@@ -169,6 +169,9 @@ socket.on('init', (data) => {
   if (data.world) {
     WORLD_W = data.world.width;
     WORLD_H = data.world.height;
+    BASE_X = data.world.baseX ?? WORLD_W / 2;
+    BASE_Y = data.world.baseY ?? WORLD_H / 2;
+    BASE_PERIMETER = data.world.basePerimeter ?? 560;
     TURRET_X = data.world.turretX;
     TURRET_Y = data.world.turretY;
   }
@@ -339,13 +342,24 @@ class MainScene extends Phaser.Scene {
     this.ship.setDrag(0.92);
     this.ship.setMaxVelocity(320);
 
-    // Caméra : bornes du monde + follow ship + zoom par molette
+    // Label "AMIRAL" qui suit le vaisseau
+    this.shipLabel = this.add.text(this.ship.x, this.ship.y - 56, 'AMIRAL', {
+      fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#ff8044',
+      stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(11);
+
+    // Cercle "grande base"
+    this.drawBasePerimeter();
+
+    // Caméra : bornes du monde + follow ship + zoom relatif au fit
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
     this.cameras.main.startFollow(this.ship, true, 0.08, 0.08);
-    this.cameras.main.setZoom(DEFAULT_ZOOM);
+    this._userZoomFactor = 1.6; // streameur démarre légèrement zoomé in
+    this.applyFitZoom();
+    this.scale.on('resize', () => this.onResize());
     this.input.on('wheel', (_p, _g, _dx, deltaY) => {
-      const cam = this.cameras.main;
-      cam.setZoom(Phaser.Math.Clamp(cam.zoom - deltaY * 0.0008, MIN_ZOOM, MAX_ZOOM));
+      this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
+      this.applyFitZoom();
     });
 
     this.thrust = this.add.particles(0, 0, 'thrust', {
@@ -445,34 +459,65 @@ class MainScene extends Phaser.Scene {
   }
 
   setupParallaxBackground() {
-    const bg01 = this.add.image(CANVAS_W / 2, CANVAS_H / 2, 'bg-01')
+    const w = this.scale.gameSize.width;
+    const h = this.scale.gameSize.height;
+    this.bgLayer01 = this.add.image(w / 2, h / 2, 'bg-01')
       .setOrigin(0.5).setScrollFactor(0).setDepth(-100);
-    const src01 = this.textures.get('bg-01').getSourceImage();
-    this._bg01CoverScale = Math.max(CANVAS_W / src01.width, CANVAS_H / src01.height) * 1.05;
-    bg01.setScale(this._bg01CoverScale);
-    this.bgLayer01 = bg01;
-
-    const bg02 = this.add.image(CANVAS_W / 2, CANVAS_H / 2, 'bg-02')
+    this.bgLayer02 = this.add.image(w / 2, h / 2, 'bg-02')
       .setOrigin(0.5).setScrollFactor(0.05).setDepth(-90).setAlpha(0.6);
-    const src02 = this.textures.get('bg-02').getSourceImage();
-    this._bg02CoverScale = Math.max(CANVAS_W / src02.width, CANVAS_H / src02.height);
-    bg02.setScale(this._bg02CoverScale);
-    this.bgLayer02 = bg02;
-
-    const bg03 = this.add.image(360, 240, 'bg-03')
+    this.bgLayer03 = this.add.image(360, 240, 'bg-03')
       .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.55);
-    this.bgLayer03 = bg03;
-
-    const bg04 = this.add.image(2100, 1180, 'bg-04')
+    this.bgLayer04 = this.add.image(2100, 1180, 'bg-04')
       .setOrigin(0.5).setScrollFactor(0.65).setDepth(-70).setScale(0.7);
-    this.bgLayer04 = bg04;
+    this.updateParallaxBackground();
   }
 
   updateParallaxBackground() {
     if (!this.bgLayer01) return;
-    const z = this.cameras.main.zoom;
-    if (this._bg01CoverScale) this.bgLayer01.setScale(this._bg01CoverScale / z);
-    if (this._bg02CoverScale) this.bgLayer02.setScale(this._bg02CoverScale / z);
+    const cam = this.cameras.main;
+    const z = cam.zoom;
+    const src01 = this.textures.get('bg-01').getSourceImage();
+    const src02 = this.textures.get('bg-02').getSourceImage();
+    const cover01 = Math.max(cam.width / src01.width, cam.height / src01.height) * 1.05;
+    const cover02 = Math.max(cam.width / src02.width, cam.height / src02.height);
+    this.bgLayer01.setScale(cover01 / z);
+    this.bgLayer02.setScale(cover02 / z);
+  }
+
+  applyFitZoom() {
+    const cam = this.cameras.main;
+    const fit = Math.min(cam.width / WORLD_W, cam.height / WORLD_H);
+    cam.setZoom(fit * (this._userZoomFactor || 1));
+  }
+
+  onResize() {
+    const w = this.scale.gameSize.width;
+    const h = this.scale.gameSize.height;
+    this.cameras.main.setSize(w, h);
+    this.applyFitZoom();
+    if (this.bgLayer01) this.bgLayer01.setPosition(w / 2, h / 2);
+    if (this.bgLayer02) this.bgLayer02.setPosition(w / 2, h / 2);
+    this.updateParallaxBackground();
+  }
+
+  drawBasePerimeter() {
+    if (this.basePerimeterGfx) this.basePerimeterGfx.destroy();
+    const g = this.add.graphics().setDepth(-50);
+    g.lineStyle(2, 0xff8044, 0.4);
+    g.strokeCircle(BASE_X, BASE_Y, BASE_PERIMETER);
+    g.lineStyle(1, 0xff8044, 0.18);
+    for (let i = 0; i < 16; i++) {
+      const a0 = (i / 16) * Math.PI * 2;
+      const a1 = a0 + Math.PI / 24;
+      g.beginPath();
+      g.arc(BASE_X, BASE_Y, BASE_PERIMETER - 18, a0, a1);
+      g.strokePath();
+    }
+    this.basePerimeterGfx = g;
+    this.tweens.add({
+      targets: g, alpha: { from: 0.7, to: 1.0 },
+      yoyo: true, repeat: -1, duration: 3000, ease: 'Sine.easeInOut'
+    });
   }
 
   setupElements(elements) {
@@ -782,6 +827,10 @@ class MainScene extends Phaser.Scene {
   update(time) {
     this.updateParallaxBackground();
     if (!this.ship) return;
+    if (this.shipLabel) {
+      this.shipLabel.x = this.ship.x;
+      this.shipLabel.y = this.ship.y - 56;
+    }
 
     // Déplacement vers la destination : contrôleur proportionnel.
     // Le vaisseau accélère pour rejoindre une "vitesse cible" qui décroît
@@ -845,11 +894,14 @@ function startGame() {
   game = new Phaser.Game({
     type: Phaser.AUTO,
     parent: 'game',
-    width: CANVAS_W,
-    height: CANVAS_H,
     backgroundColor: '#04060a',
     physics: { default: 'arcade', arcade: { gravity: { y: 0 } } },
-    scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+    scale: {
+      mode: Phaser.Scale.RESIZE,
+      autoCenter: Phaser.Scale.CENTER_BOTH,
+      width: window.innerWidth,
+      height: window.innerHeight
+    },
     scene: MainScene
   });
 }

@@ -1,13 +1,12 @@
-const CANVAS_W = 1280;
-const CANVAS_H = 720;
 let WORLD_W = 2400;
 let WORLD_H = 1350;
-let TURRET_X = 1200;
-let TURRET_Y = 1000;
-const FIT_ZOOM = CANVAS_W / WORLD_W;       // ~0.533 : tout le monde tient dans le canvas
-const MIN_ZOOM = FIT_ZOOM * 0.85;          // un peu plus loin que le strict ajustement
-const MAX_ZOOM = 1.2;                       // zoom in pour voir les détails
-const DEFAULT_ZOOM = FIT_ZOOM;             // démarre dézoomé
+let BASE_X = WORLD_W / 2;
+let BASE_Y = WORLD_H / 2;
+let BASE_PERIMETER = 560;
+let TURRET_X = BASE_X;
+let TURRET_Y = BASE_Y;
+const ZOOM_FACTOR_MIN = 0.85;
+const ZOOM_FACTOR_MAX = 2.5;
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
@@ -536,6 +535,9 @@ function connectSocket() {
     if (data.world) {
       WORLD_W = data.world.width;
       WORLD_H = data.world.height;
+      BASE_X = data.world.baseX ?? WORLD_W / 2;
+      BASE_Y = data.world.baseY ?? WORLD_H / 2;
+      BASE_PERIMETER = data.world.basePerimeter ?? 560;
       TURRET_X = data.world.turretX;
       TURRET_Y = data.world.turretY;
     }
@@ -707,7 +709,9 @@ class MainScene extends Phaser.Scene {
     this.cameras.main.setBackgroundColor('#04060a');
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
     this.cameras.main.centerOn(WORLD_W / 2, WORLD_H / 2);
-    this.cameras.main.setZoom(DEFAULT_ZOOM);
+    this._userZoomFactor = 1.0;
+    this.applyFitZoom();
+    this.scale.on('resize', () => this.onResize());
 
     // Background parallax (background_02 : fond fixe + planètes parallax)
     this.setupParallaxBackground();
@@ -725,18 +729,24 @@ class MainScene extends Phaser.Scene {
     this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2, 'ship-fr-000')
       .setScale(SHIP_SCALE)
       .setOrigin(0.5, 0.36)
-      .setDepth(10); // au-dessus des éléments (base, tourelles, astéroïdes)
+      .setDepth(10);
     this.ship.play('ship-thrust');
+    this.shipLabel = this.add.text(this.ship.x, this.ship.y - 56, 'AMIRAL', {
+      fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af',
+      stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(11);
+
+    // Cercle de "grande base" (rayon visuel autour du centre)
+    this.drawBasePerimeter();
 
     // Conteneur pour les ennemis
     this.enemies = new Set();
     this.waveWarnIcon = null;
 
-    // Zoom à la molette
+    // Zoom à la molette (zoomFactor relatif au "fit" qui s'adapte aux resize)
     this.input.on('wheel', (_pointer, _gos, _dx, deltaY) => {
-      const cam = this.cameras.main;
-      const newZoom = Phaser.Math.Clamp(cam.zoom - deltaY * 0.0008, MIN_ZOOM, MAX_ZOOM);
-      cam.setZoom(newZoom);
+      this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
+      this.applyFitZoom();
     });
 
     // Si l'init est déjà arrivée avant que create() ne tourne, on applique maintenant
@@ -747,6 +757,26 @@ class MainScene extends Phaser.Scene {
   }
 
   update() {
+    this.updateParallaxBackground();
+    if (this.shipLabel && this.ship) {
+      this.shipLabel.x = this.ship.x;
+      this.shipLabel.y = this.ship.y - 56;
+    }
+  }
+
+  applyFitZoom() {
+    const cam = this.cameras.main;
+    const fit = Math.min(cam.width / WORLD_W, cam.height / WORLD_H);
+    cam.setZoom(fit * (this._userZoomFactor || 1));
+  }
+
+  onResize() {
+    const w = this.scale.gameSize.width;
+    const h = this.scale.gameSize.height;
+    this.cameras.main.setSize(w, h);
+    this.applyFitZoom();
+    if (this.bgLayer01) this.bgLayer01.setPosition(w / 2, h / 2);
+    if (this.bgLayer02) this.bgLayer02.setPosition(w / 2, h / 2);
     this.updateParallaxBackground();
   }
 
@@ -777,52 +807,59 @@ class MainScene extends Phaser.Scene {
   }
 
   setupParallaxBackground() {
-    // Calque 01 : champ d'étoiles profond. Fixé à la caméra (scrollFactor 0),
-    // contre-zoom dans update() pour rester de la même taille a l'écran.
-    const bg01 = this.add.image(CANVAS_W / 2, CANVAS_H / 2, 'bg-01')
-      .setOrigin(0.5)
-      .setScrollFactor(0)
-      .setDepth(-100);
-    const src01 = this.textures.get('bg-01').getSourceImage();
-    this._bg01CoverScale = Math.max(CANVAS_W / src01.width, CANVAS_H / src01.height) * 1.05;
-    bg01.setScale(this._bg01CoverScale);
+    const w = this.scale.gameSize.width;
+    const h = this.scale.gameSize.height;
+    // Calque 01 : champ d'étoiles profond, fixé à la caméra (scrollFactor 0)
+    const bg01 = this.add.image(w / 2, h / 2, 'bg-01')
+      .setOrigin(0.5).setScrollFactor(0).setDepth(-100);
     this.bgLayer01 = bg01;
-
-    // Calque 02 : extras (mostly transparent). Très lent (scrollFactor 0.05).
-    const bg02 = this.add.image(CANVAS_W / 2, CANVAS_H / 2, 'bg-02')
-      .setOrigin(0.5)
-      .setScrollFactor(0.05)
-      .setDepth(-90)
-      .setAlpha(0.6);
-    const src02 = this.textures.get('bg-02').getSourceImage();
-    this._bg02CoverScale = Math.max(CANVAS_W / src02.width, CANVAS_H / src02.height);
-    bg02.setScale(this._bg02CoverScale);
+    // Calque 02 : extras, scrollFactor minimal pour quasi-immobile
+    const bg02 = this.add.image(w / 2, h / 2, 'bg-02')
+      .setOrigin(0.5).setScrollFactor(0.05).setDepth(-90).setAlpha(0.6);
     this.bgLayer02 = bg02;
-
-    // Calque 03 : Terre, parallax mid (placée en zone décorative hors base)
+    // Calque 03 : Terre, parallax mid, hors de la base centrale
     const bg03 = this.add.image(360, 240, 'bg-03')
-      .setOrigin(0.5)
-      .setScrollFactor(0.35)
-      .setDepth(-80)
-      .setScale(0.55);
+      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.55);
     this.bgLayer03 = bg03;
-
-    // Calque 04 : Lune, parallax plus proche
+    // Calque 04 : Lune, parallax proche
     const bg04 = this.add.image(2100, 1180, 'bg-04')
-      .setOrigin(0.5)
-      .setScrollFactor(0.65)
-      .setDepth(-70)
-      .setScale(0.7);
+      .setOrigin(0.5).setScrollFactor(0.65).setDepth(-70).setScale(0.7);
     this.bgLayer04 = bg04;
+    this.updateParallaxBackground();
   }
 
   updateParallaxBackground() {
-    // Contre-zoom les calques fixes pour qu'ils restent stables visuellement
-    // quelque soit le zoom de la caméra.
     if (!this.bgLayer01) return;
-    const z = this.cameras.main.zoom;
-    if (this._bg01CoverScale) this.bgLayer01.setScale(this._bg01CoverScale / z);
-    if (this._bg02CoverScale) this.bgLayer02.setScale(this._bg02CoverScale / z);
+    const cam = this.cameras.main;
+    const z = cam.zoom;
+    // Calcule la "cover scale" de manière dynamique (canvas peut être redimensionné)
+    const src01 = this.textures.get('bg-01').getSourceImage();
+    const src02 = this.textures.get('bg-02').getSourceImage();
+    const cover01 = Math.max(cam.width / src01.width, cam.height / src01.height) * 1.05;
+    const cover02 = Math.max(cam.width / src02.width, cam.height / src02.height);
+    this.bgLayer01.setScale(cover01 / z);
+    this.bgLayer02.setScale(cover02 / z);
+  }
+
+  drawBasePerimeter() {
+    if (this.basePerimeterGfx) this.basePerimeterGfx.destroy();
+    const g = this.add.graphics().setDepth(-50);
+    g.lineStyle(2, 0x4af, 0.35);
+    g.strokeCircle(BASE_X, BASE_Y, BASE_PERIMETER);
+    // 2ème cercle interne, pointillé via 12 arcs
+    g.lineStyle(1, 0x4af, 0.18);
+    for (let i = 0; i < 16; i++) {
+      const a0 = (i / 16) * Math.PI * 2;
+      const a1 = a0 + Math.PI / 24;
+      g.beginPath();
+      g.arc(BASE_X, BASE_Y, BASE_PERIMETER - 18, a0, a1);
+      g.strokePath();
+    }
+    this.basePerimeterGfx = g;
+    this.tweens.add({
+      targets: g, alpha: { from: 0.7, to: 1.0 },
+      yoyo: true, repeat: -1, duration: 3000, ease: 'Sine.easeInOut'
+    });
   }
 
   setupElements(elements) {
@@ -1256,10 +1293,13 @@ class MainScene extends Phaser.Scene {
 const game = new Phaser.Game({
   type: Phaser.AUTO,
   parent: 'game',
-  width: CANVAS_W,
-  height: CANVAS_H,
   backgroundColor: '#04060a',
-  scale: { mode: Phaser.Scale.FIT, autoCenter: Phaser.Scale.CENTER_BOTH },
+  scale: {
+    mode: Phaser.Scale.RESIZE,
+    autoCenter: Phaser.Scale.CENTER_BOTH,
+    width: window.innerWidth,
+    height: window.innerHeight
+  },
   scene: MainScene
 });
 
