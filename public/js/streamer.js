@@ -552,19 +552,16 @@ class MainScene extends Phaser.Scene {
         const phaserScale = asteroidScaleFor(variant, el.scale);
         const tint = el.subtype === 'radius' ? 0x88e0c8 : 0xffffff;
         const visibleSize = Math.max(meta.w, meta.h) * phaserScale;
+        const tex = this.textures.get(`a-${variant}`);
+        if (tex) tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
         const highlight = this.add.circle(el.x, el.y, visibleSize * 0.6, 0xffd24f, 0)
           .setStrokeStyle(3, 0xffd24f, 0);
+        // Rotation fixe aleatoire, pas de tween continu (les frames du spritesheet
+        // ne sont pas centrees, ce qui produit une vibration en rotation)
         const sprite = this.add.sprite(el.x, el.y, `a-${variant}`, 0)
           .setScale(phaserScale)
           .setRotation(Math.random() * Math.PI * 2)
           .setTint(tint);
-        const dir = (i % 2 === 0) ? 1 : -1;
-        this.tweens.add({
-          targets: sprite,
-          rotation: sprite.rotation + dir * Math.PI * 2,
-          duration: 28000 + (i * 4000),
-          repeat: -1
-        });
         sprite._asteroidVariant = variant;
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);

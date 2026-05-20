@@ -976,21 +976,20 @@ class MainScene extends Phaser.Scene {
         const meta = ASTEROID_VARIANTS[variant] || ASTEROID_VARIANTS['01'];
         const phaserScale = asteroidScaleFor(variant, el.scale);
         const tint = el.subtype === 'radius' ? 0x88e0c8 : 0xffffff;
-        const visibleSize = Math.max(meta.w, meta.h) * phaserScale; // taille visuelle approx en px monde
+        const visibleSize = Math.max(meta.w, meta.h) * phaserScale;
+        // Filtre NEAREST pour eviter le shimmer linear-filter sur les bords
+        const tex = this.textures.get(`a-${variant}`);
+        if (tex) tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
         const highlight = this.add.circle(el.x, el.y, visibleSize * 0.6, 0xffd24f, 0)
           .setStrokeStyle(3, 0xffd24f, 0);
+        // Rotation fixe aleatoire pour variete visuelle, pas de rotation continue
+        // (les frames des spritesheets ne sont pas parfaitement centrees dans leur cellule,
+        //  ce qui cree une vibration visible quand on les fait tourner en continu)
         const sprite = this.add.sprite(el.x, el.y, `a-${variant}`, 0)
           .setScale(phaserScale)
           .setRotation(Math.random() * Math.PI * 2)
           .setTint(tint)
           .setInteractive({ useHandCursor: true });
-        const dir = (i % 2 === 0) ? 1 : -1;
-        this.tweens.add({
-          targets: sprite,
-          rotation: sprite.rotation + dir * Math.PI * 2,
-          duration: 28000 + (i * 4000),
-          repeat: -1
-        });
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
           openActionMenu(el.id, pointer.event);
