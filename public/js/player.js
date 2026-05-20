@@ -818,13 +818,13 @@ class MainScene extends Phaser.Scene {
     const bg02 = this.add.image(w / 2, h / 2, 'bg-02')
       .setOrigin(0.5).setScrollFactor(0.05).setDepth(-90).setAlpha(0.6);
     this.bgLayer02 = bg02;
-    // Calque 03 : Terre, parallax mid, hors de la base centrale
-    const bg03 = this.add.image(360, 240, 'bg-03')
-      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.55);
+    // Calque 03 : Terre, placée loin de la base + plus petite pour rester décorative
+    const bg03 = this.add.image(2200, 1200, 'bg-03')
+      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.28);
     this.bgLayer03 = bg03;
-    // Calque 04 : Lune, parallax proche
-    const bg04 = this.add.image(2100, 1180, 'bg-04')
-      .setOrigin(0.5).setScrollFactor(0.65).setDepth(-70).setScale(0.7);
+    // Calque 04 : Lune, encore plus petite
+    const bg04 = this.add.image(200, 1180, 'bg-04')
+      .setOrigin(0.5).setScrollFactor(0.65).setDepth(-70).setScale(0.45);
     this.bgLayer04 = bg04;
     this.updateParallaxBackground();
   }

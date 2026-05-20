@@ -466,10 +466,10 @@ class MainScene extends Phaser.Scene {
       .setOrigin(0.5).setScrollFactor(0).setDepth(-100);
     this.bgLayer02 = this.add.image(w / 2, h / 2, 'bg-02')
       .setOrigin(0.5).setScrollFactor(0.05).setDepth(-90).setAlpha(0.6);
-    this.bgLayer03 = this.add.image(360, 240, 'bg-03')
-      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.55);
-    this.bgLayer04 = this.add.image(2100, 1180, 'bg-04')
-      .setOrigin(0.5).setScrollFactor(0.65).setDepth(-70).setScale(0.7);
+    this.bgLayer03 = this.add.image(2200, 1200, 'bg-03')
+      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.28);
+    this.bgLayer04 = this.add.image(200, 1180, 'bg-04')
+      .setOrigin(0.5).setScrollFactor(0.65).setDepth(-70).setScale(0.45);
     this.updateParallaxBackground();
   }
 
