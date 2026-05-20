@@ -260,7 +260,8 @@ function userFromToken(token) {
   return stmtGetUserById.get(row.user_id) || null;
 }
 
-const ship = { x: WORLD_W / 2, y: WORLD_H / 2, rotation: 0 };
+// Spawn du vaisseau Amiral : au sud de la base centrale pour ne pas la chevaucher
+const ship = { x: WORLD_W / 2, y: WORLD_H / 2 + 230, rotation: 0 };
 let streamerSocketId = null;
 let currentWave = null;  // wave en cours (null si aucune)
 

@@ -227,7 +227,7 @@ socket.on('streamer:kicked', () => {
 });
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
-const SHIP_SCALE = 0.055; // vaisseau Amiral plus discret
+const SHIP_SCALE = 0.035; // vaisseau Amiral discret, ne masque pas la base
 const ENEMY_LEVELS = [1, 2];
 const ENEMY_ASSETS = {
   1: '/assets/PNG/Ship_02/Ship_LVL_1.png',
@@ -339,8 +339,10 @@ class MainScene extends Phaser.Scene {
     tg.generateTexture('thrust', 8, 8);
     tg.destroy();
 
-    this.ship = this.physics.add.sprite(WORLD_W / 2, WORLD_H / 2, 'ship-fr-000');
-    this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.36).setDepth(10);
+    this.ship = this.physics.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship-fr-000');
+    // Depth 0 (par défaut) : la base et les autres éléments (ajoutés après) passent au-dessus.
+    // Le label "AMIRAL" reste à 11 pour rester visible quoi qu'il arrive.
+    this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.36);
     this.ship.play('ship-thrust');
     this.ship.setDamping(true);
     this.ship.setDrag(0.92);

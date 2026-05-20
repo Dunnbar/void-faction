@@ -10,7 +10,7 @@ const ZOOM_FACTOR_MAX = 2.5;
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
-const SHIP_SCALE = 0.085;
+const SHIP_SCALE = 0.035; // vaisseau Amiral discret
 const ENEMY_LEVELS = [1, 2];
 const ENEMY_ASSETS = {
   1: '/assets/PNG/Ship_02/Ship_LVL_1.png',
@@ -742,10 +742,11 @@ class MainScene extends Phaser.Scene {
     this.createExplosionTexture();
 
     // Vaisseau (positionné via socket)
-    this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2, 'ship-fr-000')
+    this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship-fr-000')
       .setScale(SHIP_SCALE)
-      .setOrigin(0.5, 0.36)
-      .setDepth(10);
+      .setOrigin(0.5, 0.36);
+    // Depth 0 par défaut : la base et les autres éléments passent au-dessus quand
+    // le vaisseau les survole. Le label "AMIRAL" reste à 11 pour rester visible.
     this.ship.play('ship-thrust');
     this.shipLabel = this.add.text(this.ship.x, this.ship.y - 56, 'AMIRAL', {
       fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af',
