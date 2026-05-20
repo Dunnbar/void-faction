@@ -592,6 +592,10 @@ class MainScene extends Phaser.Scene {
   preload() {
     this.load.image('ship', SHIP_ASSET);
     this.load.image('enemy_ship', ENEMY_ASSET);
+    this.load.image('bg-01', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_01.png');
+    this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_02.png');
+    this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_03.png');
+    this.load.image('bg-04', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_04.png');
     for (const [v, meta] of Object.entries(ASTEROID_VARIANTS)) {
       this.load.spritesheet(`a-${v}`,
         `/assets/Asteroids/PNG/asteroid_${v}_with_cracks.png`,
@@ -605,12 +609,8 @@ class MainScene extends Phaser.Scene {
     this.cameras.main.centerOn(WORLD_W / 2, WORLD_H / 2);
     this.cameras.main.setZoom(DEFAULT_ZOOM);
 
-    // Starfield à la taille du monde
-    const sg = this.add.graphics();
-    for (let i = 0; i < 600; i++) {
-      sg.fillStyle(0xffffff, Phaser.Math.FloatBetween(0.25, 1));
-      sg.fillCircle(Phaser.Math.Between(0, WORLD_W), Phaser.Math.Between(0, WORLD_H), Phaser.Math.FloatBetween(0.4, 1.8));
-    }
+    // Background parallax (background_02 : fond fixe + planètes parallax)
+    this.setupParallaxBackground();
 
     // Maps des éléments (peuplées par setupElements)
     this.elementSprites = new Map();
@@ -637,6 +637,59 @@ class MainScene extends Phaser.Scene {
       this.setupElements(serverElements);
       this.applyAllElementStates();
     }
+  }
+
+  update() {
+    this.updateParallaxBackground();
+  }
+
+  setupParallaxBackground() {
+    // Calque 01 : champ d'étoiles profond. Fixé à la caméra (scrollFactor 0),
+    // contre-zoom dans update() pour rester de la même taille a l'écran.
+    const bg01 = this.add.image(CANVAS_W / 2, CANVAS_H / 2, 'bg-01')
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(-100);
+    const src01 = this.textures.get('bg-01').getSourceImage();
+    this._bg01CoverScale = Math.max(CANVAS_W / src01.width, CANVAS_H / src01.height) * 1.05;
+    bg01.setScale(this._bg01CoverScale);
+    this.bgLayer01 = bg01;
+
+    // Calque 02 : extras (mostly transparent). Très lent (scrollFactor 0.05).
+    const bg02 = this.add.image(CANVAS_W / 2, CANVAS_H / 2, 'bg-02')
+      .setOrigin(0.5)
+      .setScrollFactor(0.05)
+      .setDepth(-90)
+      .setAlpha(0.6);
+    const src02 = this.textures.get('bg-02').getSourceImage();
+    this._bg02CoverScale = Math.max(CANVAS_W / src02.width, CANVAS_H / src02.height);
+    bg02.setScale(this._bg02CoverScale);
+    this.bgLayer02 = bg02;
+
+    // Calque 03 : Terre, parallax mid (placée en zone décorative hors base)
+    const bg03 = this.add.image(360, 240, 'bg-03')
+      .setOrigin(0.5)
+      .setScrollFactor(0.35)
+      .setDepth(-80)
+      .setScale(0.55);
+    this.bgLayer03 = bg03;
+
+    // Calque 04 : Lune, parallax plus proche
+    const bg04 = this.add.image(2100, 1180, 'bg-04')
+      .setOrigin(0.5)
+      .setScrollFactor(0.65)
+      .setDepth(-70)
+      .setScale(0.7);
+    this.bgLayer04 = bg04;
+  }
+
+  updateParallaxBackground() {
+    // Contre-zoom les calques fixes pour qu'ils restent stables visuellement
+    // quelque soit le zoom de la caméra.
+    if (!this.bgLayer01) return;
+    const z = this.cameras.main.zoom;
+    if (this._bg01CoverScale) this.bgLayer01.setScale(this._bg01CoverScale / z);
+    if (this._bg02CoverScale) this.bgLayer02.setScale(this._bg02CoverScale / z);
   }
 
   setupElements(elements) {
