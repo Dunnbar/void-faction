@@ -239,6 +239,9 @@ const GUN_SCALE = 0.55;
 function turretGunLevel(puissance) {
   return Math.min(GUN_LEVELS, Math.max(1, 1 + Math.floor((puissance || 0) / 10)));
 }
+function turretRangePx(state) {
+  return 280 + (state?.range || 0) * 10;
+}
 const SHIP_SPRITE_OFFSET = Math.PI / 2; // les nouveaux assets pointent vers le haut
 
 const ASTEROID_VARIANTS = {
@@ -563,15 +566,16 @@ class MainScene extends Phaser.Scene {
         const highlight = this.add.circle(el.x, el.y, 60, 0xff4f6d, 0)
           .setStrokeStyle(2, 0xff4f6d, 0);
         const sprite = this.add.sprite(el.x, el.y, 'gun-01-idle').setScale(GUN_SCALE);
-        // Patrouille : oscillation lente +/- 9° autour de 0
+        // Patrouille (mise en pause quand la tourelle vise une cible)
         const amp = 0.15;
         const dur = 7000 + Math.floor(Math.random() * 4000);
-        this.tweens.add({
+        sprite._patrolTween = this.tweens.add({
           targets: sprite,
           rotation: { from: -amp, to: amp },
           duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
           delay: Math.floor(Math.random() * 2000)
         });
+        sprite._turretId = el.id;
         this.add.text(el.x, el.y + 70, el.label, {
           fontFamily: 'Consolas, monospace', fontSize: '11px', color: '#ff4f6d'
         }).setOrigin(0.5);
@@ -623,6 +627,40 @@ class MainScene extends Phaser.Scene {
     for (const el of serverElements) {
       if (el.type === 'turret') this.updateTurretAppearance(el.id);
     }
+  }
+
+  updateTurretTargeting() {
+    if (!this.elementSprites || !this.enemies) return;
+    for (const el of serverElements) {
+      if (el.type !== 'turret') continue;
+      const sprite = this.elementSprites.get(el.id);
+      const state = elementStates.get(el.id);
+      if (!sprite || !state) continue;
+      const active = (lastActiveElements || []).find(a => a.element_id === el.id);
+      const isShooting = active && active.action_id === 'tir';
+      if (!isShooting) {
+        if (sprite._patrolTween && sprite._patrolTween.paused) sprite._patrolTween.resume();
+        continue;
+      }
+      const range = turretRangePx(state);
+      const target = this.findNearestEnemyInRange(sprite.x, sprite.y, range);
+      if (target) {
+        if (sprite._patrolTween && !sprite._patrolTween.paused) sprite._patrolTween.pause();
+        const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, target.x, target.y);
+        sprite.rotation = a + Math.PI / 2;
+      } else {
+        if (sprite._patrolTween && sprite._patrolTween.paused) sprite._patrolTween.resume();
+      }
+    }
+  }
+
+  findNearestEnemyInRange(tx, ty, range) {
+    let best = null, bestDist = range;
+    for (const e of this.enemies) {
+      const d = Phaser.Math.Distance.Between(tx, ty, e.x, e.y);
+      if (d < bestDist) { best = e; bestDist = d; }
+    }
+    return best;
   }
 
   updateTurretAppearance(id) {
@@ -836,6 +874,7 @@ class MainScene extends Phaser.Scene {
 
   update(time) {
     this.updateParallaxBackground();
+    this.updateTurretTargeting();
     if (!this.ship) return;
     if (this.shipLabel) {
       this.shipLabel.x = this.ship.x;

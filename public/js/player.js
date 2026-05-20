@@ -23,6 +23,11 @@ const GUN_SCALE = 0.55;
 function turretGunLevel(puissance) {
   return Math.min(GUN_LEVELS, Math.max(1, 1 + Math.floor((puissance || 0) / 10)));
 }
+function turretRangePx(state) {
+  // 280px de base + 10px par point de "range" — au range 0 on couvre déjà
+  // le périmètre, au range 28 on couvre toute la zone d'arrivée des vagues
+  return 280 + (state?.range || 0) * 10;
+}
 function gunKey(level, kind, frame) {
   const k = String(level).padStart(2, '0');
   if (kind === 'idle') return `gun-${k}-idle`;
@@ -321,6 +326,14 @@ function openActionMenu(elementId, anchor) {
   if (!el) return;
   actionMenuElementId = elementId;
   actionMenuTitle.textContent = el.label;
+  // Affiche le cercle de range si c'est une tourelle
+  {
+    const scene = game.scene.getScene('main');
+    if (scene && scene.scene.isActive()) {
+      if (el.type === 'turret') scene.showRangeCircle(elementId);
+      else scene.hideRangeCircle();
+    }
+  }
   // Stats de l'élément
   const statsEl = document.getElementById('actionMenuStats');
   if (statsEl) {
@@ -372,6 +385,8 @@ function openActionMenu(elementId, anchor) {
 function closeActionMenu() {
   actionMenu.classList.add('hidden');
   actionMenuElementId = null;
+  const scene = game.scene.getScene('main');
+  if (scene && scene.scene.isActive()) scene.hideRangeCircle();
 }
 
 actionMenuClose.addEventListener('click', closeActionMenu);
@@ -763,6 +778,75 @@ class MainScene extends Phaser.Scene {
       this.shipLabel.x = this.ship.x;
       this.shipLabel.y = this.ship.y - 56;
     }
+    this.updateTurretTargeting();
+  }
+
+  updateTurretTargeting() {
+    if (!this.elementSprites || !this.enemies) return;
+    for (const el of serverElements) {
+      if (el.type !== 'turret') continue;
+      const sprite = this.elementSprites.get(el.id);
+      const state = elementStates.get(el.id);
+      if (!sprite || !state) continue;
+      const active = activeElementsByElement.get(el.id);
+      const isShooting = active && active.action_id === 'tir';
+      if (!isShooting) {
+        // Pas de tir : reprise patrouille si en pause
+        if (sprite._patrolTween && sprite._patrolTween.paused) sprite._patrolTween.resume();
+        continue;
+      }
+      const range = turretRangePx(state);
+      const target = this.findNearestEnemyInRange(sprite.x, sprite.y, range);
+      if (target) {
+        if (sprite._patrolTween && !sprite._patrolTween.paused) sprite._patrolTween.pause();
+        const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, target.x, target.y);
+        sprite.rotation = a + Math.PI / 2; // asset Gun pointe vers le haut
+      } else {
+        if (sprite._patrolTween && sprite._patrolTween.paused) sprite._patrolTween.resume();
+      }
+    }
+  }
+
+  findNearestEnemyInRange(tx, ty, range) {
+    let best = null, bestDist = range;
+    for (const e of this.enemies) {
+      const d = Phaser.Math.Distance.Between(tx, ty, e.x, e.y);
+      if (d < bestDist) { best = e; bestDist = d; }
+    }
+    return best;
+  }
+
+  showRangeCircle(turretId) {
+    this.hideRangeCircle();
+    const state = elementStates.get(turretId);
+    const sprite = this.elementSprites.get(turretId);
+    if (!state || !sprite) return;
+    const range = turretRangePx(state);
+    const g = this.add.graphics().setDepth(-30);
+    g.fillStyle(0xff4f6d, 0.08);
+    g.fillCircle(sprite.x, sprite.y, range);
+    g.lineStyle(2, 0xff4f6d, 0.65);
+    g.strokeCircle(sprite.x, sprite.y, range);
+    // Petits ticks à cardinaux
+    g.lineStyle(2, 0xff4f6d, 0.8);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      const x1 = sprite.x + Math.cos(a) * (range - 8);
+      const y1 = sprite.y + Math.sin(a) * (range - 8);
+      const x2 = sprite.x + Math.cos(a) * (range + 8);
+      const y2 = sprite.y + Math.sin(a) * (range + 8);
+      g.beginPath();
+      g.moveTo(x1, y1); g.lineTo(x2, y2);
+      g.strokePath();
+    }
+    this.rangeCircleGfx = g;
+  }
+
+  hideRangeCircle() {
+    if (this.rangeCircleGfx) {
+      this.rangeCircleGfx.destroy();
+      this.rangeCircleGfx = null;
+    }
   }
 
   applyFitZoom() {
@@ -914,15 +998,16 @@ class MainScene extends Phaser.Scene {
         const sprite = this.add.sprite(el.x, el.y, 'gun-01-idle')
           .setScale(GUN_SCALE)
           .setInteractive({ useHandCursor: true });
-        // Patrouille : oscillation lente +/- 9° autour de 0
+        // Patrouille : oscillation lente +/- 9° autour de 0 (mise en pause si la tourelle vise une cible)
         const amp = 0.15;
         const dur = 7000 + Math.floor(Math.random() * 4000);
-        this.tweens.add({
+        sprite._patrolTween = this.tweens.add({
           targets: sprite,
           rotation: { from: -amp, to: amp },
           duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
           delay: Math.floor(Math.random() * 2000)
         });
+        sprite._turretId = el.id;
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
           openActionMenu(el.id, pointer.event);
