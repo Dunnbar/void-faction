@@ -599,6 +599,12 @@ class MainScene extends Phaser.Scene {
       const newZoom = Phaser.Math.Clamp(cam.zoom - deltaY * 0.0008, MIN_ZOOM, MAX_ZOOM);
       cam.setZoom(newZoom);
     });
+
+    // Si l'init est déjà arrivée avant que create() ne tourne, on applique maintenant
+    if (serverElements.length > 0) {
+      this.setupElements(serverElements);
+      this.applyAllElementStates();
+    }
   }
 
   setupElements(elements) {
