@@ -10,8 +10,14 @@ const MAX_ZOOM = 1.2;                       // zoom in pour voir les détails
 const DEFAULT_ZOOM = FIT_ZOOM;             // démarre dézoomé
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
-const SHIP_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spaceships%20-%20Pack%201/(24).png';
-const ENEMY_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spaceships%20-%20Pack%201/(22).png';
+const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
+const SHIP_SCALE = 0.085;
+const ENEMY_LEVELS = [1, 2];
+const ENEMY_ASSETS = {
+  1: '/assets/PNG/Ship_02/Ship_LVL_1.png',
+  2: '/assets/PNG/Ship_02/Ship_LVL_2.png'
+};
+const ENEMY_SCALE = 0.07;
 
 // Variants d'astéroïdes (asteroid_NN_with_cracks.png) : spritesheets en grille
 // d'images de base (frame 0 = intact, dernière frame = quasi-détruit)
@@ -591,7 +597,23 @@ class MainScene extends Phaser.Scene {
 
   preload() {
     this.load.image('ship', SHIP_ASSET);
-    this.load.image('enemy_ship', ENEMY_ASSET);
+    // Frames d'exhaust pour le vaisseau Amiral (Ship_01, variant 2 = grosse flamme)
+    for (let i = 0; i < 10; i++) {
+      const n = String(i).padStart(3, '0');
+      this.load.image(`ship-fr-${n}`, `/assets/PNG/Ship_01/Exhaust/Exhaust_1_2_${n}.png`);
+    }
+    // Frames d'exhaust + explosion pour les ennemis (par niveau)
+    for (const lvl of ENEMY_LEVELS) {
+      this.load.image(`enemy_ship_${lvl}`, ENEMY_ASSETS[lvl]);
+      for (let i = 0; i < 10; i++) {
+        const n = String(i).padStart(3, '0');
+        this.load.image(`enemy${lvl}-fr-${n}`, `/assets/PNG/Ship_02/Exhaust/Exhaust_${lvl}_2_${n}.png`);
+      }
+      for (let i = 0; i < 9; i++) {
+        const n = String(i).padStart(3, '0');
+        this.load.image(`enemy${lvl}-ex-${n}`, `/assets/PNG/Ship_02/Explosion/Explosion_${lvl}_${n}.png`);
+      }
+    }
     this.load.image('bg-01', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_01.png');
     this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_02.png');
     this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_03.png');
@@ -612,6 +634,9 @@ class MainScene extends Phaser.Scene {
     // Background parallax (background_02 : fond fixe + planètes parallax)
     this.setupParallaxBackground();
 
+    // Animations vaisseaux (Amiral + ennemis lvl 1 et 2)
+    this.createShipAnimations();
+
     // Maps des éléments (peuplées par setupElements)
     this.elementSprites = new Map();
     this.elementHighlights = new Map();
@@ -619,7 +644,10 @@ class MainScene extends Phaser.Scene {
     this.createExplosionTexture();
 
     // Vaisseau (positionné via socket)
-    this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2, 'ship').setScale(0.16);
+    this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2, 'ship-fr-000')
+      .setScale(SHIP_SCALE)
+      .setOrigin(0.5, 0.36); // ancrage sur le centre du vaisseau, pas du composite ship+flame
+    this.ship.play('ship-thrust');
 
     // Conteneur pour les ennemis
     this.enemies = new Set();
@@ -641,6 +669,24 @@ class MainScene extends Phaser.Scene {
 
   update() {
     this.updateParallaxBackground();
+  }
+
+  createShipAnimations() {
+    const mkFrames = (prefix, count) =>
+      Array.from({ length: count }, (_, i) => ({ key: `${prefix}${String(i).padStart(3, '0')}` }));
+    if (!this.anims.exists('ship-thrust')) {
+      this.anims.create({ key: 'ship-thrust', frames: mkFrames('ship-fr-', 10), frameRate: 24, repeat: -1 });
+    }
+    for (const lvl of ENEMY_LEVELS) {
+      const thr = `enemy${lvl}-thrust`;
+      if (!this.anims.exists(thr)) {
+        this.anims.create({ key: thr, frames: mkFrames(`enemy${lvl}-fr-`, 10), frameRate: 24, repeat: -1 });
+      }
+      const ex = `enemy${lvl}-explode`;
+      if (!this.anims.exists(ex)) {
+        this.anims.create({ key: ex, frames: mkFrames(`enemy${lvl}-ex-`, 9), frameRate: 22, repeat: 0 });
+      }
+    }
   }
 
   setupParallaxBackground() {
@@ -957,11 +1003,13 @@ class MainScene extends Phaser.Scene {
   }
 
   spawnEnemy(e) {
-    const sprite = this.add.image(e.spawnX, e.spawnY, 'enemy_ship').setScale(0.10);
-    sprite.setTint(0xff6677);
-    // Orientation vers la cible (asset pointe vers le bas comme le ship player)
+    const level = ENEMY_LEVELS.includes(e.level) ? e.level : 1;
+    const sprite = this.add.sprite(e.spawnX, e.spawnY, `enemy${level}-fr-000`)
+      .setScale(ENEMY_SCALE)
+      .setOrigin(0.5, 0.36);
+    sprite.play(`enemy${level}-thrust`);
     const angle = Math.atan2(e.targetY - e.spawnY, e.targetX - e.spawnX);
-    sprite.rotation = angle - Math.PI / 2;
+    sprite.rotation = angle + Math.PI / 2;
     this.enemies.add(sprite);
     this.tweens.add({
       targets: sprite,
@@ -970,11 +1018,18 @@ class MainScene extends Phaser.Scene {
       duration: e.travelMs,
       ease: 'Linear',
       onComplete: () => {
-        this.explodeAt(sprite.x, sprite.y);
+        this.playEnemyExplosion(sprite.x, sprite.y, level);
         this.enemies.delete(sprite);
         sprite.destroy();
       }
     });
+  }
+
+  playEnemyExplosion(x, y, level) {
+    const lvl = ENEMY_LEVELS.includes(level) ? level : 1;
+    const ex = this.add.sprite(x, y, `enemy${lvl}-ex-000`).setScale(ENEMY_SCALE * 1.8);
+    ex.play(`enemy${lvl}-explode`);
+    ex.once('animationcomplete', () => ex.destroy());
   }
 
   explodeAt(x, y) {

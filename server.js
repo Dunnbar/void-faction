@@ -26,6 +26,7 @@ const WAVE_WARNING_MS = 10 * 1000;         // 10s d'alerte avant le spawn
 const ENEMY_SPEED = 70;                    // px/s
 const ENEMY_MIN = 3;
 const ENEMY_MAX = 6;
+const ENEMY_LEVELS_AVAILABLE = [1, 2]; // niveaux d'ennemis pouvant spawn (Ship_02/Ship_LVL_N)
 
 const CATEGORIES = ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE'];
 const CATEGORY_TO_COLUMN = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILITAIRE: 'utilitaire' };
@@ -617,8 +618,10 @@ function rollWave() {
     const dist = Math.hypot(target.x - spawnX, target.y - spawnY);
     const travelMs = (dist / ENEMY_SPEED) * 1000;
     if (travelMs > maxTravel) maxTravel = travelMs;
+    const level = ENEMY_LEVELS_AVAILABLE[Math.floor(Math.random() * ENEMY_LEVELS_AVAILABLE.length)];
     enemies.push({
       id: `e-${now}-${i}`,
+      level,
       spawnX, spawnY,
       targetX: target.x, targetY: target.y,
       travelMs: Math.round(travelMs),
