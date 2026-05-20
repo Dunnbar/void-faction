@@ -788,9 +788,11 @@ class MainScene extends Phaser.Scene {
     this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship-fr-000')
       .setScale(SHIP_SCALE)
       .setOrigin(0.5, 0.36);
-    // Depth 0 par défaut : la base et les autres éléments passent au-dessus quand
-    // le vaisseau les survole. Le label "AMIRAL" reste à 11 pour rester visible.
     this.ship.play('ship-thrust');
+    this.ship._hp = 100;
+    this.ship._hpMax = 100;
+    this.shipHpBar = this.makeHpBar(this.ship.x, this.ship.y - 40, 60, 0x4fdb73);
+    this.shipHpBar.setDepth(11);
     this.shipLabel = this.add.text(this.ship.x, this.ship.y - 56, 'AMIRAL', {
       fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af',
       stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
@@ -818,9 +820,15 @@ class MainScene extends Phaser.Scene {
 
   update(time, delta) {
     this.updateParallaxBackground();
-    if (this.shipLabel && this.ship) {
-      this.shipLabel.x = this.ship.x;
-      this.shipLabel.y = this.ship.y - 56;
+    if (this.ship) {
+      if (this.shipLabel) {
+        this.shipLabel.x = this.ship.x;
+        this.shipLabel.y = this.ship.y - 56;
+      }
+      if (this.shipHpBar) {
+        this.shipHpBar.x = this.ship.x;
+        this.shipHpBar.y = this.ship.y - 40;
+      }
     }
     this.updateTurretTargeting();
     this.updateEnemyOrbits(delta);
@@ -834,14 +842,19 @@ class MainScene extends Phaser.Scene {
       sprite._orbitAngle += sprite._orbitSpeed * dtSec;
       sprite.x = sprite._target.x + Math.cos(sprite._orbitAngle) * sprite._orbitRadius;
       sprite.y = sprite._target.y + Math.sin(sprite._orbitAngle) * sprite._orbitRadius;
-      // Sprite tangent à la trajectoire d'orbite
       const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2);
       sprite.rotation = tangent + Math.PI / 2;
+      // HP bar suit l'ennemi
+      if (sprite._hpBar) {
+        sprite._hpBar.x = sprite.x;
+        sprite._hpBar.y = sprite.y - 38;
+      }
     }
   }
 
   updateTurretTargeting() {
     if (!this.elementSprites || !this.enemies) return;
+    const now = Date.now();
     for (const el of serverElements) {
       if (el.type !== 'turret') continue;
       const sprite = this.elementSprites.get(el.id);
@@ -850,7 +863,6 @@ class MainScene extends Phaser.Scene {
       const active = activeElementsByElement.get(el.id);
       const isShooting = active && active.action_id === 'tir';
       if (!isShooting) {
-        // Pas de tir : reprise patrouille si en pause
         if (sprite._patrolTween && sprite._patrolTween.paused) sprite._patrolTween.resume();
         continue;
       }
@@ -859,11 +871,29 @@ class MainScene extends Phaser.Scene {
       if (target) {
         if (sprite._patrolTween && !sprite._patrolTween.paused) sprite._patrolTween.pause();
         const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, target.x, target.y);
-        sprite.rotation = a + Math.PI / 2; // asset Gun pointe vers le haut
+        sprite.rotation = a + Math.PI / 2;
+        // Tir 1 fois toutes les 2s, dégâts modulés par la puissance
+        if (!sprite._lastShotAt) sprite._lastShotAt = 0;
+        if (now - sprite._lastShotAt >= 2000) {
+          const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
+          this.fireTurretLaser(sprite, target);
+          this.damageEnemy(target, dmg);
+          sprite._lastShotAt = now;
+        }
       } else {
         if (sprite._patrolTween && sprite._patrolTween.paused) sprite._patrolTween.resume();
       }
     }
+  }
+
+  fireTurretLaser(turretSprite, enemySprite) {
+    const line = this.add.graphics().setDepth(9);
+    line.lineStyle(3, 0x4afff8, 0.95);
+    line.beginPath();
+    line.moveTo(turretSprite.x, turretSprite.y);
+    line.lineTo(enemySprite.x, enemySprite.y);
+    line.strokePath();
+    this.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
   }
 
   findNearestEnemyInRange(tx, ty, range) {
@@ -1041,14 +1071,20 @@ class MainScene extends Phaser.Scene {
         if (tex) tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
         const highlight = this.add.circle(el.x, el.y, visibleSize * 0.6, 0xffd24f, 0)
           .setStrokeStyle(3, 0xffd24f, 0);
-        // Rotation fixe aleatoire pour variete visuelle, pas de rotation continue
-        // (les frames des spritesheets ne sont pas parfaitement centrees dans leur cellule,
-        //  ce qui cree une vibration visible quand on les fait tourner en continu)
         const sprite = this.add.sprite(el.x, el.y, `a-${variant}`, 0)
           .setScale(phaserScale)
           .setRotation(Math.random() * Math.PI * 2)
           .setTint(tint)
           .setInteractive({ useHandCursor: true });
+        // Rotation continue tres lente (~110-200s par cycle) avec NEAREST filter pour
+        // attenuer la vibration due au non-centrage des frames
+        const dir = (i % 2 === 0) ? 1 : -1;
+        this.tweens.add({
+          targets: sprite,
+          rotation: sprite.rotation + dir * Math.PI * 2,
+          duration: 110000 + (i * 12000),
+          repeat: -1
+        });
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
           openActionMenu(el.id, pointer.event);
@@ -1057,20 +1093,25 @@ class MainScene extends Phaser.Scene {
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
         const barW = Math.max(60, Math.min(140, visibleSize * 0.9));
-        const bar = this.makeHpBar(el.x, el.y - visibleSize * 0.5 - 14, barW);
+        const bar = this.makeHpBar(el.x, el.y - visibleSize * 0.5 - 14, barW, 0xffd24f);
         this.elementHpBars.set(el.id, bar);
       } else if (el.type === 'turret') {
         const highlight = this.add.circle(el.x, el.y, 60, 0xff4f6d, 0)
           .setStrokeStyle(2, 0xff4f6d, 0);
+        // Orientation initiale "vers l'extérieur" : direction du centre de la base vers la tourelle
+        const outward = Math.atan2(el.y - BASE_Y, el.x - BASE_X);
+        const baseRot = outward + Math.PI / 2; // l'asset Gun pointe vers le haut, on compense
         const sprite = this.add.sprite(el.x, el.y, 'gun-01-idle')
           .setScale(GUN_SCALE)
+          .setRotation(baseRot)
           .setInteractive({ useHandCursor: true });
-        // Patrouille : oscillation lente +/- 9° autour de 0 (mise en pause si la tourelle vise une cible)
+        sprite._baseRotation = baseRot;
+        // Patrouille : oscillation lente +/- 9° autour de l'orientation outward
         const amp = 0.15;
         const dur = 7000 + Math.floor(Math.random() * 4000);
         sprite._patrolTween = this.tweens.add({
           targets: sprite,
-          rotation: { from: -amp, to: amp },
+          rotation: { from: baseRot - amp, to: baseRot + amp },
           duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
           delay: Math.floor(Math.random() * 2000)
         });
@@ -1079,13 +1120,9 @@ class MainScene extends Phaser.Scene {
           if (pointer.button !== 0) return;
           openActionMenu(el.id, pointer.event);
         });
-        const label = this.add.text(el.x, el.y + 70, el.label, {
-          fontFamily: 'Consolas, monospace', fontSize: '11px', color: '#ff4f6d'
-        }).setOrigin(0.5);
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
-        this.elementLabels.set(el.id, label);
-        const bar = this.makeHpBar(el.x, el.y - 70, 90);
+        const bar = this.makeHpBar(el.x, el.y - 70, 90, 0xff4f6d);
         this.elementHpBars.set(el.id, bar);
       } else if (el.type === 'base') {
         const highlight = this.add.circle(el.x, el.y, 90, 0x4af, 0)
@@ -1102,22 +1139,23 @@ class MainScene extends Phaser.Scene {
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
         this.elementLabels.set(el.id, label);
-        const bar = this.makeHpBar(el.x, el.y - 88, 120);
+        const bar = this.makeHpBar(el.x, el.y - 88, 120, 0x4af);
         this.elementHpBars.set(el.id, bar);
       }
     });
     this.refreshElementHighlights();
   }
 
-  makeHpBar(x, y, width) {
+  makeHpBar(x, y, width, strokeColor) {
     const container = this.add.container(x, y);
     const bg = this.add.rectangle(0, 0, width, 6, 0x000000, 0.6)
-      .setStrokeStyle(1, 0xffffff, 0.4);
+      .setStrokeStyle(1.5, strokeColor || 0xffffff, 0.85);
     const fill = this.add.rectangle(-width / 2, 0, width, 4, 0x4fdb73).setOrigin(0, 0.5);
     container.add([bg, fill]);
     container.fill = fill;
     container.bg = bg;
     container.maxWidth = width;
+    container.strokeColor = strokeColor;
     return container;
   }
 
@@ -1354,10 +1392,13 @@ class MainScene extends Phaser.Scene {
     sprite._target = { x: tx, y: ty };
     sprite._orbitRadius = orbitRadius;
     sprite._orbitAngle = Math.atan2(sprite.y - ty, sprite.x - tx);
-    // Vitesse angulaire random + direction random
     sprite._orbitSpeed = (0.35 + Math.random() * 0.35) * (Math.random() < 0.5 ? 1 : -1);
     sprite._isOrbiting = true;
-    // Tir toutes les 5s avec phase initiale random pour désynchroniser
+    // HP de l'ennemi + barre rouge
+    sprite._hp = sprite._hpMax = 30;
+    sprite._hpBar = this.makeHpBar(sprite.x, sprite.y - 38, 40, 0xff3322);
+    sprite._hpBar.setDepth(8);
+    // Tir toutes les 5s avec phase initiale random
     const firstFireDelay = 800 + Math.floor(Math.random() * 2200);
     this.time.delayedCall(firstFireDelay, () => {
       if (!sprite.active) return;
@@ -1365,26 +1406,36 @@ class MainScene extends Phaser.Scene {
       sprite._fireEvent = this.time.addEvent({
         delay: 5000, loop: true,
         callback: () => {
-          if (!sprite.active) { return; }
-          this.fireEnemyShot(sprite, sprite._target.x, sprite._target.y);
+          if (sprite.active) this.fireEnemyShot(sprite, sprite._target.x, sprite._target.y);
         }
       });
     });
-    // Retraite (fade-out) après 30s d'orbite
-    sprite._despawnTimer = this.time.delayedCall(30000, () => this.retreatEnemy(sprite));
+    // Plus de despawn : l'ennemi orbite jusqu'à destruction par les tourelles
   }
 
-  retreatEnemy(sprite) {
+  damageEnemy(sprite, dmg) {
+    if (!sprite.active || !sprite._isOrbiting) return;
+    sprite._hp = Math.max(0, sprite._hp - dmg);
+    // Refresh barre
+    if (sprite._hpBar) {
+      const ratio = sprite._hp / sprite._hpMax;
+      sprite._hpBar.fill.width = sprite._hpBar.maxWidth * ratio;
+      let color = 0x4fdb73;
+      if (ratio < 0.3) color = 0xff4f6d;
+      else if (ratio < 0.6) color = 0xffd24f;
+      sprite._hpBar.fill.fillColor = color;
+    }
+    if (sprite._hp <= 0) this.destroyEnemy(sprite);
+  }
+
+  destroyEnemy(sprite) {
     if (!sprite.active) return;
     sprite._isOrbiting = false;
     if (sprite._fireEvent) sprite._fireEvent.remove();
-    this.tweens.add({
-      targets: sprite, alpha: 0, duration: 1200,
-      onComplete: () => {
-        this.enemies.delete(sprite);
-        sprite.destroy();
-      }
-    });
+    if (sprite._hpBar) sprite._hpBar.destroy();
+    this.playEnemyExplosion(sprite.x, sprite.y, sprite._level || 1);
+    this.enemies.delete(sprite);
+    sprite.destroy();
   }
 
   fireEnemyShot(sprite, tx, ty) {

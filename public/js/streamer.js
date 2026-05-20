@@ -345,10 +345,12 @@ class MainScene extends Phaser.Scene {
     tg.destroy();
 
     this.ship = this.physics.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship-fr-000');
-    // Depth 0 (par défaut) : la base et les autres éléments (ajoutés après) passent au-dessus.
-    // Le label "AMIRAL" reste à 11 pour rester visible quoi qu'il arrive.
     this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.36);
     this.ship.play('ship-thrust');
+    this.ship._hp = 100;
+    this.ship._hpMax = 100;
+    this.shipHpBar = this.makeHpBar(this.ship.x, this.ship.y - 40, 60, 0x4fdb73);
+    this.shipHpBar.setDepth(11);
     this.ship.setDamping(true);
     this.ship.setDrag(0.92);
     this.ship.setMaxVelocity(320);
@@ -562,37 +564,43 @@ class MainScene extends Phaser.Scene {
         if (tex) tex.setFilter(Phaser.Textures.FilterMode.NEAREST);
         const highlight = this.add.circle(el.x, el.y, visibleSize * 0.6, 0xffd24f, 0)
           .setStrokeStyle(3, 0xffd24f, 0);
-        // Rotation fixe aleatoire, pas de tween continu (les frames du spritesheet
-        // ne sont pas centrees, ce qui produit une vibration en rotation)
         const sprite = this.add.sprite(el.x, el.y, `a-${variant}`, 0)
           .setScale(phaserScale)
           .setRotation(Math.random() * Math.PI * 2)
           .setTint(tint);
+        const dir = (i % 2 === 0) ? 1 : -1;
+        this.tweens.add({
+          targets: sprite,
+          rotation: sprite.rotation + dir * Math.PI * 2,
+          duration: 110000 + (i * 12000),
+          repeat: -1
+        });
         sprite._asteroidVariant = variant;
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
         const barW = Math.max(60, Math.min(140, visibleSize * 0.9));
-        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - visibleSize * 0.5 - 14, barW));
+        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - visibleSize * 0.5 - 14, barW, 0xffd24f));
       } else if (el.type === 'turret') {
         const highlight = this.add.circle(el.x, el.y, 60, 0xff4f6d, 0)
           .setStrokeStyle(2, 0xff4f6d, 0);
-        const sprite = this.add.sprite(el.x, el.y, 'gun-01-idle').setScale(GUN_SCALE);
-        // Patrouille (mise en pause quand la tourelle vise une cible)
+        const outward = Math.atan2(el.y - BASE_Y, el.x - BASE_X);
+        const baseRot = outward + Math.PI / 2;
+        const sprite = this.add.sprite(el.x, el.y, 'gun-01-idle')
+          .setScale(GUN_SCALE)
+          .setRotation(baseRot);
+        sprite._baseRotation = baseRot;
         const amp = 0.15;
         const dur = 7000 + Math.floor(Math.random() * 4000);
         sprite._patrolTween = this.tweens.add({
           targets: sprite,
-          rotation: { from: -amp, to: amp },
+          rotation: { from: baseRot - amp, to: baseRot + amp },
           duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
           delay: Math.floor(Math.random() * 2000)
         });
         sprite._turretId = el.id;
-        this.add.text(el.x, el.y + 70, el.label, {
-          fontFamily: 'Consolas, monospace', fontSize: '11px', color: '#ff4f6d'
-        }).setOrigin(0.5);
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
-        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 70, 90));
+        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 70, 90, 0xff4f6d));
       } else if (el.type === 'base') {
         const highlight = this.add.circle(el.x, el.y, 90, 0x4af, 0)
           .setStrokeStyle(2, 0x4af, 0);
@@ -602,19 +610,20 @@ class MainScene extends Phaser.Scene {
         }).setOrigin(0.5);
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
-        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 88, 120));
+        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 88, 120, 0x4af));
       }
     });
     this.refreshElementHighlights(lastActiveElements);
     this.applyAllElementStates();
   }
 
-  makeHpBar(x, y, width) {
+  makeHpBar(x, y, width, strokeColor) {
     const c = this.add.container(x, y);
-    const bg = this.add.rectangle(0, 0, width, 6, 0x000000, 0.6).setStrokeStyle(1, 0xffffff, 0.4);
+    const bg = this.add.rectangle(0, 0, width, 6, 0x000000, 0.6).setStrokeStyle(1.5, strokeColor || 0xffffff, 0.85);
     const fill = this.add.rectangle(-width / 2, 0, width, 4, 0x4fdb73).setOrigin(0, 0.5);
     c.add([bg, fill]);
     c.fill = fill; c.bg = bg; c.maxWidth = width;
+    c.strokeColor = strokeColor;
     return c;
   }
 
@@ -642,6 +651,7 @@ class MainScene extends Phaser.Scene {
 
   updateTurretTargeting() {
     if (!this.elementSprites || !this.enemies) return;
+    const now = Date.now();
     for (const el of serverElements) {
       if (el.type !== 'turret') continue;
       const sprite = this.elementSprites.get(el.id);
@@ -659,10 +669,27 @@ class MainScene extends Phaser.Scene {
         if (sprite._patrolTween && !sprite._patrolTween.paused) sprite._patrolTween.pause();
         const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, target.x, target.y);
         sprite.rotation = a + Math.PI / 2;
+        if (!sprite._lastShotAt) sprite._lastShotAt = 0;
+        if (now - sprite._lastShotAt >= 2000) {
+          const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
+          this.fireTurretLaser(sprite, target);
+          this.damageEnemy(target, dmg);
+          sprite._lastShotAt = now;
+        }
       } else {
         if (sprite._patrolTween && sprite._patrolTween.paused) sprite._patrolTween.resume();
       }
     }
+  }
+
+  fireTurretLaser(turretSprite, enemySprite) {
+    const line = this.add.graphics().setDepth(9);
+    line.lineStyle(3, 0x4afff8, 0.95);
+    line.beginPath();
+    line.moveTo(turretSprite.x, turretSprite.y);
+    line.lineTo(enemySprite.x, enemySprite.y);
+    line.strokePath();
+    this.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
   }
 
   updateEnemyOrbits(delta) {
@@ -675,6 +702,10 @@ class MainScene extends Phaser.Scene {
       sprite.y = sprite._target.y + Math.sin(sprite._orbitAngle) * sprite._orbitRadius;
       const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2);
       sprite.rotation = tangent + Math.PI / 2;
+      if (sprite._hpBar) {
+        sprite._hpBar.x = sprite.x;
+        sprite._hpBar.y = sprite.y - 38;
+      }
     }
   }
 
@@ -862,6 +893,9 @@ class MainScene extends Phaser.Scene {
     sprite._orbitAngle = Math.atan2(sprite.y - ty, sprite.x - tx);
     sprite._orbitSpeed = (0.35 + Math.random() * 0.35) * (Math.random() < 0.5 ? 1 : -1);
     sprite._isOrbiting = true;
+    sprite._hp = sprite._hpMax = 30;
+    sprite._hpBar = this.makeHpBar(sprite.x, sprite.y - 38, 40, 0xff3322);
+    sprite._hpBar.setDepth(8);
     const firstFireDelay = 800 + Math.floor(Math.random() * 2200);
     this.time.delayedCall(firstFireDelay, () => {
       if (!sprite.active) return;
@@ -871,20 +905,30 @@ class MainScene extends Phaser.Scene {
         callback: () => { if (sprite.active) this.fireEnemyShot(sprite, sprite._target.x, sprite._target.y); }
       });
     });
-    sprite._despawnTimer = this.time.delayedCall(30000, () => this.retreatEnemy(sprite));
   }
 
-  retreatEnemy(sprite) {
+  damageEnemy(sprite, dmg) {
+    if (!sprite.active || !sprite._isOrbiting) return;
+    sprite._hp = Math.max(0, sprite._hp - dmg);
+    if (sprite._hpBar) {
+      const ratio = sprite._hp / sprite._hpMax;
+      sprite._hpBar.fill.width = sprite._hpBar.maxWidth * ratio;
+      let color = 0x4fdb73;
+      if (ratio < 0.3) color = 0xff4f6d;
+      else if (ratio < 0.6) color = 0xffd24f;
+      sprite._hpBar.fill.fillColor = color;
+    }
+    if (sprite._hp <= 0) this.destroyEnemy(sprite);
+  }
+
+  destroyEnemy(sprite) {
     if (!sprite.active) return;
     sprite._isOrbiting = false;
     if (sprite._fireEvent) sprite._fireEvent.remove();
-    this.tweens.add({
-      targets: sprite, alpha: 0, duration: 1200,
-      onComplete: () => {
-        this.enemies.delete(sprite);
-        sprite.destroy();
-      }
-    });
+    if (sprite._hpBar) sprite._hpBar.destroy();
+    this.playEnemyExplosion(sprite.x, sprite.y, sprite._level || 1);
+    this.enemies.delete(sprite);
+    sprite.destroy();
   }
 
   fireEnemyShot(sprite, tx, ty) {
@@ -966,6 +1010,10 @@ class MainScene extends Phaser.Scene {
     if (this.shipLabel) {
       this.shipLabel.x = this.ship.x;
       this.shipLabel.y = this.ship.y - 56;
+    }
+    if (this.shipHpBar) {
+      this.shipHpBar.x = this.ship.x;
+      this.shipHpBar.y = this.ship.y - 40;
     }
 
     // Déplacement vers la destination : contrôleur proportionnel.

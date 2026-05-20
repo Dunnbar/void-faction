@@ -646,7 +646,9 @@ function rollWave() {
 
   const count = ENEMY_MIN + Math.floor(Math.random() * (ENEMY_MAX - ENEMY_MIN + 1));
   const baseAngle = Math.random() * Math.PI * 2;
-  const spread = 0.5;
+  // Spread plus large : ennemis répartis sur un arc d'environ 110° pour éviter
+  // qu'ils soient superposés
+  const spread = 1.9;
 
   // Cible : tourelle (40%) ou astéroïde (60%)
   const asteroids = ELEMENTS.filter(e => e.type === 'asteroid');
@@ -679,8 +681,8 @@ function rollWave() {
       spawnX, spawnY,
       targetX: target.x, targetY: target.y,
       travelMs: Math.round(travelMs),
-      // léger décalage de spawn entre ennemis pour les espacer
-      spawnOffsetMs: Math.floor(Math.random() * 800)
+      // Décalage de spawn de 0-3.5s pour que les ennemis n'arrivent pas tous en même temps
+      spawnOffsetMs: Math.floor(Math.random() * 3500)
     });
   }
 
@@ -693,9 +695,10 @@ function rollWave() {
     targetLabel: target.label,
     edgeAngle: baseAngle,
     enemies,
-    // +35s : on laisse le temps aux ennemis d'arriver puis d'orbiter et tirer ~30s avant de
-    // marquer la vague terminée côté client (les ennemis se retirent à ce moment-là)
-    endsAt: spawnAt + Math.ceil(maxTravel) + 35000
+    // Buffer de 2 min : les ennemis orbitent et tirent jusqu'à être détruits par les tourelles.
+    // S'il n'y a pas d'action Tir active, ils peuvent rester très longtemps. La bannière "EN COURS"
+    // reste affichée pendant ce temps pour signaler la menace.
+    endsAt: spawnAt + Math.ceil(maxTravel) + 120000
   };
   io.emit('wave:incoming', currentWave);
   console.log(`[wave] ${currentWave.id} — ${count} ennemis vers ${target.id} (angle ${baseAngle.toFixed(2)} rad)`);
