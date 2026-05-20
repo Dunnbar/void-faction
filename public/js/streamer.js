@@ -659,6 +659,19 @@ class MainScene extends Phaser.Scene {
     }
   }
 
+  updateEnemyOrbits(delta) {
+    if (!this.enemies) return;
+    const dtSec = (delta || 16) / 1000;
+    for (const sprite of this.enemies) {
+      if (!sprite._isOrbiting || !sprite._target) continue;
+      sprite._orbitAngle += sprite._orbitSpeed * dtSec;
+      sprite.x = sprite._target.x + Math.cos(sprite._orbitAngle) * sprite._orbitRadius;
+      sprite.y = sprite._target.y + Math.sin(sprite._orbitAngle) * sprite._orbitRadius;
+      const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2);
+      sprite.rotation = tangent + Math.PI / 2;
+    }
+  }
+
   findNearestEnemyInRange(tx, ty, range) {
     let best = null, bestDist = range;
     for (const e of this.enemies) {
@@ -816,13 +829,15 @@ class MainScene extends Phaser.Scene {
     sprite.rotation = angle + Math.PI / 2;
     this.enemies.add(sprite);
 
-    const STOP_RANGE = 110;
+    const ORBIT_R_MIN = 90;
+    const ORBIT_R_MAX = 160;
+    const orbitRadius = ORBIT_R_MIN + Math.random() * (ORBIT_R_MAX - ORBIT_R_MIN);
     const total = Math.hypot(e.targetX - e.spawnX, e.targetY - e.spawnY);
-    if (total <= STOP_RANGE + 10) {
-      this.startEnemyAttack(sprite, e.targetX, e.targetY);
+    if (total <= orbitRadius + 10) {
+      this.startEnemyOrbit(sprite, e.targetX, e.targetY, orbitRadius);
       return;
     }
-    const ratio = (total - STOP_RANGE) / total;
+    const ratio = (total - orbitRadius) / total;
     const stopX = e.spawnX + (e.targetX - e.spawnX) * ratio;
     const stopY = e.spawnY + (e.targetY - e.spawnY) * ratio;
     const approachMs = e.travelMs * ratio;
@@ -830,21 +845,40 @@ class MainScene extends Phaser.Scene {
       targets: sprite,
       x: stopX, y: stopY,
       duration: approachMs, ease: 'Linear',
-      onComplete: () => this.startEnemyAttack(sprite, e.targetX, e.targetY)
+      onComplete: () => this.startEnemyOrbit(sprite, e.targetX, e.targetY, orbitRadius)
     });
   }
 
-  startEnemyAttack(sprite, tx, ty) {
+  startEnemyOrbit(sprite, tx, ty, orbitRadius) {
     if (!sprite.active) return;
-    if (sprite.anims && sprite.anims.isPlaying) sprite.anims.stop();
-    sprite.setTexture(`enemy_ship_${sprite._level}`);
-    const aim = Math.atan2(ty - sprite.y, tx - sprite.x);
-    sprite.rotation = aim + Math.PI / 2;
-    sprite._fireEvent = this.time.addEvent({
-      delay: 600, repeat: 8,
-      callback: () => { if (sprite.active) this.fireEnemyShot(sprite, tx, ty); }
+    sprite._target = { x: tx, y: ty };
+    sprite._orbitRadius = orbitRadius;
+    sprite._orbitAngle = Math.atan2(sprite.y - ty, sprite.x - tx);
+    sprite._orbitSpeed = (0.35 + Math.random() * 0.35) * (Math.random() < 0.5 ? 1 : -1);
+    sprite._isOrbiting = true;
+    const firstFireDelay = 800 + Math.floor(Math.random() * 2200);
+    this.time.delayedCall(firstFireDelay, () => {
+      if (!sprite.active) return;
+      this.fireEnemyShot(sprite, sprite._target.x, sprite._target.y);
+      sprite._fireEvent = this.time.addEvent({
+        delay: 5000, loop: true,
+        callback: () => { if (sprite.active) this.fireEnemyShot(sprite, sprite._target.x, sprite._target.y); }
+      });
     });
-    sprite._destroyTimer = this.time.delayedCall(5400, () => this.destroyEnemy(sprite));
+    sprite._despawnTimer = this.time.delayedCall(30000, () => this.retreatEnemy(sprite));
+  }
+
+  retreatEnemy(sprite) {
+    if (!sprite.active) return;
+    sprite._isOrbiting = false;
+    if (sprite._fireEvent) sprite._fireEvent.remove();
+    this.tweens.add({
+      targets: sprite, alpha: 0, duration: 1200,
+      onComplete: () => {
+        this.enemies.delete(sprite);
+        sprite.destroy();
+      }
+    });
   }
 
   fireEnemyShot(sprite, tx, ty) {
@@ -918,9 +952,10 @@ class MainScene extends Phaser.Scene {
     }
   }
 
-  update(time) {
+  update(time, delta) {
     this.updateParallaxBackground();
     this.updateTurretTargeting();
+    this.updateEnemyOrbits(delta);
     if (!this.ship) return;
     if (this.shipLabel) {
       this.shipLabel.x = this.ship.x;

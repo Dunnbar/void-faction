@@ -657,9 +657,9 @@ function rollWave() {
     targetLabel: target.label,
     edgeAngle: baseAngle,
     enemies,
-    // +8000 : on laisse le temps aux ennemis d'arriver, de tirer ~5s sur leur cible
-    // puis d'exploser visuellement avant de marquer la vague terminée côté client
-    endsAt: spawnAt + Math.ceil(maxTravel) + 8000
+    // +35s : on laisse le temps aux ennemis d'arriver puis d'orbiter et tirer ~30s avant de
+    // marquer la vague terminée côté client (les ennemis se retirent à ce moment-là)
+    endsAt: spawnAt + Math.ceil(maxTravel) + 35000
   };
   io.emit('wave:incoming', currentWave);
   console.log(`[wave] ${currentWave.id} — ${count} ennemis vers ${target.id} (angle ${baseAngle.toFixed(2)} rad)`);

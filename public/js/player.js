@@ -772,13 +772,28 @@ class MainScene extends Phaser.Scene {
     }
   }
 
-  update() {
+  update(time, delta) {
     this.updateParallaxBackground();
     if (this.shipLabel && this.ship) {
       this.shipLabel.x = this.ship.x;
       this.shipLabel.y = this.ship.y - 56;
     }
     this.updateTurretTargeting();
+    this.updateEnemyOrbits(delta);
+  }
+
+  updateEnemyOrbits(delta) {
+    if (!this.enemies) return;
+    const dtSec = (delta || 16) / 1000;
+    for (const sprite of this.enemies) {
+      if (!sprite._isOrbiting || !sprite._target) continue;
+      sprite._orbitAngle += sprite._orbitSpeed * dtSec;
+      sprite.x = sprite._target.x + Math.cos(sprite._orbitAngle) * sprite._orbitRadius;
+      sprite.y = sprite._target.y + Math.sin(sprite._orbitAngle) * sprite._orbitRadius;
+      // Sprite tangent à la trajectoire d'orbite
+      const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2);
+      sprite.rotation = tangent + Math.PI / 2;
+    }
   }
 
   updateTurretTargeting() {
@@ -1257,7 +1272,7 @@ class MainScene extends Phaser.Scene {
   }
 
   spawnEnemy(e) {
-    const level = 1; // ENEMY_LEVELS = [1] uniquement pour l'instant
+    const level = 1;
     const sprite = this.add.sprite(e.spawnX, e.spawnY, `enemy${level}-fr-000`)
       .setScale(ENEMY_SCALE)
       .setOrigin(0.5, 0.36)
@@ -1268,14 +1283,17 @@ class MainScene extends Phaser.Scene {
     sprite.rotation = angle + Math.PI / 2;
     this.enemies.add(sprite);
 
-    // Calcule le point d'arrêt : l'ennemi s'immobilise à 110px de sa cible pour ouvrir le feu
-    const STOP_RANGE = 110;
+    // L'ennemi vole vers un point près de la cible puis se met en orbite
+    const ORBIT_R_MIN = 90;
+    const ORBIT_R_MAX = 160;
+    const orbitRadius = ORBIT_R_MIN + Math.random() * (ORBIT_R_MAX - ORBIT_R_MIN);
     const total = Math.hypot(e.targetX - e.spawnX, e.targetY - e.spawnY);
-    if (total <= STOP_RANGE + 10) {
-      this.startEnemyAttack(sprite, e.targetX, e.targetY);
+    if (total <= orbitRadius + 10) {
+      this.startEnemyOrbit(sprite, e.targetX, e.targetY, orbitRadius);
       return;
     }
-    const ratio = (total - STOP_RANGE) / total;
+    // Point d'entrée en orbite : sur la ligne d'approche, à orbitRadius de la cible
+    const ratio = (total - orbitRadius) / total;
     const stopX = e.spawnX + (e.targetX - e.spawnX) * ratio;
     const stopY = e.spawnY + (e.targetY - e.spawnY) * ratio;
     const approachMs = e.travelMs * ratio;
@@ -1283,25 +1301,46 @@ class MainScene extends Phaser.Scene {
       targets: sprite,
       x: stopX, y: stopY,
       duration: approachMs, ease: 'Linear',
-      onComplete: () => this.startEnemyAttack(sprite, e.targetX, e.targetY)
+      onComplete: () => this.startEnemyOrbit(sprite, e.targetX, e.targetY, orbitRadius)
     });
   }
 
-  startEnemyAttack(sprite, tx, ty) {
+  startEnemyOrbit(sprite, tx, ty, orbitRadius) {
     if (!sprite.active) return;
-    // Arrêt de l'animation thrust, retour au sprite statique (ship hover)
-    if (sprite.anims && sprite.anims.isPlaying) sprite.anims.stop();
-    sprite.setTexture(`enemy_ship_${sprite._level}`);
-    // Ré-oriente vers la cible (en cas de drift)
-    const aim = Math.atan2(ty - sprite.y, tx - sprite.x);
-    sprite.rotation = aim + Math.PI / 2;
-    // Boucle de tir : 8 salves de 600ms = ~5s de feu
-    sprite._fireEvent = this.time.addEvent({
-      delay: 600, repeat: 8,
-      callback: () => { if (sprite.active) this.fireEnemyShot(sprite, tx, ty); }
+    sprite._target = { x: tx, y: ty };
+    sprite._orbitRadius = orbitRadius;
+    sprite._orbitAngle = Math.atan2(sprite.y - ty, sprite.x - tx);
+    // Vitesse angulaire random + direction random
+    sprite._orbitSpeed = (0.35 + Math.random() * 0.35) * (Math.random() < 0.5 ? 1 : -1);
+    sprite._isOrbiting = true;
+    // Tir toutes les 5s avec phase initiale random pour désynchroniser
+    const firstFireDelay = 800 + Math.floor(Math.random() * 2200);
+    this.time.delayedCall(firstFireDelay, () => {
+      if (!sprite.active) return;
+      this.fireEnemyShot(sprite, sprite._target.x, sprite._target.y);
+      sprite._fireEvent = this.time.addEvent({
+        delay: 5000, loop: true,
+        callback: () => {
+          if (!sprite.active) { return; }
+          this.fireEnemyShot(sprite, sprite._target.x, sprite._target.y);
+        }
+      });
     });
-    // Auto-destruction après ~5.4s
-    sprite._destroyTimer = this.time.delayedCall(5400, () => this.destroyEnemy(sprite));
+    // Retraite (fade-out) après 30s d'orbite
+    sprite._despawnTimer = this.time.delayedCall(30000, () => this.retreatEnemy(sprite));
+  }
+
+  retreatEnemy(sprite) {
+    if (!sprite.active) return;
+    sprite._isOrbiting = false;
+    if (sprite._fireEvent) sprite._fireEvent.remove();
+    this.tweens.add({
+      targets: sprite, alpha: 0, duration: 1200,
+      onComplete: () => {
+        this.enemies.delete(sprite);
+        sprite.destroy();
+      }
+    });
   }
 
   fireEnemyShot(sprite, tx, ty) {
