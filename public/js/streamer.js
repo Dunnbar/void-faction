@@ -168,9 +168,35 @@ socket.on('streamer:kicked', () => {
 });
 
 const SHIP_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spaceships%20-%20Pack%201/(24).png';
-const ASTEROID_ASSET = '/assets/Foozle_2DS0015_Void_EnvironmentPack/Foozle_2DS0015_Void_EnvironmentPack/Asteroids/PNGs/Asteroid%2001%20-%20Base.png';
 const ENEMY_ASSET = '/assets/2D%20Spaceships%20-%20Bundle%20-%20Free/2D%20Spaceships%20-%20Pack%201/(22).png';
 const SHIP_SPRITE_OFFSET = -Math.PI / 2; // l'asset pointe vers le bas, on compense
+
+const ASTEROID_VARIANTS = {
+  '01': { cols: 3, rows: 2, count: 6, w: 600, h: 500 },
+  '02': { cols: 2, rows: 2, count: 4, w: 520, h: 430 },
+  '03': { cols: 2, rows: 2, count: 4, w: 500, h: 360 },
+  '04': { cols: 2, rows: 2, count: 4, w: 350, h: 300 },
+  '05': { cols: 2, rows: 2, count: 4, w: 450, h: 200 },
+  '06': { cols: 3, rows: 1, count: 3, w: 320, h: 240 },
+  '07': { cols: 3, rows: 1, count: 3, w: 300, h: 250 },
+  '08': { cols: 3, rows: 1, count: 3, w: 240, h: 240 },
+  '09': { cols: 3, rows: 1, count: 3, w: 250, h: 230 },
+  '10': { cols: 3, rows: 1, count: 3, w: 260, h: 240 },
+  '11': { cols: 3, rows: 1, count: 3, w: 240, h: 150 },
+  '12': { cols: 3, rows: 1, count: 3, w: 170, h: 180 },
+  '13': { cols: 3, rows: 1, count: 3, w: 190, h: 160 },
+  '14': { cols: 2, rows: 1, count: 2, w: 110, h: 110 },
+  '15': { cols: 2, rows: 1, count: 2, w: 70,  h: 100 }
+};
+const ASTEROID_TARGET_SIZE = 130;
+function asteroidScaleFor(variantKey, sizeMultiplier) {
+  const meta = ASTEROID_VARIANTS[variantKey] || ASTEROID_VARIANTS['01'];
+  return (ASTEROID_TARGET_SIZE * (sizeMultiplier || 1)) / Math.max(meta.w, meta.h);
+}
+function asteroidFrameFor(variantKey, hpRatio) {
+  const meta = ASTEROID_VARIANTS[variantKey] || ASTEROID_VARIANTS['01'];
+  return Math.min(meta.count - 1, Math.max(0, Math.floor((1 - hpRatio) * meta.count)));
+}
 
 let serverElements = [];
 let pendingWave = null; // wave reçue avant que la scène ne démarre
@@ -180,8 +206,12 @@ class MainScene extends Phaser.Scene {
 
   preload() {
     this.load.image('ship', SHIP_ASSET);
-    this.load.image('asteroid', ASTEROID_ASSET);
     this.load.image('enemy_ship', ENEMY_ASSET);
+    for (const [v, meta] of Object.entries(ASTEROID_VARIANTS)) {
+      this.load.spritesheet(`a-${v}`,
+        `/assets/Asteroids/PNG/asteroid_${v}_with_cracks.png`,
+        { frameWidth: meta.w, frameHeight: meta.h });
+    }
   }
 
   create() {
@@ -195,7 +225,6 @@ class MainScene extends Phaser.Scene {
     }
 
     // Setup textures
-    this.textures.get('asteroid').setFilter(Phaser.Textures.FilterMode.NEAREST);
     this.createTurretTexture();
     this.createExplosionTexture();
 
@@ -314,25 +343,29 @@ class MainScene extends Phaser.Scene {
 
     elements.forEach((el, i) => {
       if (el.type === 'asteroid') {
-        const scale = el.scale || 2.0;
+        const variant = el.variant || '01';
+        const meta = ASTEROID_VARIANTS[variant] || ASTEROID_VARIANTS['01'];
+        const phaserScale = asteroidScaleFor(variant, el.scale);
         const tint = el.subtype === 'radius' ? 0x88e0c8 : 0xffffff;
-        const highlight = this.add.circle(el.x, el.y, 36 * scale * 0.5, 0xffd24f, 0)
-          .setStrokeStyle(2, 0xffd24f, 0);
-        const sprite = this.add.image(el.x, el.y, 'asteroid')
-          .setScale(scale)
+        const visibleSize = Math.max(meta.w, meta.h) * phaserScale;
+        const highlight = this.add.circle(el.x, el.y, visibleSize * 0.6, 0xffd24f, 0)
+          .setStrokeStyle(3, 0xffd24f, 0);
+        const sprite = this.add.sprite(el.x, el.y, `a-${variant}`, 0)
+          .setScale(phaserScale)
           .setRotation(Math.random() * Math.PI * 2)
           .setTint(tint);
         const dir = (i % 2 === 0) ? 1 : -1;
         this.tweens.add({
           targets: sprite,
           rotation: sprite.rotation + dir * Math.PI * 2,
-          duration: 22000 + (i * 3500),
+          duration: 28000 + (i * 4000),
           repeat: -1
         });
+        sprite._asteroidVariant = variant;
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
-        const barW = 50 + scale * 8;
-        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 30 - scale * 8, barW));
+        const barW = Math.max(60, Math.min(140, visibleSize * 0.9));
+        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - visibleSize * 0.5 - 14, barW));
       } else if (el.type === 'turret') {
         const highlight = this.add.circle(el.x, el.y, 50, 0xff4f6d, 0)
           .setStrokeStyle(2, 0xff4f6d, 0);
@@ -380,6 +413,10 @@ class MainScene extends Phaser.Scene {
       if (ratio < 0.3) color = 0xff4f6d;
       else if (ratio < 0.6) color = 0xffd24f;
       bar.fill.fillColor = color;
+      const sprite = this.elementSprites.get(id);
+      if (sprite && sprite._asteroidVariant) {
+        sprite.setFrame(asteroidFrameFor(sprite._asteroidVariant, ratio));
+      }
     }
   }
 
@@ -419,6 +456,7 @@ class MainScene extends Phaser.Scene {
     if (sprite) {
       this.tweens.killTweensOf(sprite);
       sprite.setAlpha(0);
+      if (sprite._asteroidVariant) sprite.setFrame(0);
       const scaleTarget = sprite.scale;
       this.tweens.add({ targets: sprite, alpha: 1, scale: { from: scaleTarget * 0.5, to: scaleTarget }, duration: 500 });
     }

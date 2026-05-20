@@ -60,16 +60,24 @@ const ELEMENTS = [
     label: 'TOURELLE SE',  actions: TURRET_ACTIONS },
   { id: 'turret-3', type: 'turret', x: 780,  y: 970,
     label: 'TOURELLE SO',  actions: TURRET_ACTIONS },
-  // Astéroïdes : alternance matériaux / radius
-  { id: 'asteroid-0', type: 'asteroid', subtype: 'materiaux', x: 250,  y: 200,  scale: 2.8, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
-  { id: 'asteroid-1', type: 'asteroid', subtype: 'radius',    x: 700,  y: 350,  scale: 2.0, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
-  { id: 'asteroid-2', type: 'asteroid', subtype: 'materiaux', x: 1700, y: 350,  scale: 2.4, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
-  { id: 'asteroid-3', type: 'asteroid', subtype: 'radius',    x: 2150, y: 230,  scale: 1.8, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
-  { id: 'asteroid-4', type: 'asteroid', subtype: 'materiaux', x: 250,  y: 1130, scale: 3.2, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
-  { id: 'asteroid-5', type: 'asteroid', subtype: 'radius',    x: 650,  y: 1080, scale: 1.9, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
-  { id: 'asteroid-6', type: 'asteroid', subtype: 'materiaux', x: 1750, y: 1100, scale: 2.2, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
-  { id: 'asteroid-7', type: 'asteroid', subtype: 'radius',    x: 2180, y: 1220, scale: 2.6, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION }
+  // Astéroïdes : alternance matériaux / radius (variant aléatoire 01-15 attribué ci-dessous)
+  { id: 'asteroid-0', type: 'asteroid', subtype: 'materiaux', x: 250,  y: 200,  scale: 1.4, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
+  { id: 'asteroid-1', type: 'asteroid', subtype: 'radius',    x: 700,  y: 350,  scale: 1.0, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
+  { id: 'asteroid-2', type: 'asteroid', subtype: 'materiaux', x: 1700, y: 350,  scale: 1.2, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
+  { id: 'asteroid-3', type: 'asteroid', subtype: 'radius',    x: 2150, y: 230,  scale: 0.9, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
+  { id: 'asteroid-4', type: 'asteroid', subtype: 'materiaux', x: 250,  y: 1130, scale: 1.6, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
+  { id: 'asteroid-5', type: 'asteroid', subtype: 'radius',    x: 650,  y: 1080, scale: 0.95, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
+  { id: 'asteroid-6', type: 'asteroid', subtype: 'materiaux', x: 1750, y: 1100, scale: 1.1, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
+  { id: 'asteroid-7', type: 'asteroid', subtype: 'radius',    x: 2180, y: 1220, scale: 1.3, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION }
 ];
+
+// Attribution d'un variant graphique aléatoire (1..15) à chaque astéroïde au démarrage
+const ASTEROID_VARIANT_COUNT = 15;
+for (const el of ELEMENTS) {
+  if (el.type === 'asteroid') {
+    el.variant = String(1 + Math.floor(Math.random() * ASTEROID_VARIANT_COUNT)).padStart(2, '0');
+  }
+}
 const ELEMENT_BY_ID = Object.fromEntries(ELEMENTS.map(e => [e.id, e]));
 
 // État runtime par élément (en mémoire — repop au boot via initElementState)
