@@ -265,7 +265,7 @@ class MainScene extends Phaser.Scene {
     tg.destroy();
 
     this.ship = this.physics.add.sprite(WORLD_W / 2, WORLD_H / 2, 'ship-fr-000');
-    this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.36);
+    this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.36).setDepth(10);
     this.ship.play('ship-thrust');
     this.ship.setDamping(true);
     this.ship.setDrag(0.92);
@@ -610,7 +610,7 @@ class MainScene extends Phaser.Scene {
   spawnEnemy(e) {
     const level = ENEMY_LEVELS.includes(e.level) ? e.level : 1;
     const sprite = this.add.sprite(e.spawnX, e.spawnY, `enemy${level}-fr-000`)
-      .setScale(ENEMY_SCALE).setOrigin(0.5, 0.36);
+      .setScale(ENEMY_SCALE).setOrigin(0.5, 0.36).setDepth(8);
     sprite.play(`enemy${level}-thrust`);
     const angle = Math.atan2(e.targetY - e.spawnY, e.targetX - e.spawnX);
     sprite.rotation = angle + Math.PI / 2;

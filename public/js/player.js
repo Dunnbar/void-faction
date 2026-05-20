@@ -646,7 +646,8 @@ class MainScene extends Phaser.Scene {
     // Vaisseau (positionné via socket)
     this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2, 'ship-fr-000')
       .setScale(SHIP_SCALE)
-      .setOrigin(0.5, 0.36); // ancrage sur le centre du vaisseau, pas du composite ship+flame
+      .setOrigin(0.5, 0.36)
+      .setDepth(10); // au-dessus des éléments (base, tourelles, astéroïdes)
     this.ship.play('ship-thrust');
 
     // Conteneur pour les ennemis
@@ -1006,7 +1007,8 @@ class MainScene extends Phaser.Scene {
     const level = ENEMY_LEVELS.includes(e.level) ? e.level : 1;
     const sprite = this.add.sprite(e.spawnX, e.spawnY, `enemy${level}-fr-000`)
       .setScale(ENEMY_SCALE)
-      .setOrigin(0.5, 0.36);
+      .setOrigin(0.5, 0.36)
+      .setDepth(8);
     sprite.play(`enemy${level}-thrust`);
     const angle = Math.atan2(e.targetY - e.spawnY, e.targetX - e.spawnX);
     sprite.rotation = angle + Math.PI / 2;
