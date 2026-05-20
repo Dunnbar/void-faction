@@ -249,16 +249,18 @@ function animateBarPlus(cat, delta) {
 }
 
 function renderBars() {
+  // Le panneau PUISSANCE/DÉFENSIF/UTILITAIRE a été retiré de l'UI.
+  // La fonction reste comme no-op pour ne pas casser les appels existants.
   const cats = ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE'];
   const keys = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILITAIRE: 'utilitaire' };
-  // % par rapport au max théorique d'1h (360 ticks). On ne dépasse pas 100% visuellement,
-  // mais on continue à incrémenter le compteur.
   const max = Math.floor(actionDurationMs / 10000);
   for (const c of cats) {
     const v = progress[keys[c]] || 0;
-    barEls[c].val.textContent = v;
+    const slot = barEls[c];
+    if (!slot || !slot.val || !slot.fill) continue;
+    slot.val.textContent = v;
     const pct = Math.min(100, (v / max) * 100);
-    barEls[c].fill.style.width = pct + '%';
+    slot.fill.style.width = pct + '%';
   }
 }
 
@@ -526,7 +528,7 @@ function connectSocket() {
       console.log(`%c[VoidFaction] dernière MAJ : ${d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })}`,
         'color:#4af; font-weight:bold');
     }
-    resourceEl.textContent = data.resource;
+    if (resourceEl) resourceEl.textContent = data.resource;
     authenticated = !!data.user;
     if (data.user) {
       username = data.user.username;
@@ -571,7 +573,7 @@ function connectSocket() {
     if (data.currentWave) triggerCaptainForWave(data.currentWave);
   });
 
-  socket.on('resource', (data) => { resourceEl.textContent = data.resource; });
+  socket.on('resource', (data) => { if (resourceEl) resourceEl.textContent = data.resource; });
 
   socket.on('ship', (data) => {
     const scene = game.scene.getScene('main');
