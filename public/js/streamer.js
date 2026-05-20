@@ -182,6 +182,7 @@ socket.on('init', (data) => {
     scene.setupElements(serverElements);
     scene.applyAllElementStates();
     scene.refreshElementHighlights(lastActiveElements);
+    scene.drawBasePerimeter();
     if (pendingWave) {
       scene.handleWaveIncoming(pendingWave);
       pendingWave = null;
@@ -226,7 +227,7 @@ socket.on('streamer:kicked', () => {
 });
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
-const SHIP_SCALE = 0.085;
+const SHIP_SCALE = 0.055; // vaisseau Amiral plus discret
 const ENEMY_LEVELS = [1, 2];
 const ENEMY_ASSETS = {
   1: '/assets/PNG/Ship_02/Ship_LVL_1.png',
@@ -354,7 +355,7 @@ class MainScene extends Phaser.Scene {
     // Caméra : bornes du monde + follow ship + zoom relatif au fit
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
     this.cameras.main.startFollow(this.ship, true, 0.08, 0.08);
-    this._userZoomFactor = 1.6; // streameur démarre légèrement zoomé in
+    this._userZoomFactor = 1.0; // démarre à la vue d'ensemble pour voir tout le périmètre
     this.applyFitZoom();
     this.scale.on('resize', () => this.onResize());
     this.input.on('wheel', (_p, _g, _dx, deltaY) => {
@@ -503,19 +504,19 @@ class MainScene extends Phaser.Scene {
   drawBasePerimeter() {
     if (this.basePerimeterGfx) this.basePerimeterGfx.destroy();
     const g = this.add.graphics().setDepth(-50);
-    g.lineStyle(2, 0xff8044, 0.4);
+    g.lineStyle(4, 0xff8044, 0.75);
     g.strokeCircle(BASE_X, BASE_Y, BASE_PERIMETER);
-    g.lineStyle(1, 0xff8044, 0.18);
-    for (let i = 0; i < 16; i++) {
-      const a0 = (i / 16) * Math.PI * 2;
-      const a1 = a0 + Math.PI / 24;
+    g.lineStyle(1.5, 0xff8044, 0.35);
+    for (let i = 0; i < 24; i++) {
+      const a0 = (i / 24) * Math.PI * 2;
+      const a1 = a0 + Math.PI / 36;
       g.beginPath();
-      g.arc(BASE_X, BASE_Y, BASE_PERIMETER - 18, a0, a1);
+      g.arc(BASE_X, BASE_Y, BASE_PERIMETER - 22, a0, a1);
       g.strokePath();
     }
     this.basePerimeterGfx = g;
     this.tweens.add({
-      targets: g, alpha: { from: 0.7, to: 1.0 },
+      targets: g, alpha: { from: 0.85, to: 1.0 },
       yoyo: true, repeat: -1, duration: 3000, ease: 'Sine.easeInOut'
     });
   }
@@ -562,6 +563,15 @@ class MainScene extends Phaser.Scene {
         const highlight = this.add.circle(el.x, el.y, 60, 0xff4f6d, 0)
           .setStrokeStyle(2, 0xff4f6d, 0);
         const sprite = this.add.sprite(el.x, el.y, 'gun-01-idle').setScale(GUN_SCALE);
+        // Patrouille : oscillation lente +/- 9° autour de 0
+        const amp = 0.15;
+        const dur = 7000 + Math.floor(Math.random() * 4000);
+        this.tweens.add({
+          targets: sprite,
+          rotation: { from: -amp, to: amp },
+          duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+          delay: Math.floor(Math.random() * 2000)
+        });
         this.add.text(el.x, el.y + 70, el.label, {
           fontFamily: 'Consolas, monospace', fontSize: '11px', color: '#ff4f6d'
         }).setOrigin(0.5);

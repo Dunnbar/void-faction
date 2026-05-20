@@ -102,7 +102,7 @@ const ELEMENT_BY_ID = Object.fromEntries(ELEMENTS.map(e => [e.id, e]));
 const elementStates = new Map();
 function initElementState(el) {
   if (el.type === 'base') {
-    elementStates.set(el.id, { hp: BASE_HP_MAX, hpMax: BASE_HP_MAX, essence: 0, essenceMax: BASE_ESSENCE_MAX });
+    elementStates.set(el.id, { hp: BASE_HP_MAX, hpMax: BASE_HP_MAX, essence: BASE_ESSENCE_MAX, essenceMax: BASE_ESSENCE_MAX });
   } else if (el.type === 'turret') {
     elementStates.set(el.id, { hp: TURRET_HP_MAX, hpMax: TURRET_HP_MAX, puissance: 0, range: 0 });
   } else if (el.type === 'asteroid') {

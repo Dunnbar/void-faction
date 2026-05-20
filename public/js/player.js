@@ -551,6 +551,7 @@ function connectSocket() {
       scene.setShipState(data.ship);
       scene.setupElements(serverElements);
       scene.applyAllElementStates();
+      scene.drawBasePerimeter();
       if (data.currentWave) scene.handleWaveIncoming(data.currentWave);
     }
     if (data.currentWave) triggerCaptainForWave(data.currentWave);
@@ -844,20 +845,19 @@ class MainScene extends Phaser.Scene {
   drawBasePerimeter() {
     if (this.basePerimeterGfx) this.basePerimeterGfx.destroy();
     const g = this.add.graphics().setDepth(-50);
-    g.lineStyle(2, 0x4af, 0.35);
+    g.lineStyle(4, 0x4af, 0.7);
     g.strokeCircle(BASE_X, BASE_Y, BASE_PERIMETER);
-    // 2ème cercle interne, pointillé via 12 arcs
-    g.lineStyle(1, 0x4af, 0.18);
-    for (let i = 0; i < 16; i++) {
-      const a0 = (i / 16) * Math.PI * 2;
-      const a1 = a0 + Math.PI / 24;
+    g.lineStyle(1.5, 0x4af, 0.35);
+    for (let i = 0; i < 24; i++) {
+      const a0 = (i / 24) * Math.PI * 2;
+      const a1 = a0 + Math.PI / 36;
       g.beginPath();
-      g.arc(BASE_X, BASE_Y, BASE_PERIMETER - 18, a0, a1);
+      g.arc(BASE_X, BASE_Y, BASE_PERIMETER - 22, a0, a1);
       g.strokePath();
     }
     this.basePerimeterGfx = g;
     this.tweens.add({
-      targets: g, alpha: { from: 0.7, to: 1.0 },
+      targets: g, alpha: { from: 0.85, to: 1.0 },
       yoyo: true, repeat: -1, duration: 3000, ease: 'Sine.easeInOut'
     });
   }
@@ -911,10 +911,18 @@ class MainScene extends Phaser.Scene {
       } else if (el.type === 'turret') {
         const highlight = this.add.circle(el.x, el.y, 60, 0xff4f6d, 0)
           .setStrokeStyle(2, 0xff4f6d, 0);
-        // On part au niveau 1 ; updateTurretAppearance ajustera selon puissance + état tir
         const sprite = this.add.sprite(el.x, el.y, 'gun-01-idle')
           .setScale(GUN_SCALE)
           .setInteractive({ useHandCursor: true });
+        // Patrouille : oscillation lente +/- 9° autour de 0
+        const amp = 0.15;
+        const dur = 7000 + Math.floor(Math.random() * 4000);
+        this.tweens.add({
+          targets: sprite,
+          rotation: { from: -amp, to: amp },
+          duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+          delay: Math.floor(Math.random() * 2000)
+        });
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
           openActionMenu(el.id, pointer.event);
