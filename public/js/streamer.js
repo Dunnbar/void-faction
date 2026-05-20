@@ -58,6 +58,8 @@ loginForm.addEventListener('submit', (e) => {
 });
 
 let lastActiveElements = [];
+let elementStates = new Map();
+let factionResources = { materiaux: 0, radius: 0 };
 let knownBuildTime = null;
 
 function triggerVersionReload() {
@@ -109,6 +111,8 @@ socket.on('init', (data) => {
   resourceEl.textContent = data.resource;
   lastActiveElements = data.activeElements || [];
   serverElements = data.elements || [];
+  elementStates = new Map((data.elementStates || []).map(s => [s.id, s]));
+  factionResources = data.factionResources || factionResources;
   if (data.world) {
     WORLD_W = data.world.width;
     WORLD_H = data.world.height;
@@ -119,6 +123,7 @@ socket.on('init', (data) => {
   const scene = game?.scene.getScene('main');
   if (scene && scene.scene.isActive()) {
     scene.setupElements(serverElements);
+    scene.applyAllElementStates();
     scene.refreshElementHighlights(lastActiveElements);
     if (pendingWave) {
       scene.handleWaveIncoming(pendingWave);
@@ -131,8 +136,26 @@ socket.on('resource', (data) => {
 });
 socket.on('elements:update', (data) => {
   lastActiveElements = data.activeElements || [];
+  if (Array.isArray(data.states)) {
+    elementStates = new Map(data.states.map(s => [s.id, s]));
+  }
+  if (data.faction) factionResources = data.faction;
   const scene = game?.scene.getScene('main');
-  if (scene && scene.scene.isActive()) scene.refreshElementHighlights(lastActiveElements);
+  if (scene && scene.scene.isActive()) {
+    scene.refreshElementHighlights(lastActiveElements);
+    scene.applyAllElementStates();
+  }
+});
+socket.on('asteroid:destroyed', (data) => {
+  const scene = game?.scene.getScene('main');
+  if (scene && scene.scene.isActive()) scene.onAsteroidDestroyed(data.id, data.respawnsAt);
+  const st = elementStates.get(data.id);
+  if (st) { st.hp = 0; st.respawnsAt = data.respawnsAt; }
+});
+socket.on('asteroid:respawned', (data) => {
+  const scene = game?.scene.getScene('main');
+  if (scene && scene.scene.isActive()) scene.onAsteroidRespawned(data.id);
+  if (data.state) elementStates.set(data.id, data.state);
 });
 socket.on('wave:incoming', (wave) => {
   const scene = game?.scene.getScene('main');
@@ -280,17 +303,25 @@ class MainScene extends Phaser.Scene {
     if (!Array.isArray(elements)) return;
     for (const s of this.elementSprites.values()) s.destroy();
     for (const h of this.elementHighlights.values()) h.destroy();
+    if (this.elementHpBars) for (const b of this.elementHpBars.values()) b.destroy();
+    if (this.elementRespawnTimers) for (const t of this.elementRespawnTimers.values()) t.destroy();
     this.elementSprites.clear();
     this.elementHighlights.clear();
+    this.elementHpBars = new Map();
+    this.elementRespawnTimers = new Map();
+
+    this.createBaseTexture();
 
     elements.forEach((el, i) => {
       if (el.type === 'asteroid') {
         const scale = el.scale || 2.0;
+        const tint = el.subtype === 'radius' ? 0x88e0c8 : 0xffffff;
         const highlight = this.add.circle(el.x, el.y, 36 * scale * 0.5, 0xffd24f, 0)
           .setStrokeStyle(2, 0xffd24f, 0);
         const sprite = this.add.image(el.x, el.y, 'asteroid')
           .setScale(scale)
-          .setRotation(Math.random() * Math.PI * 2);
+          .setRotation(Math.random() * Math.PI * 2)
+          .setTint(tint);
         const dir = (i % 2 === 0) ? 1 : -1;
         this.tweens.add({
           targets: sprite,
@@ -300,17 +331,131 @@ class MainScene extends Phaser.Scene {
         });
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
+        const barW = 50 + scale * 8;
+        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 30 - scale * 8, barW));
       } else if (el.type === 'turret') {
-        const highlight = this.add.circle(el.x, el.y, 48, 0xff4f6d, 0)
+        const highlight = this.add.circle(el.x, el.y, 50, 0xff4f6d, 0)
           .setStrokeStyle(2, 0xff4f6d, 0);
-        this.add.image(el.x, el.y, 'turret');
-        this.add.text(el.x, el.y + 50, el.label, {
-          fontFamily: 'Consolas, monospace', fontSize: '12px', color: '#ff4f6d'
+        const sprite = this.add.image(el.x, el.y, 'turret');
+        this.add.text(el.x, el.y + 58, el.label, {
+          fontFamily: 'Consolas, monospace', fontSize: '11px', color: '#ff4f6d'
         }).setOrigin(0.5);
+        this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
+        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 50, 80));
+      } else if (el.type === 'base') {
+        const highlight = this.add.circle(el.x, el.y, 90, 0x4af, 0)
+          .setStrokeStyle(2, 0x4af, 0);
+        const sprite = this.add.image(el.x, el.y, 'base');
+        this.add.text(el.x, el.y + 90, el.label, {
+          fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af'
+        }).setOrigin(0.5);
+        this.elementSprites.set(el.id, sprite);
+        this.elementHighlights.set(el.id, highlight);
+        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 88, 120));
       }
     });
     this.refreshElementHighlights(lastActiveElements);
+    this.applyAllElementStates();
+  }
+
+  makeHpBar(x, y, width) {
+    const c = this.add.container(x, y);
+    const bg = this.add.rectangle(0, 0, width, 6, 0x000000, 0.6).setStrokeStyle(1, 0xffffff, 0.4);
+    const fill = this.add.rectangle(-width / 2, 0, width, 4, 0x4fdb73).setOrigin(0, 0.5);
+    c.add([bg, fill]);
+    c.fill = fill; c.bg = bg; c.maxWidth = width;
+    return c;
+  }
+
+  applyAllElementStates() {
+    if (!this.elementHpBars) return;
+    for (const [id, bar] of this.elementHpBars.entries()) {
+      const state = elementStates.get(id);
+      if (!state) continue;
+      const ratio = Math.max(0, Math.min(1, state.hp / state.hpMax));
+      const w = bar.maxWidth * ratio;
+      bar.fill.width = Math.max(0, w);
+      let color = 0x4fdb73;
+      if (ratio < 0.3) color = 0xff4f6d;
+      else if (ratio < 0.6) color = 0xffd24f;
+      bar.fill.fillColor = color;
+    }
+  }
+
+  onAsteroidDestroyed(id, respawnsAt) {
+    const sprite = this.elementSprites.get(id);
+    const bar = this.elementHpBars.get(id);
+    if (sprite) {
+      this.explodeAt(sprite.x, sprite.y);
+      this.tweens.killTweensOf(sprite);
+      this.tweens.add({ targets: sprite, alpha: 0, scale: sprite.scale * 1.4, duration: 600, ease: 'Cubic.easeOut' });
+    }
+    if (bar) bar.setVisible(false);
+    if (sprite) {
+      const timer = this.add.text(sprite.x, sprite.y, '', {
+        fontFamily: 'Consolas, monospace', fontSize: '14px', color: '#88e0c8',
+        stroke: '#000', strokeThickness: 3, align: 'center'
+      }).setOrigin(0.5);
+      const update = () => {
+        const remaining = respawnsAt - Date.now();
+        if (remaining <= 0) { timer.destroy(); return; }
+        const m = Math.floor(remaining / 60000);
+        const s = Math.floor((remaining % 60000) / 1000);
+        timer.setText(`RESPAWN\n${m}m ${String(s).padStart(2,'0')}s`);
+      };
+      update();
+      const interval = setInterval(update, 1000);
+      timer.once('destroy', () => clearInterval(interval));
+      this.elementRespawnTimers.set(id, timer);
+    }
+  }
+
+  onAsteroidRespawned(id) {
+    const sprite = this.elementSprites.get(id);
+    const bar = this.elementHpBars.get(id);
+    const timer = this.elementRespawnTimers.get(id);
+    if (timer) { timer.destroy(); this.elementRespawnTimers.delete(id); }
+    if (sprite) {
+      this.tweens.killTweensOf(sprite);
+      sprite.setAlpha(0);
+      const scaleTarget = sprite.scale;
+      this.tweens.add({ targets: sprite, alpha: 1, scale: { from: scaleTarget * 0.5, to: scaleTarget }, duration: 500 });
+    }
+    if (bar) bar.setVisible(true);
+    this.applyAllElementStates();
+  }
+
+  createBaseTexture() {
+    if (this.textures.exists('base')) return;
+    const g = this.make.graphics({ x: 0, y: 0, add: false });
+    const cx = 80, cy = 80, r = 60;
+    g.fillStyle(0x152038, 1);
+    g.lineStyle(3, 0x4af, 1);
+    const pts = [];
+    for (let i = 0; i < 6; i++) {
+      const a = (i / 6) * Math.PI * 2 - Math.PI / 2;
+      pts.push(cx + Math.cos(a) * r, cy + Math.sin(a) * r);
+    }
+    g.beginPath();
+    g.moveTo(pts[0], pts[1]);
+    for (let i = 2; i < pts.length; i += 2) g.lineTo(pts[i], pts[i+1]);
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
+    g.fillStyle(0x223a5e, 1);
+    g.fillCircle(cx, cy, r * 0.65);
+    g.lineStyle(2, 0x6cf, 0.7);
+    g.strokeCircle(cx, cy, r * 0.65);
+    g.lineStyle(2, 0x4af, 1);
+    g.beginPath();
+    g.moveTo(cx - 14, cy); g.lineTo(cx + 14, cy);
+    g.moveTo(cx, cy - 14); g.lineTo(cx, cy + 14);
+    g.strokePath();
+    g.fillStyle(0x4af, 1);
+    g.fillCircle(cx, cy, 5);
+    g.generateTexture('base', 160, 160);
+    g.destroy();
   }
 
   handleWaveIncoming(wave) {

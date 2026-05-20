@@ -30,28 +30,72 @@ const ENEMY_MAX = 6;
 const CATEGORIES = ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE'];
 const CATEGORY_TO_COLUMN = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILITAIRE: 'utilitaire' };
 
-// Configuration des éléments interactifs (positions partagées avec le client)
+// ============ Configuration des éléments interactifs ============
+
+const TURRET_ACTIONS = [
+  { id: 'tir',        label: 'Améliorer Tir',   category: 'PUISSANCE' },
+  { id: 'visee',      label: 'Améliorer Visée', category: 'PUISSANCE' },
+  { id: 'reparation', label: 'Réparation',      category: 'DEFENSIF'  }
+];
+const BASE_ACTIONS = [
+  { id: 'reparation', label: 'Réparation', category: 'DEFENSIF'   },
+  { id: 'remplir',    label: 'Remplir',    category: 'UTILITAIRE' }
+];
 const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }];
+
+const ASTEROID_HP_MAX     = 240;
+const ASTEROID_RESPAWN_MS = 20 * 60 * 1000;  // 20 minutes
+const TURRET_HP_MAX       = 200;
+const BASE_HP_MAX         = 400;
+const BASE_ESSENCE_MAX    = 400;
+
 const ELEMENTS = [
-  {
-    id: 'turret-1', type: 'turret', x: TURRET_X, y: TURRET_Y,
-    label: 'TOURELLE',
-    actions: [
-      { id: 'tir',        label: 'Tir',        category: 'PUISSANCE' },
-      { id: 'reparation', label: 'Réparation', category: 'DEFENSIF'  }
-    ]
-  },
-  // Astéroïdes répartis sur la nouvelle carte 2400x1350 (mêmes positions côté client)
-  { id: 'asteroid-0', type: 'asteroid', x: 250,  y: 200,  scale: 2.8, label: 'ASTÉROÏDE', actions: MINING_ACTION },
-  { id: 'asteroid-1', type: 'asteroid', x: 700,  y: 350,  scale: 2.0, label: 'ASTÉROÏDE', actions: MINING_ACTION },
-  { id: 'asteroid-2', type: 'asteroid', x: 1700, y: 350,  scale: 2.4, label: 'ASTÉROÏDE', actions: MINING_ACTION },
-  { id: 'asteroid-3', type: 'asteroid', x: 2150, y: 230,  scale: 1.8, label: 'ASTÉROÏDE', actions: MINING_ACTION },
-  { id: 'asteroid-4', type: 'asteroid', x: 250,  y: 1130, scale: 3.2, label: 'ASTÉROÏDE', actions: MINING_ACTION },
-  { id: 'asteroid-5', type: 'asteroid', x: 650,  y: 1080, scale: 1.9, label: 'ASTÉROÏDE', actions: MINING_ACTION },
-  { id: 'asteroid-6', type: 'asteroid', x: 1750, y: 1100, scale: 2.2, label: 'ASTÉROÏDE', actions: MINING_ACTION },
-  { id: 'asteroid-7', type: 'asteroid', x: 2180, y: 1220, scale: 2.6, label: 'ASTÉROÏDE', actions: MINING_ACTION }
+  // Base centrale
+  { id: 'base-1', type: 'base', x: WORLD_W / 2, y: WORLD_H / 2,
+    label: 'BASE', actions: BASE_ACTIONS },
+  // Tourelles autour de la base (formation triangulaire)
+  { id: 'turret-1', type: 'turret', x: 1200, y: 380,
+    label: 'TOURELLE NORD', actions: TURRET_ACTIONS },
+  { id: 'turret-2', type: 'turret', x: 1620, y: 970,
+    label: 'TOURELLE SE',  actions: TURRET_ACTIONS },
+  { id: 'turret-3', type: 'turret', x: 780,  y: 970,
+    label: 'TOURELLE SO',  actions: TURRET_ACTIONS },
+  // Astéroïdes : alternance matériaux / radius
+  { id: 'asteroid-0', type: 'asteroid', subtype: 'materiaux', x: 250,  y: 200,  scale: 2.8, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
+  { id: 'asteroid-1', type: 'asteroid', subtype: 'radius',    x: 700,  y: 350,  scale: 2.0, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
+  { id: 'asteroid-2', type: 'asteroid', subtype: 'materiaux', x: 1700, y: 350,  scale: 2.4, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
+  { id: 'asteroid-3', type: 'asteroid', subtype: 'radius',    x: 2150, y: 230,  scale: 1.8, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
+  { id: 'asteroid-4', type: 'asteroid', subtype: 'materiaux', x: 250,  y: 1130, scale: 3.2, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
+  { id: 'asteroid-5', type: 'asteroid', subtype: 'radius',    x: 650,  y: 1080, scale: 1.9, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION },
+  { id: 'asteroid-6', type: 'asteroid', subtype: 'materiaux', x: 1750, y: 1100, scale: 2.2, label: 'ASTÉROÏDE (matériaux)', actions: MINING_ACTION },
+  { id: 'asteroid-7', type: 'asteroid', subtype: 'radius',    x: 2180, y: 1220, scale: 2.6, label: 'ASTÉROÏDE (radius)',    actions: MINING_ACTION }
 ];
 const ELEMENT_BY_ID = Object.fromEntries(ELEMENTS.map(e => [e.id, e]));
+
+// État runtime par élément (en mémoire — repop au boot via initElementState)
+const elementStates = new Map();
+function initElementState(el) {
+  if (el.type === 'base') {
+    elementStates.set(el.id, { hp: BASE_HP_MAX, hpMax: BASE_HP_MAX, essence: 0, essenceMax: BASE_ESSENCE_MAX });
+  } else if (el.type === 'turret') {
+    elementStates.set(el.id, { hp: TURRET_HP_MAX, hpMax: TURRET_HP_MAX, puissance: 0, range: 0 });
+  } else if (el.type === 'asteroid') {
+    elementStates.set(el.id, { hp: ASTEROID_HP_MAX, hpMax: ASTEROID_HP_MAX, subtype: el.subtype, destroyedAt: null, respawnsAt: null });
+  }
+}
+for (const el of ELEMENTS) initElementState(el);
+
+// Ressources globales (faction)
+const factionResources = { materiaux: 0, radius: 0 };
+
+function getPublicElementState(id) {
+  const s = elementStates.get(id);
+  if (!s) return null;
+  return { id, ...s };
+}
+function getAllElementStates() {
+  return ELEMENTS.map(e => getPublicElementState(e.id));
+}
 
 const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(dataDir, { recursive: true });
@@ -280,6 +324,8 @@ io.on('connection', (socket) => {
     user: socket.data.userId ? { username: socket.data.username } : null,
     history: getRecentActionHistory(),
     elements: ELEMENTS,
+    elementStates: getAllElementStates(),
+    factionResources: { ...factionResources },
     activeAction: userActiveAction || null,
     actionDurationMs: ACTION_MAX_DURATION_MS,
     actionTickMs: ACTION_TICK_MS,
@@ -300,6 +346,11 @@ io.on('connection', (socket) => {
     if (!el) return respond({ ok: false, error: 'element inconnu' });
     const action = el.actions.find(a => a.id === actionId);
     if (!action) return respond({ ok: false, error: 'action inconnue' });
+    // Refuse les activations sur un astéroïde détruit
+    const st = elementStates.get(elementId);
+    if (st && el.type === 'asteroid' && st.hp <= 0) {
+      return respond({ ok: false, error: 'asteroïde détruit (respawn en cours)' });
+    }
 
     const now = Date.now();
     // Si une action est déjà active, on la solde puis on l'efface
@@ -378,8 +429,78 @@ io.on('connection', (socket) => {
   });
 });
 
+// Applique l'effet d'une action sur l'état de l'élément cible (1 tick = 1 unité).
+// Retourne true si l'effet a été appliqué, false si l'élément n'existe plus ou n'est pas exploitable.
+function applyActionEffect(actionId, element) {
+  const state = elementStates.get(element.id);
+  if (!state) return false;
+
+  // Astéroïde détruit → minage inopérant
+  if (element.type === 'asteroid' && state.hp <= 0) return false;
+
+  switch (actionId) {
+    case 'tir':
+      state.puissance = (state.puissance || 0) + 1;
+      return true;
+    case 'visee':
+      state.range = (state.range || 0) + 1;
+      return true;
+    case 'reparation':
+      if (state.hp >= state.hpMax) return false;
+      state.hp = Math.min(state.hp + 1, state.hpMax);
+      return true;
+    case 'remplir':
+      if (state.essence >= state.essenceMax) return false;
+      state.essence = Math.min(state.essence + 1, state.essenceMax);
+      return true;
+    case 'minage':
+      state.hp = Math.max(0, state.hp - 1);
+      if (state.subtype === 'materiaux') factionResources.materiaux += 1;
+      else if (state.subtype === 'radius') factionResources.radius += 1;
+      if (state.hp <= 0) destroyAsteroid(element.id);
+      return true;
+    default:
+      return false;
+  }
+}
+
+// Détruit un astéroïde : marque l'état, désactive les actions des joueurs qui le minaient,
+// et programme un respawn 20 minutes plus tard.
+function destroyAsteroid(id) {
+  const state = elementStates.get(id);
+  if (!state) return;
+  state.destroyedAt = Date.now();
+  state.respawnsAt = state.destroyedAt + ASTEROID_RESPAWN_MS;
+  io.emit('asteroid:destroyed', { id, respawnsAt: state.respawnsAt });
+  console.log(`[asteroid] ${id} détruit, respawn à ${new Date(state.respawnsAt).toISOString()}`);
+  // Désactiver toutes les actions actives sur cet astéroïde
+  const affected = db.prepare('SELECT user_id, action_id, category FROM active_actions WHERE element_id = ?').all(id);
+  for (const a of affected) {
+    stmtDeleteActiveAction.run(a.user_id);
+    stmtInsertActionLog.run(a.user_id, '', id, a.action_id, a.category, 'expire', Date.now());
+    const sockets = socketsByUser.get(a.user_id);
+    if (sockets) {
+      const progress = getProgressFor(a.user_id);
+      for (const s of sockets) s.emit('action:state', { activeAction: null, progress, expired: true });
+    }
+  }
+  // Programmer le respawn
+  setTimeout(() => respawnAsteroid(id), ASTEROID_RESPAWN_MS);
+}
+
+function respawnAsteroid(id) {
+  const state = elementStates.get(id);
+  if (!state) return;
+  state.hp = state.hpMax;
+  state.destroyedAt = null;
+  state.respawnsAt = null;
+  io.emit('asteroid:respawned', { id, state: getPublicElementState(id) });
+  console.log(`[asteroid] ${id} respawn`);
+}
+
 // Solde une action active : crédite les points écoulés depuis last_settled_at jusqu'à now
-// (ou jusqu'à started_at + 1h si dépassé), met à jour les compteurs joueur + global.
+// (ou jusqu'à started_at + 1h si dépassé), met à jour les compteurs joueur + global +
+// applique les effets sur l'élément ciblé.
 function settleAction(action, now) {
   const cap = action.started_at + ACTION_MAX_DURATION_MS;
   const settledThrough = Math.min(now, cap);
@@ -392,6 +513,15 @@ function settleAction(action, now) {
   incrementCategory(action.user_id, action.category, delta);
   const newRes = getResource() + delta;
   setResource(newRes);
+  // Applique l'effet sur l'élément : N ticks = N applications
+  const element = ELEMENT_BY_ID[action.element_id];
+  if (element) {
+    for (let i = 0; i < delta; i++) {
+      const applied = applyActionEffect(action.action_id, element);
+      // Si la cible devient inactive (asteroïde HP=0) on arrête d'appliquer
+      if (!applied) break;
+    }
+  }
   return delta;
 }
 
@@ -418,7 +548,11 @@ function tickActions() {
       io.emit('resource', { resource: res });
       lastBroadcastResource = res;
     }
-    io.emit('elements:update', { activeElements: getAllActiveElementStates() });
+    io.emit('elements:update', {
+      activeElements: getAllActiveElementStates(),
+      states: getAllElementStates(),
+      faction: { ...factionResources }
+    });
     // Pour chaque user actif, notifier sa nouvelle progression personnelle
     const stillActive = stmtAllActiveActions.all();
     for (const a of stillActive) {

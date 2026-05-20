@@ -42,6 +42,12 @@
       pointer-events: none;
     }
     .line strong { color: var(--c-frame); }
+    .resources-line { display: flex; gap: 12px; justify-content: space-between; }
+    .resources-line .res-cell { display: inline-flex; align-items: center; gap: 4px; }
+    .resources-line .res-cell:nth-child(1) { color: #c8a878; }
+    .resources-line .res-cell:nth-child(1) .icon, .resources-line .res-cell:nth-child(1) strong { color: #d4b487; }
+    .resources-line .res-cell:nth-child(2) { color: #66e1c5; }
+    .resources-line .res-cell:nth-child(2) .icon, .resources-line .res-cell:nth-child(2) strong { color: #66e1c5; }
     #userLine {
       display: flex; align-items: center; gap: 10px;
       pointer-events: auto; justify-content: space-between;
@@ -275,6 +281,12 @@
     }
     #actionMenu .deact:hover { background: #f55; color: #000; }
     #actionMenu .note { font-size: 10px; opacity: 0.6; margin-top: 6px; font-style: italic; }
+    #actionMenu .stats {
+      font-size: 11px; color: #9bd0ff; padding: 6px 0 8px;
+      border-bottom: 1px solid rgba(74,175,255,0.2);
+      margin-bottom: 8px; letter-spacing: 0.5px;
+    }
+    #actionMenu .stats strong { color: #fff; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -310,6 +322,18 @@
       <symbol id="ic-pulse" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
         <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
       </symbol>
+      <symbol id="ic-materiaux" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round">
+        <path d="M3 7l9-5 9 5v10l-9 5-9-5V7z"/>
+        <path d="M3 7l9 5 9-5M12 12v10"/>
+      </symbol>
+      <symbol id="ic-radius" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round">
+        <circle cx="12" cy="12" r="2"/>
+        <path d="M7 12a5 5 0 0 1 10 0"/>
+        <path d="M3 12a9 9 0 0 1 18 0"/>
+      </symbol>
+      <symbol id="ic-heart" viewBox="0 0 24 24" fill="currentColor">
+        <path d="M12 21s-7-4.35-7-10a4 4 0 0 1 7-2.65A4 4 0 0 1 19 11c0 5.65-7 10-7 10z"/>
+      </symbol>
     </defs>
   </svg>
 
@@ -321,6 +345,10 @@
     <div class="line">
       <svg class="icon"><use href="#ic-resource"/></svg>
       Ressource de faction : <strong id="resource">0</strong>
+    </div>
+    <div class="line resources-line">
+      <span class="res-cell"><svg class="icon"><use href="#ic-materiaux"/></svg> Matériaux : <strong id="factionMateriaux">0</strong></span>
+      <span class="res-cell"><svg class="icon"><use href="#ic-radius"/></svg> Radius : <strong id="factionRadius">0</strong></span>
     </div>
     <div class="line idle" id="activeAction">
       <div class="row">
@@ -382,6 +410,7 @@
       <span class="title" id="actionMenuTitle">ÉLÉMENT</span>
       <button class="close" id="actionMenuClose" aria-label="Fermer">×</button>
     </div>
+    <div class="stats hidden" id="actionMenuStats"></div>
     <div class="actions" id="actionMenuActions"></div>
     <button class="deact hidden" id="actionMenuDeact">Désactiver</button>
     <div class="note hidden" id="actionMenuNote"></div>
