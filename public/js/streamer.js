@@ -230,6 +230,11 @@ const ENEMY_ASSETS = {
   2: '/assets/PNG/Ship_02/Ship_LVL_2.png'
 };
 const ENEMY_SCALE = 0.07;
+const GUN_LEVELS = 10;
+const GUN_SCALE = 0.55;
+function turretGunLevel(puissance) {
+  return Math.min(GUN_LEVELS, Math.max(1, 1 + Math.floor((puissance || 0) / 10)));
+}
 const SHIP_SPRITE_OFFSET = Math.PI / 2; // les nouveaux assets pointent vers le haut
 
 const ASTEROID_VARIANTS = {
@@ -286,6 +291,14 @@ class MainScene extends Phaser.Scene {
     this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_02.png');
     this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_03.png');
     this.load.image('bg-04', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_04.png');
+    for (let g = 1; g <= GUN_LEVELS; g++) {
+      const k = String(g).padStart(2, '0');
+      this.load.image(`gun-${k}-idle`, `/assets/PNG/Guns/Gun${k}/Idle/Gun${k}-Idle_0.png`);
+      for (let f = 0; f < 10; f++) {
+        const ff = String(f).padStart(2, '0');
+        this.load.image(`gun-${k}-shoot-${ff}`, `/assets/PNG/Guns/Gun${k}/Shoot/Gun${k}-Shoot_${ff}.png`);
+      }
+    }
     for (const [v, meta] of Object.entries(ASTEROID_VARIANTS)) {
       this.load.spritesheet(`a-${v}`,
         `/assets/Asteroids/PNG/asteroid_${v}_with_cracks.png`,
@@ -407,19 +420,26 @@ class MainScene extends Phaser.Scene {
   }
 
   createShipAnimations() {
-    const mkFrames = (prefix, count) =>
-      Array.from({ length: count }, (_, i) => ({ key: `${prefix}${String(i).padStart(3, '0')}` }));
+    const mkFrames = (prefix, count, pad) =>
+      Array.from({ length: count }, (_, i) => ({ key: `${prefix}${String(i).padStart(pad || 3, '0')}` }));
     if (!this.anims.exists('ship-thrust')) {
-      this.anims.create({ key: 'ship-thrust', frames: mkFrames('ship-fr-', 10), frameRate: 24, repeat: -1 });
+      this.anims.create({ key: 'ship-thrust', frames: mkFrames('ship-fr-', 10, 3), frameRate: 24, repeat: -1 });
     }
     for (const lvl of ENEMY_LEVELS) {
       const thr = `enemy${lvl}-thrust`;
       if (!this.anims.exists(thr)) {
-        this.anims.create({ key: thr, frames: mkFrames(`enemy${lvl}-fr-`, 10), frameRate: 24, repeat: -1 });
+        this.anims.create({ key: thr, frames: mkFrames(`enemy${lvl}-fr-`, 10, 3), frameRate: 24, repeat: -1 });
       }
       const ex = `enemy${lvl}-explode`;
       if (!this.anims.exists(ex)) {
-        this.anims.create({ key: ex, frames: mkFrames(`enemy${lvl}-ex-`, 9), frameRate: 22, repeat: 0 });
+        this.anims.create({ key: ex, frames: mkFrames(`enemy${lvl}-ex-`, 9, 3), frameRate: 22, repeat: 0 });
+      }
+    }
+    for (let g = 1; g <= GUN_LEVELS; g++) {
+      const k = String(g).padStart(2, '0');
+      const key = `gun-${k}-shoot`;
+      if (!this.anims.exists(key)) {
+        this.anims.create({ key, frames: mkFrames(`gun-${k}-shoot-`, 10, 2), frameRate: 24, repeat: -1 });
       }
     }
   }
@@ -494,15 +514,15 @@ class MainScene extends Phaser.Scene {
         const barW = Math.max(60, Math.min(140, visibleSize * 0.9));
         this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - visibleSize * 0.5 - 14, barW));
       } else if (el.type === 'turret') {
-        const highlight = this.add.circle(el.x, el.y, 50, 0xff4f6d, 0)
+        const highlight = this.add.circle(el.x, el.y, 60, 0xff4f6d, 0)
           .setStrokeStyle(2, 0xff4f6d, 0);
-        const sprite = this.add.image(el.x, el.y, 'turret');
-        this.add.text(el.x, el.y + 58, el.label, {
+        const sprite = this.add.sprite(el.x, el.y, 'gun-01-idle').setScale(GUN_SCALE);
+        this.add.text(el.x, el.y + 70, el.label, {
           fontFamily: 'Consolas, monospace', fontSize: '11px', color: '#ff4f6d'
         }).setOrigin(0.5);
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
-        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 50, 80));
+        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 70, 90));
       } else if (el.type === 'base') {
         const highlight = this.add.circle(el.x, el.y, 90, 0x4af, 0)
           .setStrokeStyle(2, 0x4af, 0);
@@ -544,6 +564,32 @@ class MainScene extends Phaser.Scene {
       if (sprite && sprite._asteroidVariant) {
         sprite.setFrame(asteroidFrameFor(sprite._asteroidVariant, ratio));
       }
+    }
+    for (const el of serverElements) {
+      if (el.type === 'turret') this.updateTurretAppearance(el.id);
+    }
+  }
+
+  updateTurretAppearance(id) {
+    const sprite = this.elementSprites.get(id);
+    if (!sprite) return;
+    const state = elementStates.get(id);
+    if (!state) return;
+    const level = turretGunLevel(state.puissance);
+    const k = String(level).padStart(2, '0');
+    const idleKey = `gun-${k}-idle`;
+    const shootKey = `gun-${k}-shoot`;
+    const active = (lastActiveElements || []).find(a => a.element_id === id);
+    const isShooting = active && active.action_id === 'tir';
+    if (isShooting) {
+      if (sprite._currentAnim !== shootKey) {
+        sprite.play(shootKey);
+        sprite._currentAnim = shootKey;
+      }
+    } else {
+      if (sprite.anims && sprite.anims.isPlaying) sprite.anims.stop();
+      if (sprite.texture && sprite.texture.key !== idleKey) sprite.setTexture(idleKey);
+      sprite._currentAnim = null;
     }
   }
 
@@ -727,6 +773,9 @@ class MainScene extends Phaser.Scene {
         highlight.setFillStyle(0xffffff, 0);
         highlight.alpha = 1;
       }
+    }
+    for (const el of serverElements) {
+      if (el.type === 'turret') this.updateTurretAppearance(el.id);
     }
   }
 
