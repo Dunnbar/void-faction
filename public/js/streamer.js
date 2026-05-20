@@ -228,12 +228,11 @@ socket.on('streamer:kicked', () => {
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
 const SHIP_SCALE = 0.035; // vaisseau Amiral discret, ne masque pas la base
-const ENEMY_LEVELS = [1, 2];
+const ENEMY_LEVELS = [1];
 const ENEMY_ASSETS = {
-  1: '/assets/PNG/Ship_02/Ship_LVL_1.png',
-  2: '/assets/PNG/Ship_02/Ship_LVL_2.png'
+  1: '/assets/PNG/Ship_02/Ship_LVL_1.png'
 };
-const ENEMY_SCALE = 0.07;
+const ENEMY_SCALE = 0.045;
 const GUN_LEVELS = 10;
 const GUN_SCALE = 0.55;
 function turretGunLevel(puissance) {
@@ -508,6 +507,13 @@ class MainScene extends Phaser.Scene {
 
   drawBasePerimeter() {
     if (this.basePerimeterGfx) this.basePerimeterGfx.destroy();
+    if (this.basePerimeterHalo) this.basePerimeterHalo.destroy();
+    const halo = this.add.graphics().setDepth(-60);
+    halo.fillStyle(0xff8044, 0.07);
+    halo.fillCircle(BASE_X, BASE_Y, BASE_PERIMETER);
+    halo.fillStyle(0xff8044, 0.04);
+    halo.fillCircle(BASE_X, BASE_Y, BASE_PERIMETER * 1.05);
+    this.basePerimeterHalo = halo;
     const g = this.add.graphics().setDepth(-50);
     g.lineStyle(4, 0xff8044, 0.75);
     g.strokeCircle(BASE_X, BASE_Y, BASE_PERIMETER);
@@ -804,28 +810,69 @@ class MainScene extends Phaser.Scene {
   }
 
   spawnEnemy(e) {
-    const level = ENEMY_LEVELS.includes(e.level) ? e.level : 1;
+    const level = 1;
     const sprite = this.add.sprite(e.spawnX, e.spawnY, `enemy${level}-fr-000`)
       .setScale(ENEMY_SCALE).setOrigin(0.5, 0.36).setDepth(8);
     sprite.play(`enemy${level}-thrust`);
+    sprite._level = level;
     const angle = Math.atan2(e.targetY - e.spawnY, e.targetX - e.spawnX);
     sprite.rotation = angle + Math.PI / 2;
     this.enemies.add(sprite);
-    this.tweens.add({
+
+    const STOP_RANGE = 110;
+    const total = Math.hypot(e.targetX - e.spawnX, e.targetY - e.spawnY);
+    if (total <= STOP_RANGE + 10) {
+      this.startEnemyAttack(sprite, e.targetX, e.targetY);
+      return;
+    }
+    const ratio = (total - STOP_RANGE) / total;
+    const stopX = e.spawnX + (e.targetX - e.spawnX) * ratio;
+    const stopY = e.spawnY + (e.targetY - e.spawnY) * ratio;
+    const approachMs = e.travelMs * ratio;
+    sprite._approachTween = this.tweens.add({
       targets: sprite,
-      x: e.targetX, y: e.targetY,
-      duration: e.travelMs, ease: 'Linear',
-      onComplete: () => {
-        this.playEnemyExplosion(sprite.x, sprite.y, level);
-        this.enemies.delete(sprite);
-        sprite.destroy();
-      }
+      x: stopX, y: stopY,
+      duration: approachMs, ease: 'Linear',
+      onComplete: () => this.startEnemyAttack(sprite, e.targetX, e.targetY)
     });
   }
 
+  startEnemyAttack(sprite, tx, ty) {
+    if (!sprite.active) return;
+    if (sprite.anims && sprite.anims.isPlaying) sprite.anims.stop();
+    sprite.setTexture(`enemy_ship_${sprite._level}`);
+    const aim = Math.atan2(ty - sprite.y, tx - sprite.x);
+    sprite.rotation = aim + Math.PI / 2;
+    sprite._fireEvent = this.time.addEvent({
+      delay: 600, repeat: 8,
+      callback: () => { if (sprite.active) this.fireEnemyShot(sprite, tx, ty); }
+    });
+    sprite._destroyTimer = this.time.delayedCall(5400, () => this.destroyEnemy(sprite));
+  }
+
+  fireEnemyShot(sprite, tx, ty) {
+    const line = this.add.graphics().setDepth(9);
+    line.lineStyle(3, 0xff3322, 0.95);
+    line.beginPath();
+    line.moveTo(sprite.x, sprite.y);
+    line.lineTo(tx, ty);
+    line.strokePath();
+    this.tweens.add({ targets: line, alpha: 0, duration: 220, onComplete: () => line.destroy() });
+    const spark = this.add.circle(tx, ty, 9, 0xff7733, 0.9).setDepth(9);
+    this.tweens.add({ targets: spark, alpha: 0, scale: 1.8, duration: 280, onComplete: () => spark.destroy() });
+  }
+
+  destroyEnemy(sprite) {
+    if (!sprite.active) return;
+    if (sprite._fireEvent) sprite._fireEvent.remove();
+    this.playEnemyExplosion(sprite.x, sprite.y, sprite._level || 1);
+    this.enemies.delete(sprite);
+    sprite.destroy();
+  }
+
   playEnemyExplosion(x, y, level) {
-    const lvl = ENEMY_LEVELS.includes(level) ? level : 1;
-    const ex = this.add.sprite(x, y, `enemy${lvl}-ex-000`).setScale(ENEMY_SCALE * 1.8);
+    const lvl = 1;
+    const ex = this.add.sprite(x, y, `enemy${lvl}-ex-000`).setScale(ENEMY_SCALE * 2.2).setDepth(9);
     ex.play(`enemy${lvl}-explode`);
     ex.once('animationcomplete', () => ex.destroy());
   }

@@ -29,7 +29,7 @@ const WAVE_WARNING_MS = 10 * 1000;         // 10s d'alerte avant le spawn
 const ENEMY_SPEED = 70;                    // px/s
 const ENEMY_MIN = 3;
 const ENEMY_MAX = 6;
-const ENEMY_LEVELS_AVAILABLE = [1, 2]; // niveaux d'ennemis pouvant spawn (Ship_02/Ship_LVL_N)
+const ENEMY_LEVELS_AVAILABLE = [1]; // pour l'instant uniquement Ship_LVL_1
 
 const CATEGORIES = ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE'];
 const CATEGORY_TO_COLUMN = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILITAIRE: 'utilitaire' };
@@ -657,7 +657,9 @@ function rollWave() {
     targetLabel: target.label,
     edgeAngle: baseAngle,
     enemies,
-    endsAt: spawnAt + Math.ceil(maxTravel) + 2000
+    // +8000 : on laisse le temps aux ennemis d'arriver, de tirer ~5s sur leur cible
+    // puis d'exploser visuellement avant de marquer la vague terminée côté client
+    endsAt: spawnAt + Math.ceil(maxTravel) + 8000
   };
   io.emit('wave:incoming', currentWave);
   console.log(`[wave] ${currentWave.id} — ${count} ennemis vers ${target.id} (angle ${baseAngle.toFixed(2)} rad)`);
