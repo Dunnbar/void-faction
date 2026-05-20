@@ -172,9 +172,17 @@ db.exec(`
 `);
 db.prepare("INSERT OR IGNORE INTO state (key, value) VALUES ('resource', '0')").run();
 
+// Migration : ajoute amiral_name si pas encore present (signups choisissent un Amiral)
+{
+  const cols = db.prepare("PRAGMA table_info(users)").all();
+  if (!cols.find(c => c.name === 'amiral_name')) {
+    db.exec("ALTER TABLE users ADD COLUMN amiral_name TEXT");
+  }
+}
+
 const stmtGetState         = db.prepare('SELECT value FROM state WHERE key = ?');
 const stmtSetState         = db.prepare('UPDATE state SET value = ? WHERE key = ?');
-const stmtInsertUser       = db.prepare('INSERT INTO users (username, password_hash, created_at) VALUES (?, ?, ?)');
+const stmtInsertUser       = db.prepare('INSERT INTO users (username, password_hash, created_at, amiral_name) VALUES (?, ?, ?, ?)');
 const stmtGetUserByName    = db.prepare('SELECT id, username, password_hash FROM users WHERE username = ?');
 const stmtGetUserById      = db.prepare('SELECT id, username FROM users WHERE id = ?');
 const stmtInsertSession    = db.prepare('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)');
@@ -263,7 +271,12 @@ function userFromToken(token) {
 // Spawn du vaisseau Amiral : au sud de la base centrale pour ne pas la chevaucher
 const ship = { x: WORLD_W / 2, y: WORLD_H / 2 + 230, rotation: 0 };
 let streamerSocketId = null;
+let streamerDisplayName = null; // nom affichable de l'Amiral connecté (saisi à l'auth)
 let currentWave = null;  // wave en cours (null si aucune)
+
+function getCurrentAmirals() {
+  return streamerDisplayName ? [{ name: streamerDisplayName }] : [];
+}
 
 const app = express();
 app.use(express.json());
@@ -277,22 +290,33 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
+app.get('/api/amiraux', (_req, res) => {
+  res.json({ amiraux: getCurrentAmirals() });
+});
+
 app.post('/api/signup', (req, res) => {
-  const { username, password } = req.body || {};
+  const { username, password, amiralName } = req.body || {};
   if (typeof username !== 'string' || !USERNAME_RE.test(username)) {
     return res.status(400).json({ ok: false, error: 'Pseudo invalide (3-20 caractères, alphanumériques)' });
   }
   if (typeof password !== 'string' || password.length < 6 || password.length > 200) {
     return res.status(400).json({ ok: false, error: 'Mot de passe : 6 caractères minimum' });
   }
+  const amirals = getCurrentAmirals();
+  if (amirals.length === 0) {
+    return res.status(409).json({ ok: false, error: 'Aucun Amiral en ligne — création de compte impossible pour l\'instant' });
+  }
+  if (typeof amiralName !== 'string' || !amirals.find(a => a.name === amiralName)) {
+    return res.status(400).json({ ok: false, error: 'Choisis un Amiral à rejoindre' });
+  }
   const existing = stmtGetUserByName.get(username);
   if (existing) return res.status(409).json({ ok: false, error: 'Ce pseudo est déjà pris' });
   try {
-    const info = stmtInsertUser.run(username, hashPassword(password), Date.now());
+    const info = stmtInsertUser.run(username, hashPassword(password), Date.now(), amiralName);
     stmtEnsureProgress.run(info.lastInsertRowid);
     const token = newToken();
     stmtInsertSession.run(token, info.lastInsertRowid, Date.now());
-    res.json({ ok: true, token, username });
+    res.json({ ok: true, token, username, amiralName });
   } catch (e) {
     console.error('[signup] erreur:', e?.code || '', e?.message || e);
     res.status(500).json({ ok: false, error: 'Erreur serveur: ' + (e?.code || e?.message || 'inconnue') });
@@ -419,7 +443,12 @@ io.on('connection', (socket) => {
   socket.on('streamer:auth', (data, cb) => {
     if (typeof cb !== 'function') return;
     if (data?.password !== STREAMER_PASSWORD) {
-      cb({ ok: false });
+      cb({ ok: false, error: 'Mot de passe incorrect' });
+      return;
+    }
+    const rawName = String(data?.name || '').trim();
+    if (!rawName || rawName.length < 2 || rawName.length > 24 || !/^[\w \-'.]{2,24}$/.test(rawName)) {
+      cb({ ok: false, error: 'Nom Amiral invalide (2-24 caractères)' });
       return;
     }
     if (streamerSocketId && streamerSocketId !== socket.id) {
@@ -430,8 +459,11 @@ io.on('connection', (socket) => {
       }
     }
     streamerSocketId = socket.id;
+    streamerDisplayName = rawName;
     socket.data.isStreamer = true;
-    cb({ ok: true });
+    socket.data.streamerName = rawName;
+    io.emit('amirals:update', { amiraux: getCurrentAmirals() });
+    cb({ ok: true, name: rawName });
   });
 
   socket.on('streamer:ship', (data) => {
@@ -445,7 +477,11 @@ io.on('connection', (socket) => {
   });
 
   socket.on('disconnect', () => {
-    if (socket.id === streamerSocketId) streamerSocketId = null;
+    if (socket.id === streamerSocketId) {
+      streamerSocketId = null;
+      streamerDisplayName = null;
+      io.emit('amirals:update', { amiraux: getCurrentAmirals() });
+    }
     if (socket.data.userId) {
       const set = socketsByUser.get(socket.data.userId);
       if (set) {

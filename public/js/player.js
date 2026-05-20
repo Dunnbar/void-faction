@@ -420,9 +420,42 @@ deactivateBtn.addEventListener('click', deactivateCurrent);
 
 // ============ Auth ============
 
+async function refreshAmiralSelect() {
+  const sel = document.getElementById('signupAmiralSelect');
+  const warn = document.getElementById('signupNoAmiral');
+  const submitBtn = document.getElementById('signupSubmit');
+  if (!sel) return;
+  try {
+    const res = await fetch('/api/amiraux');
+    const body = await res.json();
+    const amiraux = Array.isArray(body?.amiraux) ? body.amiraux : [];
+    sel.innerHTML = '';
+    if (amiraux.length === 0) {
+      sel.innerHTML = '<option value="">— Aucun Amiral en ligne —</option>';
+      sel.disabled = true;
+      if (warn) warn.classList.remove('hidden');
+      if (submitBtn) submitBtn.disabled = true;
+    } else {
+      for (const a of amiraux) {
+        const opt = document.createElement('option');
+        opt.value = a.name;
+        opt.textContent = a.name;
+        sel.appendChild(opt);
+      }
+      sel.disabled = false;
+      if (warn) warn.classList.add('hidden');
+      if (submitBtn) submitBtn.disabled = false;
+    }
+  } catch (e) {
+    if (warn) warn.classList.remove('hidden');
+    if (submitBtn) submitBtn.disabled = true;
+  }
+}
+
 function openAuthModal() {
   authError.textContent = '';
   authModal.classList.remove('hidden');
+  refreshAmiralSelect();
   setTimeout(() => {
     const visible = signupForm.classList.contains('hidden') ? loginForm : signupForm;
     visible.querySelector('input')?.focus();
@@ -508,7 +541,11 @@ loginForm.addEventListener('submit', (e) => {
 signupForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const fd = new FormData(signupForm);
-  submitAuth('/api/signup', { username: fd.get('username'), password: fd.get('password') });
+  submitAuth('/api/signup', {
+    username: fd.get('username'),
+    password: fd.get('password'),
+    amiralName: fd.get('amiralName')
+  });
 });
 
 // ============ Socket ============
@@ -648,6 +685,11 @@ function connectSocket() {
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) scene.handleWaveIncoming(wave);
     triggerCaptainForWave(wave);
+  });
+
+  // Liste des Amiraux connectés met à jour le dropdown si la modal est ouverte
+  socket.on('amirals:update', () => {
+    if (authModal && !authModal.classList.contains('hidden')) refreshAmiralSelect();
   });
 }
 

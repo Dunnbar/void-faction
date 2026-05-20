@@ -471,7 +471,15 @@
       <form id="signupForm" class="hidden" autocomplete="off">
         <input name="username" placeholder="Pseudo (3-20 caractères)" autocomplete="off" required />
         <input name="password" type="password" placeholder="Mot de passe (6 min)" autocomplete="new-password" required />
-        <button type="submit">Créer un compte</button>
+        <label style="font-size:11px;color:#9bd0ff;letter-spacing:1px;text-transform:uppercase;">Amiral à rejoindre</label>
+        <select name="amiralName" id="signupAmiralSelect" required
+          style="background:#000;color:#fff;border:1px solid #4af;padding:8px 10px;font-family:monospace;font-size:13px;border-radius:3px;">
+          <option value="">— Chargement —</option>
+        </select>
+        <p id="signupNoAmiral" class="hidden" style="font-size:11px;color:#f88;margin:4px 0 0 0;">
+          Aucun Amiral n'est en ligne. L'inscription est impossible tant qu'un Amiral n'a pas pris ses fonctions.
+        </p>
+        <button type="submit" id="signupSubmit">Créer un compte</button>
       </form>
       <p id="authError"></p>
     </div>

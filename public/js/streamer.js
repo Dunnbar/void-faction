@@ -39,16 +39,22 @@ loginForm.addEventListener('submit', (e) => {
   e.preventDefault();
   loginError.textContent = '';
   const password = passwordInput.value;
+  const nameInput = document.getElementById('amiralName');
+  const name = (nameInput?.value || '').trim();
+  if (!name) {
+    loginError.textContent = 'Saisis un nom d\'Amiral';
+    return;
+  }
   if (!socket.connected) socket.connect();
   const tryAuth = () => {
-    socket.emit('streamer:auth', { password }, (resp) => {
+    socket.emit('streamer:auth', { password, name }, (resp) => {
       if (resp?.ok) {
         authenticated = true;
         loginEl.classList.add('hidden');
         hudEl.classList.remove('hidden');
         startGame();
       } else {
-        loginError.textContent = 'Mot de passe incorrect';
+        loginError.textContent = resp?.error || 'Authentification refusée';
         socket.disconnect();
       }
     });
