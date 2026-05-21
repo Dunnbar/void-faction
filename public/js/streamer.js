@@ -107,6 +107,116 @@ signupForm.addEventListener('submit', (e) => {
 let lastActiveElements = [];
 let elementStates = new Map();
 let factionResources = { materiaux: 0, radius: 0 };
+let activeAction = null;  // action active de l'Amiral (slot unique)
+let amiralProgress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
+let serverElementsRef = null;  // alias vers le tableau d'elements (mis a jour dans init)
+
+// ============ Menu d'action (clic sur un element) ============
+let actionMenuElementId = null;
+const actionMenu = document.getElementById('actionMenu');
+const actionMenuTitle = document.getElementById('actionMenuTitle');
+const actionMenuActions = document.getElementById('actionMenuActions');
+const actionMenuClose = document.getElementById('actionMenuClose');
+const actionMenuDeact = document.getElementById('actionMenuDeact');
+const actionMenuNote = document.getElementById('actionMenuNote');
+const actionMenuStats = document.getElementById('actionMenuStats');
+
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function getElement(elementId) {
+  if (!serverElements) return null;
+  return serverElements.find(e => e.id === elementId);
+}
+
+function openActionMenu(elementId, anchor) {
+  if (!authenticated) return; // l'Amiral doit etre authentifie pour cliquer
+  const el = getElement(elementId);
+  if (!el) return;
+  actionMenuElementId = elementId;
+  actionMenuTitle.textContent = el.label;
+
+  // Stats de l'element
+  if (actionMenuStats) {
+    const st = elementStates.get(elementId);
+    if (st) {
+      const parts = [];
+      if (st.hp !== undefined && el.type !== 'asteroid') parts.push(`HP <strong>${st.hp}</strong>/${st.hpMax}`);
+      if (st.puissance !== undefined) parts.push(`Puissance <strong>${st.puissance}</strong>`);
+      if (st.range !== undefined) parts.push(`Visée <strong>${st.range}</strong>`);
+      if (st.essence !== undefined) parts.push(`Essence <strong>${st.essence}</strong>/${st.essenceMax}`);
+      if (st.subtype) {
+        parts.push(`Type <strong>${st.subtype === 'radius' ? 'Radius' : 'Matériaux'}</strong>`);
+        if (st.hpMax) {
+          const remainingSec = Math.max(0, Math.round(st.hp / 1000));
+          const m = Math.floor(remainingSec / 60);
+          const s = remainingSec % 60;
+          parts.push(`Durée <strong>${m}m${String(s).padStart(2,'0')}s</strong>`);
+        }
+      }
+      actionMenuStats.innerHTML = parts.join(' &middot; ');
+      actionMenuStats.classList.remove('hidden');
+    } else {
+      actionMenuStats.classList.add('hidden');
+    }
+  }
+
+  actionMenuActions.innerHTML = '';
+  for (const a of el.actions) {
+    const isActive = activeAction && activeAction.element_id === elementId && activeAction.action_id === a.id;
+    const btn = document.createElement('button');
+    btn.innerHTML = `<span class="tag cat-tag ${a.category}">${a.category}</span> ${escapeHtml(a.label)}`;
+    if (isActive) btn.classList.add('active');
+    btn.addEventListener('click', () => activateAction(elementId, a.id));
+    actionMenuActions.appendChild(btn);
+  }
+  const activeHere = activeAction && activeAction.element_id === elementId;
+  actionMenuDeact.classList.toggle('hidden', !activeHere);
+  if (activeAction && activeAction.element_id !== elementId) {
+    actionMenuNote.textContent = 'Tu vas désactiver ton action en cours.';
+    actionMenuNote.classList.remove('hidden');
+  } else {
+    actionMenuNote.classList.add('hidden');
+  }
+
+  actionMenu.classList.remove('hidden');
+  const rect = actionMenu.getBoundingClientRect();
+  let x = (anchor?.clientX ?? window.innerWidth / 2) + 12;
+  let y = (anchor?.clientY ?? window.innerHeight / 2) - 10;
+  if (x + rect.width > window.innerWidth - 8) x = (anchor?.clientX ?? 0) - rect.width - 12;
+  if (y + rect.height > window.innerHeight - 8) y = window.innerHeight - rect.height - 8;
+  if (y < 8) y = 8;
+  if (x < 8) x = 8;
+  actionMenu.style.left = x + 'px';
+  actionMenu.style.top = y + 'px';
+}
+
+function closeActionMenu() {
+  actionMenu.classList.add('hidden');
+  actionMenuElementId = null;
+}
+
+function activateAction(elementId, actionId) {
+  if (!socket || !authenticated) return;
+  socket.emit('action:activate', { elementId, actionId }, (resp) => {
+    if (resp?.ok) closeActionMenu();
+    else console.warn('[amiral] activation refusee:', resp?.error);
+  });
+}
+
+function deactivateCurrent() {
+  if (!socket || !authenticated || !activeAction) return;
+  socket.emit('action:deactivate', null, () => closeActionMenu());
+}
+
+if (actionMenuClose) actionMenuClose.addEventListener('click', closeActionMenu);
+if (actionMenuDeact) actionMenuDeact.addEventListener('click', deactivateCurrent);
+document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeActionMenu(); });
+document.addEventListener('mousedown', (e) => {
+  if (!actionMenu || actionMenu.classList.contains('hidden')) return;
+  if (!actionMenu.contains(e.target)) closeActionMenu();
+}, true);
 let knownBuildTime = null;
 
 // ============ Commandant overlay HUD ============
@@ -225,6 +335,8 @@ function wireSocketEvents() {
     serverElements = data.elements || [];
     elementStates = new Map((data.elementStates || []).map(s => [s.id, s]));
     factionResources = data.factionResources || factionResources;
+    activeAction = data.activeAction || null;
+    amiralProgress = data.progress || amiralProgress;
     if (data.world) {
       WORLD_W = data.world.width;
       WORLD_H = data.world.height;
@@ -309,6 +421,14 @@ function wireSocketEvents() {
     amiralToken = null;
     localStorage.removeItem('voidfaction:amiralToken');
     location.reload();
+  });
+  socket.on('action:state', (data) => {
+    activeAction = data?.activeAction || null;
+    if (data?.progress) amiralProgress = data.progress;
+    // Mise a jour du menu si ouvert sur l'element concerne
+    if (actionMenuElementId && !actionMenu.classList.contains('hidden')) {
+      openActionMenu(actionMenuElementId, null);
+    }
   });
 }
 
@@ -655,7 +775,12 @@ class MainScene extends Phaser.Scene {
         const sprite = this.add.sprite(el.x, el.y, `a-${variant}`, 0)
           .setScale(phaserScale)
           .setRotation(Math.random() * Math.PI * 2)
-          .setTint(tint);
+          .setTint(tint)
+          .setInteractive({ useHandCursor: true });
+        sprite.on('pointerdown', (pointer) => {
+          if (pointer.button !== 0) return;
+          openActionMenu(el.id, pointer.event);
+        });
         const dir = (i % 2 === 0) ? 1 : -1;
         this.tweens.add({
           targets: sprite,
@@ -687,7 +812,12 @@ class MainScene extends Phaser.Scene {
         const baseRot = outward + Math.PI / 2;
         const sprite = this.add.sprite(el.x, el.y, 'gun-01-idle')
           .setScale(GUN_SCALE)
-          .setRotation(baseRot);
+          .setRotation(baseRot)
+          .setInteractive({ useHandCursor: true });
+        sprite.on('pointerdown', (pointer) => {
+          if (pointer.button !== 0) return;
+          openActionMenu(el.id, pointer.event);
+        });
         sprite._baseRotation = baseRot;
         const amp = 0.15;
         const dur = 7000 + Math.floor(Math.random() * 4000);
@@ -704,7 +834,12 @@ class MainScene extends Phaser.Scene {
       } else if (el.type === 'base') {
         const highlight = this.add.circle(el.x, el.y, 120, 0x4af, 0)
           .setStrokeStyle(2, 0x4af, 0);
-        const sprite = this.add.image(el.x, el.y, 'mothership-base').setScale(0.9);
+        const sprite = this.add.image(el.x, el.y, 'mothership-base').setScale(0.9)
+          .setInteractive({ useHandCursor: true });
+        sprite.on('pointerdown', (pointer) => {
+          if (pointer.button !== 0) return;
+          openActionMenu(el.id, pointer.event);
+        });
         this.add.text(el.x, el.y + 120, el.label, {
           fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af'
         }).setOrigin(0.5);

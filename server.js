@@ -204,7 +204,29 @@ db.exec(`
   );
   CREATE INDEX IF NOT EXISTS idx_action_log_time ON action_log (at DESC);
   CREATE INDEX IF NOT EXISTS idx_action_log_amiral ON action_log (amiral_id, at DESC);
+
+  -- L'Amiral peut activer une action a la fois (meme regle qu'un joueur)
+  CREATE TABLE IF NOT EXISTS amiral_active_actions (
+    amiral_id INTEGER PRIMARY KEY,
+    element_id TEXT NOT NULL,
+    action_id TEXT NOT NULL,
+    category TEXT NOT NULL,
+    started_at INTEGER NOT NULL,
+    last_settled_at INTEGER NOT NULL,
+    FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
+  );
 `);
+
+// Ajoute colonnes de progression a la table amirals si pas encore presentes
+{
+  const cols = db.prepare("PRAGMA table_info(amirals)").all();
+  if (!cols.find(c => c.name === 'puissance')) {
+    db.exec("ALTER TABLE amirals ADD COLUMN puissance INTEGER NOT NULL DEFAULT 0");
+    db.exec("ALTER TABLE amirals ADD COLUMN defensif INTEGER NOT NULL DEFAULT 0");
+    db.exec("ALTER TABLE amirals ADD COLUMN utilitaire INTEGER NOT NULL DEFAULT 0");
+    db.exec("ALTER TABLE amirals ADD COLUMN total INTEGER NOT NULL DEFAULT 0");
+  }
+}
 db.prepare("INSERT OR IGNORE INTO state (key, value) VALUES ('resource', '0')").run();
 
 // Prepared statements
@@ -259,6 +281,32 @@ const stmtActiveElementsBy  = db.prepare(`
   FROM active_actions a JOIN users u ON u.id = a.user_id
   WHERE u.amiral_id = ?
 `);
+
+// Amiral active actions (slot dedie pour l'Amiral)
+const stmtGetAmiralActive    = db.prepare('SELECT amiral_id, element_id, action_id, category, started_at, last_settled_at FROM amiral_active_actions WHERE amiral_id = ?');
+const stmtAllAmiralActive    = db.prepare(`
+  SELECT a.amiral_id, a.element_id, a.action_id, a.category, a.started_at, a.last_settled_at, am.username
+  FROM amiral_active_actions a JOIN amirals am ON am.id = a.amiral_id
+`);
+const stmtUpsertAmiralActive = db.prepare(`
+  INSERT INTO amiral_active_actions (amiral_id, element_id, action_id, category, started_at, last_settled_at)
+  VALUES (?, ?, ?, ?, ?, ?)
+  ON CONFLICT(amiral_id) DO UPDATE SET
+    element_id = excluded.element_id,
+    action_id = excluded.action_id,
+    category = excluded.category,
+    started_at = excluded.started_at,
+    last_settled_at = excluded.last_settled_at
+`);
+const stmtDeleteAmiralActive = db.prepare('DELETE FROM amiral_active_actions WHERE amiral_id = ?');
+const stmtUpdateAmiralLastSettled = db.prepare('UPDATE amiral_active_actions SET last_settled_at = ? WHERE amiral_id = ?');
+const stmtAmiralActiveOnElement   = db.prepare('SELECT amiral_id, action_id, category FROM amiral_active_actions WHERE element_id = ? AND amiral_id = ?');
+
+// Amiral progression
+const stmtGetAmiralProgress  = db.prepare('SELECT puissance, defensif, utilitaire, total FROM amirals WHERE id = ?');
+const stmtIncAmiralPuissance = db.prepare('UPDATE amirals SET puissance = puissance + ?, total = total + ? WHERE id = ?');
+const stmtIncAmiralDefensif  = db.prepare('UPDATE amirals SET defensif  = defensif  + ?, total = total + ? WHERE id = ?');
+const stmtIncAmiralUtil      = db.prepare('UPDATE amirals SET utilitaire = utilitaire + ?, total = total + ? WHERE id = ?');
 
 const getResource = () => parseInt(stmtGetState.get('resource').value, 10);
 const setResource = (n) => stmtSetState.run(String(n), 'resource');
@@ -382,8 +430,18 @@ function publicElementState(rt, id) {
 function allElementStates(rt) {
   return rt.elements.map(e => publicElementState(rt, e.id));
 }
+// Union des actions actives sur les elements d'un Amiral : joueurs + l'Amiral lui-meme
+const stmtActiveElementsByAmiralUnion = db.prepare(`
+  SELECT a.element_id, a.action_id, a.category, u.username
+  FROM active_actions a JOIN users u ON u.id = a.user_id
+  WHERE u.amiral_id = ?
+  UNION ALL
+  SELECT a.element_id, a.action_id, a.category, am.username
+  FROM amiral_active_actions a JOIN amirals am ON am.id = a.amiral_id
+  WHERE am.id = ?
+`);
 function activeElementStatesForAmiral(amiralId) {
-  return stmtActiveElementsBy.all(amiralId);
+  return stmtActiveElementsByAmiralUnion.all(amiralId, amiralId);
 }
 function recentHistoryForAmiral(amiralId) {
   return stmtRecentActionLog.all(amiralId, HISTORY_LIMIT).map(r => ({
@@ -596,6 +654,8 @@ io.on('connection', (socket) => {
       rt.online = true;
       socket.join(amiralRoom(rt.id));
       amiralIdForRoom = rt.id;
+      if (!amiralSocketsById.has(socket.data.amiralId)) amiralSocketsById.set(socket.data.amiralId, new Set());
+      amiralSocketsById.get(socket.data.amiralId).add(socket);
       broadcastAmiraux();
     }
   } else if (socket.data.userId && socket.data.userAmiralId) {
@@ -605,8 +665,16 @@ io.on('connection', (socket) => {
     socketsByUser.get(socket.data.userId).add(socket);
   }
 
-  const userActiveAction = socket.data.userId ? stmtGetActiveAction.get(socket.data.userId) : null;
-  const userProgress = socket.data.userId ? getProgressFor(socket.data.userId) : null;
+  // Acteur = joueur OU Amiral (les deux peuvent avoir une action active)
+  let userActiveAction = null;
+  let userProgress = null;
+  if (socket.data.amiralId) {
+    userActiveAction = stmtGetAmiralActive.get(socket.data.amiralId) || null;
+    userProgress = stmtGetAmiralProgress.get(socket.data.amiralId) || { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
+  } else if (socket.data.userId) {
+    userActiveAction = stmtGetActiveAction.get(socket.data.userId) || null;
+    userProgress = getProgressFor(socket.data.userId);
+  }
 
   // 1) Amiral connecté -> son propre monde
   // 2) Joueur affilié -> monde de son Amiral
@@ -650,12 +718,12 @@ io.on('connection', (socket) => {
 
   socket.on('action:activate', (data, cb) => {
     const respond = (payload) => { if (typeof cb === 'function') cb(payload); };
-    const uid = socket.data.userId;
-    if (!uid) return respond({ ok: false, error: 'auth' });
-    const amiralId = socket.data.userAmiralId;
-    const rt = amiralsRuntime.get(amiralId);
+    const actor = getSocketActor(socket);
+    if (!actor) return respond({ ok: false, error: 'auth' });
+    const rt = amiralsRuntime.get(actor.amiralId);
     if (!rt) return respond({ ok: false, error: 'amiral inconnu' });
-    if (!rt.online) return respond({ ok: false, error: 'amiral hors-ligne' });
+    // Les joueurs ne peuvent pas agir si l'Amiral est hors-ligne. L'Amiral lui-meme oui.
+    if (actor.type === 'user' && !rt.online) return respond({ ok: false, error: 'amiral hors-ligne' });
     const elementId = String(data?.elementId || '');
     const actionId = String(data?.actionId || '');
     const el = rt.elementById[elementId];
@@ -671,38 +739,37 @@ io.on('connection', (socket) => {
     }
 
     const now = Date.now();
-    const prev = stmtGetActiveAction.get(uid);
+    const prev = getActiveActionForActor(actor);
     if (prev) {
-      settleAction(prev, now, rt);
-      stmtInsertActionLog.run(uid, socket.data.username, amiralId, prev.element_id, prev.action_id, prev.category, 'deactivate', now);
+      settleActionGeneric(actor, prev, now, rt);
+      insertActorActionLog(actor, rt.id, prev.element_id, prev.action_id, prev.category, 'deactivate', now);
     }
 
-    stmtUpsertActiveAction.run(uid, elementId, actionId, action.category, now, now);
-    stmtInsertActionLog.run(uid, socket.data.username, amiralId, elementId, actionId, action.category, 'activate', now);
+    upsertActiveActionForActor(actor, elementId, actionId, action.category, now);
+    insertActorActionLog(actor, rt.id, elementId, actionId, action.category, 'activate', now);
 
-    const newAction = stmtGetActiveAction.get(uid);
-    const progress = getProgressFor(uid);
+    const newAction = getActiveActionForActor(actor);
+    const progress = getProgressForActor(actor);
 
-    io.to(amiralRoom(amiralId)).emit('elements:update', { activeElements: activeElementStatesForAmiral(amiralId) });
-    io.to(amiralRoom(amiralId)).emit('history:new', { username: socket.data.username, element_id: elementId, action_id: actionId, category: action.category, at: now });
+    io.to(amiralRoom(rt.id)).emit('elements:update', { activeElements: activeElementStatesForAmiral(rt.id) });
+    io.to(amiralRoom(rt.id)).emit('history:new', { username: actor.displayName, element_id: elementId, action_id: actionId, category: action.category, at: now });
     socket.emit('action:state', { activeAction: newAction, progress });
     respond({ ok: true });
   });
 
   socket.on('action:deactivate', (_, cb) => {
     const respond = (payload) => { if (typeof cb === 'function') cb(payload); };
-    const uid = socket.data.userId;
-    if (!uid) return respond({ ok: false, error: 'auth' });
-    const amiralId = socket.data.userAmiralId;
-    const rt = amiralsRuntime.get(amiralId);
-    const prev = stmtGetActiveAction.get(uid);
+    const actor = getSocketActor(socket);
+    if (!actor) return respond({ ok: false, error: 'auth' });
+    const rt = amiralsRuntime.get(actor.amiralId);
+    const prev = getActiveActionForActor(actor);
     if (!prev) return respond({ ok: true });
     const now = Date.now();
-    if (rt) settleAction(prev, now, rt);
-    stmtDeleteActiveAction.run(uid);
-    stmtInsertActionLog.run(uid, socket.data.username, amiralId, prev.element_id, prev.action_id, prev.category, 'deactivate', now);
-    const progress = getProgressFor(uid);
-    if (amiralId) io.to(amiralRoom(amiralId)).emit('elements:update', { activeElements: activeElementStatesForAmiral(amiralId) });
+    if (rt) settleActionGeneric(actor, prev, now, rt);
+    deleteActiveActionForActor(actor);
+    insertActorActionLog(actor, actor.amiralId, prev.element_id, prev.action_id, prev.category, 'deactivate', now);
+    const progress = getProgressForActor(actor);
+    if (actor.amiralId) io.to(amiralRoom(actor.amiralId)).emit('elements:update', { activeElements: activeElementStatesForAmiral(actor.amiralId) });
     socket.emit('action:state', { activeAction: null, progress });
     respond({ ok: true });
   });
@@ -726,6 +793,11 @@ io.on('connection', (socket) => {
         rt.socketId = null;
         rt.online = false;
         broadcastAmiraux();
+      }
+      const set = amiralSocketsById.get(socket.data.amiralId);
+      if (set) {
+        set.delete(socket);
+        if (set.size === 0) amiralSocketsById.delete(socket.data.amiralId);
       }
     }
     if (socket.data.userId) {
@@ -796,6 +868,17 @@ function destroyAsteroidGroup(rt, subtype) {
         for (const s of sockets) s.emit('action:state', { activeAction: null, progress, expired: true });
       }
     }
+    // Egalement les actions de l'Amiral sur cet element
+    const amAffected = stmtAmiralActiveOnElement.all(id, rt.id);
+    for (const a of amAffected) {
+      stmtDeleteAmiralActive.run(a.amiral_id);
+      stmtInsertActionLog.run(0, rt.username, rt.id, id, a.action_id, a.category, 'expire', Date.now());
+      const sockets = amiralSocketsById.get(a.amiral_id);
+      if (sockets) {
+        const progress = stmtGetAmiralProgress.get(a.amiral_id) || { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
+        for (const s of sockets) s.emit('action:state', { activeAction: null, progress, expired: true });
+      }
+    }
   }
   setTimeout(() => respawnAsteroidGroup(rt, subtype), ASTEROID_RESPAWN_MS);
 }
@@ -832,7 +915,79 @@ function getProgressFor(uid) {
   return stmtGetProgress.get(uid);
 }
 
-function settleAction(action, now, rt) {
+// ============ Acteurs (user OU amiral) ============
+
+function getSocketActor(socket) {
+  if (socket.data.amiralId) {
+    return {
+      type: 'amiral',
+      id: socket.data.amiralId,
+      displayName: socket.data.amiralUsername || 'AMIRAL',
+      amiralId: socket.data.amiralId
+    };
+  }
+  if (socket.data.userId && socket.data.userAmiralId) {
+    return {
+      type: 'user',
+      id: socket.data.userId,
+      displayName: socket.data.username || 'joueur',
+      amiralId: socket.data.userAmiralId
+    };
+  }
+  return null;
+}
+
+function getActiveActionForActor(actor) {
+  if (actor.type === 'amiral') return stmtGetAmiralActive.get(actor.id);
+  return stmtGetActiveAction.get(actor.id);
+}
+function upsertActiveActionForActor(actor, elementId, actionId, category, now) {
+  if (actor.type === 'amiral') return stmtUpsertAmiralActive.run(actor.id, elementId, actionId, category, now, now);
+  return stmtUpsertActiveAction.run(actor.id, elementId, actionId, category, now, now);
+}
+function deleteActiveActionForActor(actor) {
+  if (actor.type === 'amiral') return stmtDeleteAmiralActive.run(actor.id);
+  return stmtDeleteActiveAction.run(actor.id);
+}
+function updateLastSettledForActor(actor, lastSettled) {
+  if (actor.type === 'amiral') return stmtUpdateAmiralLastSettled.run(lastSettled, actor.id);
+  return stmtUpdateLastSettled.run(lastSettled, actor.id);
+}
+function getProgressForActor(actor) {
+  if (actor.type === 'amiral') return stmtGetAmiralProgress.get(actor.id) || { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
+  return getProgressFor(actor.id);
+}
+function incrementCategoryForActor(actor, category, n) {
+  if (n <= 0) return;
+  if (actor.type === 'amiral') {
+    if (category === 'PUISSANCE')      stmtIncAmiralPuissance.run(n, n, actor.id);
+    else if (category === 'DEFENSIF')  stmtIncAmiralDefensif.run(n, n, actor.id);
+    else if (category === 'UTILITAIRE') stmtIncAmiralUtil.run(n, n, actor.id);
+  } else {
+    incrementCategory(actor.id, category, n);
+  }
+}
+// Pour action_log : on stocke user_id = 0 pour les Amiraux (le username reste informatif)
+function insertActorActionLog(actor, amiralId, elementId, actionId, category, eventType, at) {
+  const userIdField = actor.type === 'amiral' ? 0 : actor.id;
+  stmtInsertActionLog.run(userIdField, actor.displayName, amiralId, elementId, actionId, category, eventType, at);
+}
+
+// Notification action:state vers tous les sockets de l'acteur
+const amiralSocketsById = new Map();
+function notifyActorActionState(actor, payload) {
+  if (actor.type === 'amiral') {
+    const set = amiralSocketsById.get(actor.id);
+    if (!set) return;
+    for (const s of set) s.emit('action:state', payload);
+  } else {
+    const set = socketsByUser.get(actor.id);
+    if (!set) return;
+    for (const s of set) s.emit('action:state', payload);
+  }
+}
+
+function settleActionGeneric(actor, action, now, rt) {
   const cap = action.started_at + ACTION_MAX_DURATION_MS;
   const settledThrough = Math.min(now, cap);
   const elapsedSinceLast = settledThrough - action.last_settled_at;
@@ -840,8 +995,8 @@ function settleAction(action, now, rt) {
   const delta = Math.floor(elapsedSinceLast / ACTION_TICK_MS);
   if (delta <= 0) return 0;
   const newLastSettled = action.last_settled_at + delta * ACTION_TICK_MS;
-  stmtUpdateLastSettled.run(newLastSettled, action.user_id);
-  incrementCategory(action.user_id, action.category, delta);
+  updateLastSettledForActor(actor, newLastSettled);
+  incrementCategoryForActor(actor, action.category, delta);
   const newRes = getResource() + delta;
   setResource(newRes);
   const element = rt.elementById[action.element_id];
@@ -857,19 +1012,29 @@ function settleAction(action, now, rt) {
 let lastBroadcastResource = -1;
 function tickActions() {
   const now = Date.now();
-  const all = stmtAllActiveActions.all();
+  // Snapshots des actions actives : joueurs + Amiraux (chacun avec un acteur type)
+  const userRows = stmtAllActiveActions.all().map(r => ({
+    actor: { type: 'user', id: r.user_id, displayName: r.username, amiralId: r.amiral_id },
+    action: r
+  }));
+  const amiralRows = stmtAllAmiralActive.all().map(r => ({
+    actor: { type: 'amiral', id: r.amiral_id, displayName: r.username, amiralId: r.amiral_id },
+    action: r
+  }));
+  const all = [...userRows, ...amiralRows];
+
   const dirtyAmiraux = new Set();
-  const expiredUserIds = [];
-  for (const a of all) {
-    const rt = amiralsRuntime.get(a.amiral_id);
+  const expiredActors = [];
+  for (const { actor, action } of all) {
+    const rt = amiralsRuntime.get(actor.amiralId);
     if (!rt) continue;
-    const delta = settleAction(a, now, rt);
-    if (delta > 0) dirtyAmiraux.add(a.amiral_id);
-    if (now >= a.started_at + ACTION_MAX_DURATION_MS) {
-      stmtDeleteActiveAction.run(a.user_id);
-      stmtInsertActionLog.run(a.user_id, a.username, a.amiral_id, a.element_id, a.action_id, a.category, 'expire', now);
-      expiredUserIds.push(a.user_id);
-      dirtyAmiraux.add(a.amiral_id);
+    const delta = settleActionGeneric(actor, action, now, rt);
+    if (delta > 0) dirtyAmiraux.add(actor.amiralId);
+    if (now >= action.started_at + ACTION_MAX_DURATION_MS) {
+      deleteActiveActionForActor(actor);
+      insertActorActionLog(actor, actor.amiralId, action.element_id, action.action_id, action.category, 'expire', now);
+      expiredActors.push(actor);
+      dirtyAmiraux.add(actor.amiralId);
     }
   }
   if (dirtyAmiraux.size > 0) {
@@ -887,19 +1052,16 @@ function tickActions() {
         faction: { ...rt.factionResources }
       });
     }
-    const stillActive = stmtAllActiveActions.all();
-    for (const a of stillActive) {
-      const sockets = socketsByUser.get(a.user_id);
-      if (!sockets) continue;
-      const progress = getProgressFor(a.user_id);
-      const activeAction = stmtGetActiveAction.get(a.user_id);
-      for (const s of sockets) s.emit('action:state', { activeAction, progress });
+    // Notifier les acteurs encore actifs
+    for (const { actor } of all) {
+      if (expiredActors.find(e => e.type === actor.type && e.id === actor.id)) continue;
+      const activeAction = getActiveActionForActor(actor);
+      const progress = getProgressForActor(actor);
+      notifyActorActionState(actor, { activeAction, progress });
     }
-    for (const uid of expiredUserIds) {
-      const sockets = socketsByUser.get(uid);
-      if (!sockets) continue;
-      const progress = getProgressFor(uid);
-      for (const s of sockets) s.emit('action:state', { activeAction: null, progress, expired: true });
+    for (const actor of expiredActors) {
+      const progress = getProgressForActor(actor);
+      notifyActorActionState(actor, { activeAction: null, progress, expired: true });
     }
   }
 }
