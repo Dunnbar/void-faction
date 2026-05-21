@@ -299,10 +299,10 @@ class MainScene extends Phaser.Scene {
         this.load.image(`enemy${lvl}-ex-${n}`, `/assets/PNG/Ship_02/Explosion/Explosion_${lvl}_${n}.png`);
       }
     }
-    this.load.image('bg-01', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_01.png');
-    this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_02.png');
-    this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_03.png');
-    this.load.image('bg-04', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_04.png');
+    this.load.image('bg-01', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_01.png');
+    this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_02.png');
+    this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_03.png');
+    this.load.image('bg-04', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_04.png');
     for (let g = 1; g <= GUN_LEVELS; g++) {
       const k = String(g).padStart(2, '0');
       this.load.image(`gun-${k}-idle`, `/assets/PNG/Guns/Gun${k}/Idle/Gun${k}-Idle_0.png`);
@@ -321,7 +321,7 @@ class MainScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#04060a');
 
-    // Background parallax (background_02)
+    // Background parallax (background_03)
     this.setupParallaxBackground();
 
     // Animations vaisseaux

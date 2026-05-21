@@ -744,10 +744,10 @@ class MainScene extends Phaser.Scene {
         this.load.image(`enemy${lvl}-ex-${n}`, `/assets/PNG/Ship_02/Explosion/Explosion_${lvl}_${n}.png`);
       }
     }
-    this.load.image('bg-01', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_01.png');
-    this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_02.png');
-    this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_03.png');
-    this.load.image('bg-04', '/assets/Backgrounds/PNG_and_JPG/background_02_parallax_04.png');
+    this.load.image('bg-01', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_01.png');
+    this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_02.png');
+    this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_03.png');
+    this.load.image('bg-04', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_04.png');
     // Tourelles : 10 niveaux x (1 idle + 10 shoot frames)
     for (let g = 1; g <= GUN_LEVELS; g++) {
       const k = String(g).padStart(2, '0');
@@ -772,7 +772,7 @@ class MainScene extends Phaser.Scene {
     this.applyFitZoom();
     this.scale.on('resize', () => this.onResize());
 
-    // Background parallax (background_02 : fond fixe + planètes parallax)
+    // Background parallax (background_03 : fond fixe + planètes parallax)
     this.setupParallaxBackground();
 
     // Animations vaisseaux (Amiral + ennemis lvl 1 et 2)
