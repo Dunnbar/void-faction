@@ -423,7 +423,7 @@ class MainScene extends Phaser.Scene {
     this.shipHpBar.setDepth(11);
     this.ship.setDamping(true);
     this.ship.setDrag(0.92);
-    this.ship.setMaxVelocity(220);
+    this.ship.setMaxVelocity(140);
 
     // Label "AMIRAL" qui suit le vaisseau
     this.shipLabel = this.add.text(this.ship.x, this.ship.y - 56, 'AMIRAL', {
@@ -955,7 +955,7 @@ class MainScene extends Phaser.Scene {
     sprite._target = { x: tx, y: ty };
     sprite._orbitRadius = orbitRadius;
     sprite._orbitAngle = Math.atan2(sprite.y - ty, sprite.x - tx);
-    sprite._orbitSpeed = (0.35 + Math.random() * 0.35) * (Math.random() < 0.5 ? 1 : -1);
+    sprite._orbitSpeed = (0.20 + Math.random() * 0.20) * (Math.random() < 0.5 ? 1 : -1);
     sprite._isOrbiting = true;
     sprite._hp = sprite._hpMax = 30;
     sprite._hpBar = this.makeHpBar(sprite.x, sprite.y - 38, 40, 0xff3322);
@@ -1083,8 +1083,8 @@ class MainScene extends Phaser.Scene {
     // Déplacement vers la destination : contrôleur proportionnel.
     // Le vaisseau accélère pour rejoindre une "vitesse cible" qui décroît
     // en sqrt(2·a·d) à l'approche, ce qui le fait freiner avant d'arriver.
-    const MAX_SPEED = 200;           // px/s
-    const APPROACH_DECEL = 240;      // px/s² (force de freinage théorique)
+    const MAX_SPEED = 120;           // px/s
+    const APPROACH_DECEL = 150;      // px/s² (force de freinage théorique)
     const STIFFNESS = 6;             // raideur du correcteur vitesse
     const STOP_DIST = 4;             // px : on s'arrête net si proche ET lent
     const STOP_SPEED = 20;           // px/s

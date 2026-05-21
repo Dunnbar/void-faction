@@ -1380,7 +1380,7 @@ class MainScene extends Phaser.Scene {
     sprite._target = { x: tx, y: ty };
     sprite._orbitRadius = orbitRadius;
     sprite._orbitAngle = Math.atan2(sprite.y - ty, sprite.x - tx);
-    sprite._orbitSpeed = (0.35 + Math.random() * 0.35) * (Math.random() < 0.5 ? 1 : -1);
+    sprite._orbitSpeed = (0.20 + Math.random() * 0.20) * (Math.random() < 0.5 ? 1 : -1);
     sprite._isOrbiting = true;
     // HP de l'ennemi + barre rouge
     sprite._hp = sprite._hpMax = 30;
