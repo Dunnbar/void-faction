@@ -423,7 +423,7 @@ class MainScene extends Phaser.Scene {
     this.shipHpBar.setDepth(11);
     this.ship.setDamping(true);
     this.ship.setDrag(0.92);
-    this.ship.setMaxVelocity(320);
+    this.ship.setMaxVelocity(220);
 
     // Label "AMIRAL" qui suit le vaisseau
     this.shipLabel = this.add.text(this.ship.x, this.ship.y - 56, 'AMIRAL', {
@@ -1083,8 +1083,8 @@ class MainScene extends Phaser.Scene {
     // Déplacement vers la destination : contrôleur proportionnel.
     // Le vaisseau accélère pour rejoindre une "vitesse cible" qui décroît
     // en sqrt(2·a·d) à l'approche, ce qui le fait freiner avant d'arriver.
-    const MAX_SPEED = 280;           // px/s
-    const APPROACH_DECEL = 300;      // px/s² (force de freinage théorique)
+    const MAX_SPEED = 200;           // px/s
+    const APPROACH_DECEL = 240;      // px/s² (force de freinage théorique)
     const STIFFNESS = 6;             // raideur du correcteur vitesse
     const STOP_DIST = 4;             // px : on s'arrête net si proche ET lent
     const STOP_SPEED = 20;           // px/s
