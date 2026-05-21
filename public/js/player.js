@@ -727,7 +727,7 @@ class MainScene extends Phaser.Scene {
 
   preload() {
     this.load.image('ship', SHIP_ASSET);
-    this.load.image('base', '/assets/Spaceships/PNG/enemy_mothership.png');
+    this.load.image('mothership-base', '/assets/Spaceships/PNG/enemy_mothership.png');
     // Frames d'exhaust pour le vaisseau Amiral (Ship_01, variant 2 = grosse flamme)
     for (let i = 0; i < 10; i++) {
       const n = String(i).padStart(3, '0');
@@ -1115,7 +1115,7 @@ class MainScene extends Phaser.Scene {
       } else if (el.type === 'base') {
         const highlight = this.add.circle(el.x, el.y, 120, 0x4af, 0)
           .setStrokeStyle(2, 0x4af, 0);
-        const sprite = this.add.image(el.x, el.y, 'base').setScale(0.9)
+        const sprite = this.add.image(el.x, el.y, 'mothership-base').setScale(0.9)
           .setInteractive({ useHandCursor: true });
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;

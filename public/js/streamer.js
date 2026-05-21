@@ -353,7 +353,7 @@ class MainScene extends Phaser.Scene {
 
   preload() {
     this.load.image('ship', SHIP_ASSET);
-    this.load.image('base', '/assets/Spaceships/PNG/enemy_mothership.png');
+    this.load.image('mothership-base', '/assets/Spaceships/PNG/enemy_mothership.png');
     for (let i = 0; i < 10; i++) {
       const n = String(i).padStart(3, '0');
       this.load.image(`ship-fr-${n}`, `/assets/PNG/Ship_01/Exhaust/Exhaust_1_2_${n}.png`);
@@ -668,7 +668,7 @@ class MainScene extends Phaser.Scene {
       } else if (el.type === 'base') {
         const highlight = this.add.circle(el.x, el.y, 120, 0x4af, 0)
           .setStrokeStyle(2, 0x4af, 0);
-        const sprite = this.add.image(el.x, el.y, 'base').setScale(0.9);
+        const sprite = this.add.image(el.x, el.y, 'mothership-base').setScale(0.9);
         this.add.text(el.x, el.y + 120, el.label, {
           fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af'
         }).setOrigin(0.5);
