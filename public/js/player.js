@@ -861,21 +861,17 @@ class MainScene extends Phaser.Scene {
       const sprite = this.elementSprites.get(el.id);
       const state = elementStates.get(el.id);
       if (!sprite || !state) continue;
-      const active = activeElementsByElement.get(el.id);
-      const isShooting = active && active.action_id === 'tir';
-      if (!isShooting) {
-        if (sprite._patrolTween && sprite._patrolTween.paused) sprite._patrolTween.resume();
-        continue;
-      }
+      // Tourelle autonome : tire en permanence sur l'ennemi le plus proche.
+      // L'action 'tir' boost les degats via state.puissance.
       const range = turretRangePx(state);
       const target = this.findNearestEnemyInRange(sprite.x, sprite.y, range);
       if (target) {
         if (sprite._patrolTween && !sprite._patrolTween.paused) sprite._patrolTween.pause();
         const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, target.x, target.y);
         sprite.rotation = a + Math.PI / 2;
-        // Tir 1 fois toutes les 2s, dégâts modulés par la puissance
         if (!sprite._lastShotAt) sprite._lastShotAt = 0;
-        if (now - sprite._lastShotAt >= 2000) {
+        const fireDelay = Math.max(1000, 2000 - (state.puissance || 0) * 30);
+        if (now - sprite._lastShotAt >= fireDelay) {
           const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
           this.fireTurretLaser(sprite, target);
           this.damageEnemy(target, dmg);
