@@ -318,6 +318,31 @@ function getOrCreateAmiralRuntime(amiral) {
 // Précharge tous les amiraux (élements en mémoire dès le boot)
 for (const a of stmtAllAmirals.all()) getOrCreateAmiralRuntime(a);
 
+// Runtime de démo (uniquement en mémoire, pas en DB) : sert de fallback pour les
+// visiteurs anonymes quand aucun Amiral n'est inscrit. Permet d'avoir une vue
+// non-vide même au démarrage.
+let demoRuntime = null;
+function getDemoRuntime() {
+  if (demoRuntime) return demoRuntime;
+  const elements = buildElementsForAmiral();
+  const elementStates = new Map();
+  for (const el of elements) elementStates.set(el.id, initStateFor(el));
+  demoRuntime = {
+    id: 0,
+    username: 'DEMO',
+    gridX: 0, gridY: 0,
+    socketId: null,
+    online: false,
+    ship: { x: WORLD_W / 2, y: WORLD_H / 2 + 230, rotation: 0 },
+    elements,
+    elementById: Object.fromEntries(elements.map(e => [e.id, e])),
+    elementStates,
+    factionResources: { materiaux: 0, radius: 0 },
+    currentWave: null
+  };
+  return demoRuntime;
+}
+
 function publicElementState(rt, id) {
   const s = rt.elementStates.get(id);
   if (!s) return null;
@@ -564,8 +589,12 @@ io.on('connection', (socket) => {
   if (!rtForInit) {
     rtForInit = amiralsRuntime.values().next().value || null;
   }
+  if (!rtForInit) {
+    rtForInit = getDemoRuntime();
+  }
   // Le visiteur anonyme rejoint la room de l'Amiral observé pour voir les events en live
-  if (rtForInit && !socket.data.amiralId && !socket.data.userAmiralId) {
+  // (sauf demo runtime qui n'a pas de room dédiée)
+  if (rtForInit && rtForInit.id !== 0 && !socket.data.amiralId && !socket.data.userAmiralId) {
     socket.join(amiralRoom(rtForInit.id));
   }
 

@@ -949,7 +949,6 @@ class MainScene extends Phaser.Scene {
     this.cameras.main.setSize(w, h);
     this.applyFitZoom();
     if (this.bgLayer01) this.bgLayer01.setPosition(w / 2, h / 2);
-    if (this.bgLayer02) this.bgLayer02.setPosition(w / 2, h / 2);
     this.updateParallaxBackground();
   }
 
@@ -982,22 +981,14 @@ class MainScene extends Phaser.Scene {
   setupParallaxBackground() {
     const w = this.scale.gameSize.width;
     const h = this.scale.gameSize.height;
-    // Calque 01 : champ d'étoiles profond, fixé à la caméra (scrollFactor 0)
+    // Calque 01 : fond principal, fixé à la caméra
     const bg01 = this.add.image(w / 2, h / 2, 'bg-01')
       .setOrigin(0.5).setScrollFactor(0).setDepth(-100);
     this.bgLayer01 = bg01;
-    // Calque 02 : extras, scrollFactor minimal pour quasi-immobile
-    const bg02 = this.add.image(w / 2, h / 2, 'bg-02')
-      .setOrigin(0.5).setScrollFactor(0.05).setDepth(-90).setAlpha(0.6);
-    this.bgLayer02 = bg02;
-    // Calque 03 : Terre, placée loin de la base + plus petite pour rester décorative
+    // Calque 03 : petite planète parallax dans le monde
     const bg03 = this.add.image(2200, 1200, 'bg-03')
-      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.28);
+      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.4);
     this.bgLayer03 = bg03;
-    // Calque 04 : Lune, encore plus petite
-    const bg04 = this.add.image(200, 1180, 'bg-04')
-      .setOrigin(0.5).setScrollFactor(0.65).setDepth(-70).setScale(0.45);
-    this.bgLayer04 = bg04;
     this.updateParallaxBackground();
   }
 
@@ -1005,13 +996,9 @@ class MainScene extends Phaser.Scene {
     if (!this.bgLayer01) return;
     const cam = this.cameras.main;
     const z = cam.zoom;
-    // Calcule la "cover scale" de manière dynamique (canvas peut être redimensionné)
     const src01 = this.textures.get('bg-01').getSourceImage();
-    const src02 = this.textures.get('bg-02').getSourceImage();
     const cover01 = Math.max(cam.width / src01.width, cam.height / src01.height) * 1.05;
-    const cover02 = Math.max(cam.width / src02.width, cam.height / src02.height);
     this.bgLayer01.setScale(cover01 / z);
-    this.bgLayer02.setScale(cover02 / z);
   }
 
   drawBasePerimeter() {

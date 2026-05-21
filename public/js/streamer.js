@@ -542,14 +542,12 @@ class MainScene extends Phaser.Scene {
   setupParallaxBackground() {
     const w = this.scale.gameSize.width;
     const h = this.scale.gameSize.height;
+    // Fond principal qui couvre le viewport (suit la camera)
     this.bgLayer01 = this.add.image(w / 2, h / 2, 'bg-01')
       .setOrigin(0.5).setScrollFactor(0).setDepth(-100);
-    this.bgLayer02 = this.add.image(w / 2, h / 2, 'bg-02')
-      .setOrigin(0.5).setScrollFactor(0.05).setDepth(-90).setAlpha(0.6);
+    // Petite planete parallax dans le monde
     this.bgLayer03 = this.add.image(2200, 1200, 'bg-03')
-      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.28);
-    this.bgLayer04 = this.add.image(200, 1180, 'bg-04')
-      .setOrigin(0.5).setScrollFactor(0.65).setDepth(-70).setScale(0.45);
+      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.4);
     this.updateParallaxBackground();
   }
 
@@ -558,11 +556,8 @@ class MainScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const z = cam.zoom;
     const src01 = this.textures.get('bg-01').getSourceImage();
-    const src02 = this.textures.get('bg-02').getSourceImage();
     const cover01 = Math.max(cam.width / src01.width, cam.height / src01.height) * 1.05;
-    const cover02 = Math.max(cam.width / src02.width, cam.height / src02.height);
     this.bgLayer01.setScale(cover01 / z);
-    this.bgLayer02.setScale(cover02 / z);
   }
 
   applyFitZoom() {
@@ -577,7 +572,6 @@ class MainScene extends Phaser.Scene {
     this.cameras.main.setSize(w, h);
     this.applyFitZoom();
     if (this.bgLayer01) this.bgLayer01.setPosition(w / 2, h / 2);
-    if (this.bgLayer02) this.bgLayer02.setPosition(w / 2, h / 2);
     this.updateParallaxBackground();
   }
 
