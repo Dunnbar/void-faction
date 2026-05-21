@@ -46,8 +46,13 @@ const BASE_ACTIONS = [
 ];
 const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }];
 
-const ASTEROID_HP_MAX     = 240;
+// Astéroïdes : groupés par subtype, partagent une durée d'utilisation de 40 min.
+// La durée descend naturellement (1s par seconde), accélérée par les tirs ennemis.
+// Le minage ne consomme PAS la durée (produit seulement des ressources).
+const ASTEROID_GROUP_DURATION_MS = 40 * 60 * 1000;  // 40 min
+const ASTEROID_ENEMY_DAMAGE_MS = 30 * 1000;         // 30s retires par tir ennemi
 const ASTEROID_RESPAWN_MS = 20 * 60 * 1000;
+const ASTEROID_HP_MAX     = 240;  // legacy, gardé pour eventuel fallback
 const TURRET_HP_MAX       = 200;
 const BASE_HP_MAX         = 400;
 const BASE_ESSENCE_MAX    = 400;
@@ -105,7 +110,8 @@ function initStateFor(el) {
     return { hp: TURRET_HP_MAX, hpMax: TURRET_HP_MAX, puissance: 0, range: 0 };
   }
   if (el.type === 'asteroid') {
-    return { hp: ASTEROID_HP_MAX, hpMax: ASTEROID_HP_MAX, subtype: el.subtype, destroyedAt: null, respawnsAt: null };
+    // L'etat per-asteroide ne contient que le subtype ; la duree partagee est dans rt.asteroidGroups
+    return { subtype: el.subtype };
   }
   return {};
 }
@@ -309,10 +315,18 @@ function getOrCreateAmiralRuntime(amiral) {
     elementById: Object.fromEntries(elements.map(e => [e.id, e])),
     elementStates,
     factionResources: { materiaux: 0, radius: 0 },
-    currentWave: null
+    currentWave: null,
+    asteroidGroups: makeFreshAsteroidGroups()
   };
   amiralsRuntime.set(amiral.id, rt);
   return rt;
+}
+
+function makeFreshAsteroidGroups() {
+  return {
+    materiaux: { durationMs: ASTEROID_GROUP_DURATION_MS, durationMaxMs: ASTEROID_GROUP_DURATION_MS, destroyedAt: null, respawnsAt: null },
+    radius:    { durationMs: ASTEROID_GROUP_DURATION_MS, durationMaxMs: ASTEROID_GROUP_DURATION_MS, destroyedAt: null, respawnsAt: null }
+  };
 }
 
 // Précharge tous les amiraux (élements en mémoire dès le boot)
@@ -338,7 +352,8 @@ function getDemoRuntime() {
     elementById: Object.fromEntries(elements.map(e => [e.id, e])),
     elementStates,
     factionResources: { materiaux: 0, radius: 0 },
-    currentWave: null
+    currentWave: null,
+    asteroidGroups: makeFreshAsteroidGroups()
   };
   return demoRuntime;
 }
@@ -346,6 +361,22 @@ function getDemoRuntime() {
 function publicElementState(rt, id) {
   const s = rt.elementStates.get(id);
   if (!s) return null;
+  const el = rt.elementById[id];
+  // Pour les astéroïdes, on renvoie la durée du groupe en tant que hp/hpMax
+  // pour que le rendu HP bar reste compatible cote client.
+  if (el && el.type === 'asteroid') {
+    const group = rt.asteroidGroups[s.subtype];
+    if (group) {
+      return {
+        id,
+        subtype: s.subtype,
+        hp: group.durationMs,
+        hpMax: group.durationMaxMs,
+        destroyedAt: group.destroyedAt,
+        respawnsAt: group.respawnsAt
+      };
+    }
+  }
   return { id, ...s };
 }
 function allElementStates(rt) {
@@ -631,9 +662,12 @@ io.on('connection', (socket) => {
     if (!el) return respond({ ok: false, error: 'element inconnu' });
     const action = el.actions.find(a => a.id === actionId);
     if (!action) return respond({ ok: false, error: 'action inconnue' });
-    const st = rt.elementStates.get(elementId);
-    if (st && el.type === 'asteroid' && st.hp <= 0) {
-      return respond({ ok: false, error: 'asteroïde détruit (respawn en cours)' });
+    if (el.type === 'asteroid') {
+      const st = rt.elementStates.get(elementId);
+      const group = st && rt.asteroidGroups[st.subtype];
+      if (group && group.destroyedAt) {
+        return respond({ ok: false, error: 'astéroïdes détruits (respawn en cours)' });
+      }
     }
 
     const now = Date.now();
@@ -709,7 +743,11 @@ io.on('connection', (socket) => {
 function applyActionEffect(rt, actionId, element) {
   const state = rt.elementStates.get(element.id);
   if (!state) return false;
-  if (element.type === 'asteroid' && state.hp <= 0) return false;
+  // Astéroïde : verifier que le groupe n'est pas detruit
+  if (element.type === 'asteroid') {
+    const group = rt.asteroidGroups[state.subtype];
+    if (!group || group.destroyedAt) return false;
+  }
 
   switch (actionId) {
     case 'tir':
@@ -727,44 +765,60 @@ function applyActionEffect(rt, actionId, element) {
       state.essence = Math.min(state.essence + 1, state.essenceMax);
       return true;
     case 'minage':
-      state.hp = Math.max(0, state.hp - 1);
+      // Le minage ne diminue PAS la duree (countdown naturel + tirs ennemis).
+      // Il ne produit que des ressources.
       if (state.subtype === 'materiaux') rt.factionResources.materiaux += 1;
       else if (state.subtype === 'radius') rt.factionResources.radius += 1;
-      if (state.hp <= 0) destroyAsteroid(rt, element.id);
       return true;
     default:
       return false;
   }
 }
 
-function destroyAsteroid(rt, id) {
-  const state = rt.elementStates.get(id);
-  if (!state) return;
-  state.destroyedAt = Date.now();
-  state.respawnsAt = state.destroyedAt + ASTEROID_RESPAWN_MS;
-  io.to(amiralRoom(rt.id)).emit('asteroid:destroyed', { id, respawnsAt: state.respawnsAt });
-  console.log(`[amiral ${rt.username}] asteroïde ${id} détruit, respawn à ${new Date(state.respawnsAt).toISOString()}`);
-  const affected = stmtActiveOnElement.all(id, rt.id);
-  for (const a of affected) {
-    stmtDeleteActiveAction.run(a.user_id);
-    stmtInsertActionLog.run(a.user_id, '', rt.id, id, a.action_id, a.category, 'expire', Date.now());
-    const sockets = socketsByUser.get(a.user_id);
-    if (sockets) {
-      const progress = getProgressFor(a.user_id);
-      for (const s of sockets) s.emit('action:state', { activeAction: null, progress, expired: true });
+function destroyAsteroidGroup(rt, subtype) {
+  const group = rt.asteroidGroups[subtype];
+  if (!group || group.destroyedAt) return;
+  group.durationMs = 0;
+  group.destroyedAt = Date.now();
+  group.respawnsAt = group.destroyedAt + ASTEROID_RESPAWN_MS;
+  const affectedIds = rt.elements.filter(e => e.type === 'asteroid' && e.subtype === subtype).map(e => e.id);
+  io.to(amiralRoom(rt.id)).emit('asteroid:group_destroyed', { subtype, ids: affectedIds, respawnsAt: group.respawnsAt });
+  console.log(`[amiral ${rt.username}] groupe ${subtype} detruit, respawn a ${new Date(group.respawnsAt).toISOString()}`);
+  // Couper les actions en cours sur n'importe quel astéroïde de ce subtype
+  for (const id of affectedIds) {
+    const affected = stmtActiveOnElement.all(id, rt.id);
+    for (const a of affected) {
+      stmtDeleteActiveAction.run(a.user_id);
+      stmtInsertActionLog.run(a.user_id, '', rt.id, id, a.action_id, a.category, 'expire', Date.now());
+      const sockets = socketsByUser.get(a.user_id);
+      if (sockets) {
+        const progress = getProgressFor(a.user_id);
+        for (const s of sockets) s.emit('action:state', { activeAction: null, progress, expired: true });
+      }
     }
   }
-  setTimeout(() => respawnAsteroid(rt, id), ASTEROID_RESPAWN_MS);
+  setTimeout(() => respawnAsteroidGroup(rt, subtype), ASTEROID_RESPAWN_MS);
 }
 
-function respawnAsteroid(rt, id) {
-  const state = rt.elementStates.get(id);
-  if (!state) return;
-  state.hp = state.hpMax;
-  state.destroyedAt = null;
-  state.respawnsAt = null;
-  io.to(amiralRoom(rt.id)).emit('asteroid:respawned', { id, state: publicElementState(rt, id) });
-  console.log(`[amiral ${rt.username}] asteroïde ${id} respawn`);
+function respawnAsteroidGroup(rt, subtype) {
+  const group = rt.asteroidGroups[subtype];
+  if (!group) return;
+  group.durationMs = group.durationMaxMs;
+  group.destroyedAt = null;
+  group.respawnsAt = null;
+  const ids = rt.elements.filter(e => e.type === 'asteroid' && e.subtype === subtype).map(e => e.id);
+  const states = ids.map(id => publicElementState(rt, id));
+  io.to(amiralRoom(rt.id)).emit('asteroid:group_respawned', { subtype, ids, states });
+  console.log(`[amiral ${rt.username}] groupe ${subtype} respawn`);
+}
+
+// Retire `damageMs` de la duree du groupe ; declenche destruction si <= 0.
+// Utilise par le countdown naturel et par les tirs ennemis.
+function applyAsteroidGroupDamage(rt, subtype, damageMs) {
+  const group = rt.asteroidGroups[subtype];
+  if (!group || group.destroyedAt) return;
+  group.durationMs = Math.max(0, group.durationMs - damageMs);
+  if (group.durationMs <= 0) destroyAsteroidGroup(rt, subtype);
 }
 
 function incrementCategory(uid, category, n) {
@@ -902,6 +956,26 @@ function rollWaveFor(rt) {
   };
   io.to(amiralRoom(rt.id)).emit('wave:incoming', rt.currentWave);
   console.log(`[amiral ${rt.username}] wave ${rt.currentWave.id} — ${count} ennemis vers ${target.id}`);
+
+  // Si la cible est un astéroïde, on planifie les tirs ennemis qui vont rogner
+  // la durée du groupe (simulation server-side, indépendamment du combat client).
+  if (target.type === 'asteroid' && target.subtype) {
+    const subtype = target.subtype;
+    const ENEMY_FIRE_INTERVAL_MS = 5000;
+    const ENEMY_BURST_DURATION_MS = 30000; // ~6 tirs par ennemi avant qu'on suppose qu'il soit gere
+    for (const enemy of enemies) {
+      const enemyArrivesAt = spawnAt + enemy.spawnOffsetMs + enemy.travelMs;
+      const ticksToFire = Math.ceil(ENEMY_BURST_DURATION_MS / ENEMY_FIRE_INTERVAL_MS);
+      for (let t = 0; t < ticksToFire; t++) {
+        const fireAt = enemyArrivesAt + t * ENEMY_FIRE_INTERVAL_MS;
+        const delay = Math.max(0, fireAt - Date.now());
+        setTimeout(() => {
+          if (!rt.online) return;
+          applyAsteroidGroupDamage(rt, subtype, ASTEROID_ENEMY_DAMAGE_MS);
+        }, delay);
+      }
+    }
+  }
 }
 
 function rollWaves() {
@@ -910,6 +984,28 @@ function rollWaves() {
   }
 }
 setInterval(rollWaves, WAVE_CHECK_INTERVAL_MS);
+
+// ============ Countdown naturel des groupes d'asteroides ============
+// Toutes les secondes : decrement chaque groupe non detruit de 1000 ms.
+// Broadcast d'un snapshot des etats toutes les 5s pour rafraichir la barre cote client.
+let lastAsteroidBroadcast = 0;
+setInterval(() => {
+  const now = Date.now();
+  const shouldBroadcast = (now - lastAsteroidBroadcast) >= 5000;
+  if (shouldBroadcast) lastAsteroidBroadcast = now;
+  for (const rt of amiralsRuntime.values()) {
+    for (const subtype of ['materiaux', 'radius']) {
+      const group = rt.asteroidGroups[subtype];
+      if (!group || group.destroyedAt) continue;
+      applyAsteroidGroupDamage(rt, subtype, 1000);
+    }
+    if (shouldBroadcast && rt.online) {
+      const ids = rt.elements.filter(e => e.type === 'asteroid').map(e => e.id);
+      const states = ids.map(id => publicElementState(rt, id));
+      io.to(amiralRoom(rt.id)).emit('elements:update', { states });
+    }
+  }
+}, 1000);
 
 server.listen(PORT, () => {
   console.log(`VoidFaction écoute sur le port ${PORT}`);

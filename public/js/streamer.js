@@ -279,6 +279,25 @@ function wireSocketEvents() {
     if (scene && scene.scene.isActive()) scene.onAsteroidRespawned(data.id);
     if (data.state) elementStates.set(data.id, data.state);
   });
+  // Groupes : destruction/respawn de tous les asteroides d'un subtype
+  socket.on('asteroid:group_destroyed', (data) => {
+    const scene = game?.scene.getScene('main');
+    for (const id of (data.ids || [])) {
+      if (scene && scene.scene.isActive()) scene.onAsteroidDestroyed(id, data.respawnsAt);
+      const st = elementStates.get(id);
+      if (st) { st.hp = 0; st.respawnsAt = data.respawnsAt; }
+    }
+  });
+  socket.on('asteroid:group_respawned', (data) => {
+    const scene = game?.scene.getScene('main');
+    const ids = data.ids || [];
+    const states = data.states || [];
+    for (let i = 0; i < ids.length; i++) {
+      const id = ids[i];
+      if (scene && scene.scene.isActive()) scene.onAsteroidRespawned(id);
+      if (states[i]) elementStates.set(id, states[i]);
+    }
+  });
   socket.on('wave:incoming', (wave) => {
     const scene = game?.scene.getScene('main');
     if (scene && scene.scene.isActive()) scene.handleWaveIncoming(wave);
@@ -617,6 +636,11 @@ class MainScene extends Phaser.Scene {
 
     this.createBaseTexture();
 
+    // Pour les asteroides, on partage UNE seule barre par subtype (materiaux / radius).
+    // La barre est attachee au premier asteroide rencontre de chaque type ; les autres
+    // n'ont pas de barre individuelle.
+    const groupBarSubtypes = new Set();
+
     elements.forEach((el, i) => {
       if (el.type === 'asteroid') {
         const variant = el.variant || '01';
@@ -642,8 +666,20 @@ class MainScene extends Phaser.Scene {
         sprite._asteroidVariant = variant;
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
-        const barW = Math.max(60, Math.min(140, visibleSize * 0.9));
-        this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - visibleSize * 0.5 - 14, barW, 0xffd24f));
+        // Barre commune : seul le premier asteroide de chaque subtype en a une
+        if (!groupBarSubtypes.has(el.subtype)) {
+          groupBarSubtypes.add(el.subtype);
+          const barColor = el.subtype === 'radius' ? 0x88e0c8 : 0xffd24f;
+          const barW = 140;
+          const bar = this.makeHpBar(el.x, el.y - visibleSize * 0.5 - 28, barW, barColor);
+          const labelTxt = el.subtype === 'radius' ? 'ASTÉROÏDES RADIUS' : 'ASTÉROÏDES MATÉRIAUX';
+          this.add.text(el.x, el.y - visibleSize * 0.5 - 44, labelTxt, {
+            fontFamily: 'Consolas, monospace', fontSize: '10px',
+            color: el.subtype === 'radius' ? '#88e0c8' : '#ffd24f',
+            stroke: '#000', strokeThickness: 2
+          }).setOrigin(0.5);
+          this.elementHpBars.set(el.id, bar);
+        }
       } else if (el.type === 'turret') {
         const highlight = this.add.circle(el.x, el.y, 60, 0xff4f6d, 0)
           .setStrokeStyle(2, 0xff4f6d, 0);
