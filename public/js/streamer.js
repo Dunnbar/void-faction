@@ -301,8 +301,8 @@ if (amiralToken) {
   setActiveTab('login');
 }
 
-const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
-const SHIP_SCALE = 0.035; // vaisseau Amiral discret, ne masque pas la base
+const SHIP_ASSET = '/assets/Spaceships/PNG/enemy_mothership.png';
+const SHIP_SCALE = 0.30; // vaisseau mère Amiral
 const ENEMY_LEVELS = [1];
 const ENEMY_ASSETS = {
   1: '/assets/PNG/Ship_02/Ship_LVL_1.png'
@@ -368,10 +368,10 @@ class MainScene extends Phaser.Scene {
         this.load.image(`enemy${lvl}-ex-${n}`, `/assets/PNG/Ship_02/Explosion/Explosion_${lvl}_${n}.png`);
       }
     }
-    this.load.image('bg-01', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_01.png');
-    this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_02.png');
-    this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_03.png');
-    this.load.image('bg-04', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_04.png');
+    this.load.image('bg-01', '/assets/Backgrounds/PNG_and_JPG/background_04_parallax_01.png');
+    this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_04_parallax_02.png');
+    this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_04_parallax_03.png');
+    this.load.image('bg-04', '/assets/Backgrounds/PNG_and_JPG/background_04_parallax_04.png');
     for (let g = 1; g <= GUN_LEVELS; g++) {
       const k = String(g).padStart(2, '0');
       this.load.image(`gun-${k}-idle`, `/assets/PNG/Guns/Gun${k}/Idle/Gun${k}-Idle_0.png`);
@@ -390,7 +390,7 @@ class MainScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#04060a');
 
-    // Background parallax (background_03)
+    // Background parallax (background_04)
     this.setupParallaxBackground();
 
     // Animations vaisseaux
@@ -413,9 +413,8 @@ class MainScene extends Phaser.Scene {
     tg.generateTexture('thrust', 8, 8);
     tg.destroy();
 
-    this.ship = this.physics.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship-fr-000');
-    this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.36);
-    this.ship.play('ship-thrust');
+    this.ship = this.physics.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship');
+    this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.5);
     this.ship._hp = 100;
     this.ship._hpMax = 100;
     this.shipHpBar = this.makeHpBar(this.ship.x, this.ship.y - 40, 60, 0x4fdb73);

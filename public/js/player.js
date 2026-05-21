@@ -9,8 +9,8 @@ const ZOOM_FACTOR_MIN = 0.85;
 const ZOOM_FACTOR_MAX = 2.5;
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
-const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
-const SHIP_SCALE = 0.035; // vaisseau Amiral discret
+const SHIP_ASSET = '/assets/Spaceships/PNG/enemy_mothership.png';
+const SHIP_SCALE = 0.30; // vaisseau mère Amiral
 const ENEMY_LEVELS = [1];
 const ENEMY_ASSETS = {
   1: '/assets/PNG/Ship_02/Ship_LVL_1.png'
@@ -744,10 +744,10 @@ class MainScene extends Phaser.Scene {
         this.load.image(`enemy${lvl}-ex-${n}`, `/assets/PNG/Ship_02/Explosion/Explosion_${lvl}_${n}.png`);
       }
     }
-    this.load.image('bg-01', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_01.png');
-    this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_02.png');
-    this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_03.png');
-    this.load.image('bg-04', '/assets/Backgrounds/PNG_and_JPG/background_03_parallax_04.png');
+    this.load.image('bg-01', '/assets/Backgrounds/PNG_and_JPG/background_04_parallax_01.png');
+    this.load.image('bg-02', '/assets/Backgrounds/PNG_and_JPG/background_04_parallax_02.png');
+    this.load.image('bg-03', '/assets/Backgrounds/PNG_and_JPG/background_04_parallax_03.png');
+    this.load.image('bg-04', '/assets/Backgrounds/PNG_and_JPG/background_04_parallax_04.png');
     // Tourelles : 10 niveaux x (1 idle + 10 shoot frames)
     for (let g = 1; g <= GUN_LEVELS; g++) {
       const k = String(g).padStart(2, '0');
@@ -772,7 +772,7 @@ class MainScene extends Phaser.Scene {
     this.applyFitZoom();
     this.scale.on('resize', () => this.onResize());
 
-    // Background parallax (background_03 : fond fixe + planètes parallax)
+    // Background parallax (background_04 : fond fixe + planètes parallax)
     this.setupParallaxBackground();
 
     // Animations vaisseaux (Amiral + ennemis lvl 1 et 2)
@@ -784,11 +784,10 @@ class MainScene extends Phaser.Scene {
     this.createTurretTexture();
     this.createExplosionTexture();
 
-    // Vaisseau (positionné via socket)
-    this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship-fr-000')
+    // Vaisseau mère (positionné via socket)
+    this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship')
       .setScale(SHIP_SCALE)
-      .setOrigin(0.5, 0.36);
-    this.ship.play('ship-thrust');
+      .setOrigin(0.5, 0.5);
     this.ship._hp = 100;
     this.ship._hpMax = 100;
     this.shipHpBar = this.makeHpBar(this.ship.x, this.ship.y - 40, 60, 0x4fdb73);
