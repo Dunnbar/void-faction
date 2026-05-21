@@ -301,8 +301,8 @@ if (amiralToken) {
   setActiveTab('login');
 }
 
-const SHIP_ASSET = '/assets/Spaceships/PNG/enemy_mothership.png';
-const SHIP_SCALE = 0.30; // vaisseau mère Amiral
+const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
+const SHIP_SCALE = 0.035; // vaisseau Amiral discret, ne masque pas la base
 const ENEMY_LEVELS = [1];
 const ENEMY_ASSETS = {
   1: '/assets/PNG/Ship_02/Ship_LVL_1.png'
@@ -353,6 +353,7 @@ class MainScene extends Phaser.Scene {
 
   preload() {
     this.load.image('ship', SHIP_ASSET);
+    this.load.image('base', '/assets/Spaceships/PNG/enemy_mothership.png');
     for (let i = 0; i < 10; i++) {
       const n = String(i).padStart(3, '0');
       this.load.image(`ship-fr-${n}`, `/assets/PNG/Ship_01/Exhaust/Exhaust_1_2_${n}.png`);
@@ -413,8 +414,9 @@ class MainScene extends Phaser.Scene {
     tg.generateTexture('thrust', 8, 8);
     tg.destroy();
 
-    this.ship = this.physics.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship');
-    this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.5);
+    this.ship = this.physics.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship-fr-000');
+    this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.36);
+    this.ship.play('ship-thrust');
     this.ship._hp = 100;
     this.ship._hpMax = 100;
     this.shipHpBar = this.makeHpBar(this.ship.x, this.ship.y - 40, 60, 0x4fdb73);
@@ -664,10 +666,10 @@ class MainScene extends Phaser.Scene {
         this.elementHighlights.set(el.id, highlight);
         this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 70, 90, 0xff4f6d));
       } else if (el.type === 'base') {
-        const highlight = this.add.circle(el.x, el.y, 90, 0x4af, 0)
+        const highlight = this.add.circle(el.x, el.y, 120, 0x4af, 0)
           .setStrokeStyle(2, 0x4af, 0);
-        const sprite = this.add.image(el.x, el.y, 'base');
-        this.add.text(el.x, el.y + 90, el.label, {
+        const sprite = this.add.image(el.x, el.y, 'base').setScale(0.9);
+        this.add.text(el.x, el.y + 120, el.label, {
           fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af'
         }).setOrigin(0.5);
         this.elementSprites.set(el.id, sprite);
