@@ -125,30 +125,56 @@
 </head>
 <body>
   <div id="login">
-    <form id="loginForm">
-      <h2>&gt; ACCÈS AMIRAL</h2>
-      <p>Nom Amiral :</p>
-      <input type="text" id="amiralName" autocomplete="off" maxlength="24" placeholder="ex: Dunnbar" autofocus
-        style="background:#000;color:#fff;border:1px solid #4af;padding:8px;font-family:monospace;width:100%;box-sizing:border-box;margin-bottom:10px;" />
-      <p>Mot de passe Amiral :</p>
-      <div class="pwd-wrap">
-        <input type="password" id="password" autocomplete="off" />
-        <button type="button" class="pwd-toggle" id="pwdToggle" aria-label="Afficher le mot de passe" title="Afficher / masquer">
-          <svg id="pwdEye" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <g class="eye-open">
-              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>
-              <circle cx="12" cy="12" r="3"/>
-            </g>
-            <g class="eye-closed" style="display:none">
-              <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/>
-              <line x1="1" y1="1" x2="23" y2="23"/>
-            </g>
-          </svg>
-        </button>
+    <div id="loginBox" style="background:#0a1424;border:1px solid #4af;padding:24px 28px;border-radius:6px;box-shadow:0 0 32px rgba(74,175,255,0.4);min-width:300px;">
+      <h2 style="margin:0 0 12px 0;color:#4af;font-size:16px;">&gt; ACCÈS AMIRAL</h2>
+      <div style="display:flex;gap:0;margin-bottom:14px;border-bottom:1px solid #234;">
+        <button type="button" id="tabLogin" class="tab-active" style="flex:1;padding:8px;background:transparent;border:0;border-bottom:2px solid #4af;color:#4af;font-family:monospace;cursor:pointer;font-weight:bold;">Connexion</button>
+        <button type="button" id="tabSignup" style="flex:1;padding:8px;background:transparent;border:0;border-bottom:2px solid transparent;color:#789;font-family:monospace;cursor:pointer;">Inscription</button>
       </div>
-      <button type="submit">Connexion</button>
+
+      <form id="loginForm">
+        <p style="margin:4px 0;font-size:13px;">Pseudo :</p>
+        <input type="text" id="loginUsername" autocomplete="off" maxlength="20" placeholder="ex: Dunnbar"
+          style="background:#000;color:#fff;border:1px solid #4af;padding:8px;font-family:monospace;width:100%;box-sizing:border-box;margin-bottom:10px;" />
+        <p style="margin:4px 0;font-size:13px;">Mot de passe :</p>
+        <div class="pwd-wrap">
+          <input type="password" id="loginPassword" autocomplete="current-password" />
+          <button type="button" class="pwd-toggle" data-target="loginPassword" aria-label="Afficher" title="Afficher / masquer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+        <button type="submit">Connexion</button>
+      </form>
+
+      <form id="signupForm" class="hidden">
+        <p style="margin:4px 0;font-size:13px;">Pseudo (3-20 caractères alphanumériques) :</p>
+        <input type="text" id="signupUsername" autocomplete="off" maxlength="20"
+          style="background:#000;color:#fff;border:1px solid #4af;padding:8px;font-family:monospace;width:100%;box-sizing:border-box;margin-bottom:10px;" />
+        <p style="margin:4px 0;font-size:13px;">Mot de passe (6 min) :</p>
+        <div class="pwd-wrap">
+          <input type="password" id="signupPassword" autocomplete="new-password" />
+          <button type="button" class="pwd-toggle" data-target="signupPassword" aria-label="Afficher" title="Afficher / masquer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+        <p style="margin:4px 0;font-size:13px;">Code maître :</p>
+        <div class="pwd-wrap">
+          <input type="password" id="signupMaster" autocomplete="off" />
+          <button type="button" class="pwd-toggle" data-target="signupMaster" aria-label="Afficher" title="Afficher / masquer">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/>
+            </svg>
+          </button>
+        </div>
+        <button type="submit">Créer le compte</button>
+      </form>
+
       <p id="loginError"></p>
-    </form>
+    </div>
   </div>
   <div id="hud" class="hidden">
     <div class="line">Ressource de faction : <strong id="resource">0</strong></div>

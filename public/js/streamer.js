@@ -8,59 +8,100 @@ let TURRET_Y = BASE_Y;
 const ZOOM_FACTOR_MIN = 0.85;
 const ZOOM_FACTOR_MAX = 2.5;
 
-const socket = io({ autoConnect: false });
+let amiralToken = localStorage.getItem('voidfaction:amiralToken') || null;
+let socket = null;
 const loginEl = document.getElementById('login');
 const loginForm = document.getElementById('loginForm');
+const signupForm = document.getElementById('signupForm');
 const loginError = document.getElementById('loginError');
-const passwordInput = document.getElementById('password');
+const tabLogin = document.getElementById('tabLogin');
+const tabSignup = document.getElementById('tabSignup');
 const hudEl = document.getElementById('hud');
 const resourceEl = document.getElementById('resource');
 
 let authenticated = false;
+let gameStarted = false;
 
-const pwdToggle = document.getElementById('pwdToggle');
-const pwdEye = document.getElementById('pwdEye');
-if (pwdToggle && pwdEye) {
-  const eyeOpen = pwdEye.querySelector('.eye-open');
-  const eyeClosed = pwdEye.querySelector('.eye-closed');
-  pwdToggle.addEventListener('click', (e) => {
+document.querySelectorAll('.pwd-toggle').forEach((btn) => {
+  btn.addEventListener('click', (e) => {
     e.preventDefault();
     e.stopPropagation();
-    const isHidden = passwordInput.type === 'password';
-    passwordInput.type = isHidden ? 'text' : 'password';
-    if (eyeOpen) eyeOpen.style.display = isHidden ? 'none' : '';
-    if (eyeClosed) eyeClosed.style.display = isHidden ? '' : 'none';
-    pwdToggle.setAttribute('aria-label', isHidden ? 'Masquer le mot de passe' : 'Afficher le mot de passe');
-    passwordInput.focus();
+    const id = btn.getAttribute('data-target');
+    const input = document.getElementById(id);
+    if (!input) return;
+    input.type = input.type === 'password' ? 'text' : 'password';
+    input.focus();
   });
+});
+
+function setActiveTab(which) {
+  loginError.textContent = '';
+  const isLogin = which === 'login';
+  loginForm.classList.toggle('hidden', !isLogin);
+  signupForm.classList.toggle('hidden', isLogin);
+  tabLogin.style.borderBottomColor = isLogin ? '#4af' : 'transparent';
+  tabLogin.style.color = isLogin ? '#4af' : '#789';
+  tabLogin.style.fontWeight = isLogin ? 'bold' : 'normal';
+  tabSignup.style.borderBottomColor = !isLogin ? '#4af' : 'transparent';
+  tabSignup.style.color = !isLogin ? '#4af' : '#789';
+  tabSignup.style.fontWeight = !isLogin ? 'bold' : 'normal';
+  setTimeout(() => (isLogin ? loginForm : signupForm).querySelector('input')?.focus(), 30);
+}
+tabLogin.addEventListener('click', () => setActiveTab('login'));
+tabSignup.addEventListener('click', () => setActiveTab('signup'));
+
+function showLoginUI() {
+  loginEl.classList.remove('hidden');
+  hudEl.classList.add('hidden');
+}
+function hideLoginUI() {
+  loginEl.classList.add('hidden');
+  hudEl.classList.remove('hidden');
+}
+
+function connectAmiralSocket() {
+  if (socket) try { socket.disconnect(); } catch {}
+  socket = io({ auth: amiralToken ? { amiralToken } : {} });
+  wireSocketEvents();
+}
+
+async function submitAmiralAuth(endpoint, body) {
+  loginError.textContent = '';
+  let res;
+  try {
+    res = await fetch(endpoint, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body)
+    });
+  } catch (e) {
+    loginError.textContent = 'Erreur réseau: ' + (e?.message || 'inconnue');
+    return;
+  }
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok || !data.ok) {
+    loginError.textContent = data.error || `Erreur ${res.status}`;
+    return;
+  }
+  amiralToken = data.token;
+  localStorage.setItem('voidfaction:amiralToken', amiralToken);
+  localStorage.setItem('voidfaction:amiralUsername', data.username);
+  connectAmiralSocket();
 }
 
 loginForm.addEventListener('submit', (e) => {
   e.preventDefault();
-  loginError.textContent = '';
-  const password = passwordInput.value;
-  const nameInput = document.getElementById('amiralName');
-  const name = (nameInput?.value || '').trim();
-  if (!name) {
-    loginError.textContent = 'Saisis un nom d\'Amiral';
-    return;
-  }
-  if (!socket.connected) socket.connect();
-  const tryAuth = () => {
-    socket.emit('streamer:auth', { password, name }, (resp) => {
-      if (resp?.ok) {
-        authenticated = true;
-        loginEl.classList.add('hidden');
-        hudEl.classList.remove('hidden');
-        startGame();
-      } else {
-        loginError.textContent = resp?.error || 'Authentification refusée';
-        socket.disconnect();
-      }
-    });
-  };
-  if (socket.connected) tryAuth();
-  else socket.once('connect', tryAuth);
+  submitAmiralAuth('/api/amiral/login', {
+    username: document.getElementById('loginUsername').value.trim(),
+    password: document.getElementById('loginPassword').value
+  });
+});
+signupForm.addEventListener('submit', (e) => {
+  e.preventDefault();
+  submitAmiralAuth('/api/amiral/signup', {
+    username: document.getElementById('signupUsername').value.trim(),
+    password: document.getElementById('signupPassword').value,
+    masterCode: document.getElementById('signupMaster').value
+  });
 });
 
 let lastActiveElements = [];
@@ -156,81 +197,109 @@ function showWaveBanner(wave) {
   waveBannerInterval = setInterval(update, 250);
 }
 
-socket.on('init', (data) => {
-  if (data.buildTime) {
-    if (knownBuildTime && knownBuildTime !== data.buildTime) {
-      triggerVersionReload();
+function wireSocketEvents() {
+  socket.on('init', (data) => {
+    if (data.buildTime) {
+      if (knownBuildTime && knownBuildTime !== data.buildTime) {
+        triggerVersionReload();
+        return;
+      }
+      knownBuildTime = data.buildTime;
+      const d = new Date(data.buildTime);
+      console.log(`%c[VoidFaction Amiral] dernière MAJ : ${d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })}`,
+        'color:#ff8044; font-weight:bold');
+    }
+    // Authentification : si data.amiral est absent, le token est invalide
+    if (!data.amiral) {
+      amiralToken = null;
+      localStorage.removeItem('voidfaction:amiralToken');
+      authenticated = false;
+      showLoginUI();
+      try { socket.disconnect(); } catch {}
       return;
     }
-    knownBuildTime = data.buildTime;
-    const d = new Date(data.buildTime);
-    console.log(`%c[VoidFaction Amiral] dernière MAJ : ${d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })}`,
-      'color:#ff8044; font-weight:bold');
-  }
-  resourceEl.textContent = data.resource;
-  lastActiveElements = data.activeElements || [];
-  serverElements = data.elements || [];
-  elementStates = new Map((data.elementStates || []).map(s => [s.id, s]));
-  factionResources = data.factionResources || factionResources;
-  if (data.world) {
-    WORLD_W = data.world.width;
-    WORLD_H = data.world.height;
-    BASE_X = data.world.baseX ?? WORLD_W / 2;
-    BASE_Y = data.world.baseY ?? WORLD_H / 2;
-    BASE_PERIMETER = data.world.basePerimeter ?? 560;
-    TURRET_X = data.world.turretX;
-    TURRET_Y = data.world.turretY;
-  }
-  pendingWave = data.currentWave && data.currentWave.endsAt > Date.now() ? data.currentWave : null;
-  if (pendingWave) triggerCaptainForWave(pendingWave);
-  const scene = game?.scene.getScene('main');
-  if (scene && scene.scene.isActive()) {
-    scene.setupElements(serverElements);
-    scene.applyAllElementStates();
-    scene.refreshElementHighlights(lastActiveElements);
-    scene.drawBasePerimeter();
-    if (pendingWave) {
-      scene.handleWaveIncoming(pendingWave);
-      pendingWave = null;
+    authenticated = true;
+    hideLoginUI();
+    resourceEl.textContent = data.resource;
+    lastActiveElements = data.activeElements || [];
+    serverElements = data.elements || [];
+    elementStates = new Map((data.elementStates || []).map(s => [s.id, s]));
+    factionResources = data.factionResources || factionResources;
+    if (data.world) {
+      WORLD_W = data.world.width;
+      WORLD_H = data.world.height;
+      BASE_X = data.world.baseX ?? WORLD_W / 2;
+      BASE_Y = data.world.baseY ?? WORLD_H / 2;
+      BASE_PERIMETER = data.world.basePerimeter ?? 560;
+      TURRET_X = data.world.turretX;
+      TURRET_Y = data.world.turretY;
     }
-  }
-});
-socket.on('resource', (data) => {
-  resourceEl.textContent = data.resource;
-});
-socket.on('elements:update', (data) => {
-  lastActiveElements = data.activeElements || [];
-  if (Array.isArray(data.states)) {
-    elementStates = new Map(data.states.map(s => [s.id, s]));
-  }
-  if (data.faction) factionResources = data.faction;
-  const scene = game?.scene.getScene('main');
-  if (scene && scene.scene.isActive()) {
-    scene.refreshElementHighlights(lastActiveElements);
-    scene.applyAllElementStates();
-  }
-});
-socket.on('asteroid:destroyed', (data) => {
-  const scene = game?.scene.getScene('main');
-  if (scene && scene.scene.isActive()) scene.onAsteroidDestroyed(data.id, data.respawnsAt);
-  const st = elementStates.get(data.id);
-  if (st) { st.hp = 0; st.respawnsAt = data.respawnsAt; }
-});
-socket.on('asteroid:respawned', (data) => {
-  const scene = game?.scene.getScene('main');
-  if (scene && scene.scene.isActive()) scene.onAsteroidRespawned(data.id);
-  if (data.state) elementStates.set(data.id, data.state);
-});
-socket.on('wave:incoming', (wave) => {
-  const scene = game?.scene.getScene('main');
-  if (scene && scene.scene.isActive()) scene.handleWaveIncoming(wave);
-  else pendingWave = wave;
-  triggerCaptainForWave(wave);
-});
-socket.on('streamer:kicked', () => {
-  alert('Un autre Amiral s\'est connecté. Tu as perdu le contrôle.');
-  location.reload();
-});
+    pendingWave = data.currentWave && data.currentWave.endsAt > Date.now() ? data.currentWave : null;
+    if (pendingWave) triggerCaptainForWave(pendingWave);
+    if (!gameStarted) {
+      gameStarted = true;
+      startGame();
+    } else {
+      const scene = game?.scene.getScene('main');
+      if (scene && scene.scene.isActive()) {
+        scene.setupElements(serverElements);
+        scene.applyAllElementStates();
+        scene.refreshElementHighlights(lastActiveElements);
+        scene.drawBasePerimeter();
+        if (pendingWave) {
+          scene.handleWaveIncoming(pendingWave);
+          pendingWave = null;
+        }
+      }
+    }
+  });
+  socket.on('resource', (data) => {
+    resourceEl.textContent = data.resource;
+  });
+  socket.on('elements:update', (data) => {
+    lastActiveElements = data.activeElements || [];
+    if (Array.isArray(data.states)) {
+      elementStates = new Map(data.states.map(s => [s.id, s]));
+    }
+    if (data.faction) factionResources = data.faction;
+    const scene = game?.scene.getScene('main');
+    if (scene && scene.scene.isActive()) {
+      scene.refreshElementHighlights(lastActiveElements);
+      scene.applyAllElementStates();
+    }
+  });
+  socket.on('asteroid:destroyed', (data) => {
+    const scene = game?.scene.getScene('main');
+    if (scene && scene.scene.isActive()) scene.onAsteroidDestroyed(data.id, data.respawnsAt);
+    const st = elementStates.get(data.id);
+    if (st) { st.hp = 0; st.respawnsAt = data.respawnsAt; }
+  });
+  socket.on('asteroid:respawned', (data) => {
+    const scene = game?.scene.getScene('main');
+    if (scene && scene.scene.isActive()) scene.onAsteroidRespawned(data.id);
+    if (data.state) elementStates.set(data.id, data.state);
+  });
+  socket.on('wave:incoming', (wave) => {
+    const scene = game?.scene.getScene('main');
+    if (scene && scene.scene.isActive()) scene.handleWaveIncoming(wave);
+    else pendingWave = wave;
+    triggerCaptainForWave(wave);
+  });
+  socket.on('streamer:kicked', () => {
+    alert('Un autre Amiral s\'est connecté avec ton compte. Tu as perdu le contrôle.');
+    amiralToken = null;
+    localStorage.removeItem('voidfaction:amiralToken');
+    location.reload();
+  });
+}
+
+// Connexion initiale : si un token Amiral est en localStorage, on tente de réutiliser ;
+// sinon le formulaire de login/signup reste affiché.
+if (amiralToken) {
+  connectAmiralSocket();
+} else {
+  setActiveTab('login');
+}
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
 const SHIP_SCALE = 0.035; // vaisseau Amiral discret, ne masque pas la base

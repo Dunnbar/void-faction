@@ -13,28 +13,27 @@ const WORLD_W = 2400;
 const WORLD_H = 1350;
 const BASE_X = WORLD_W / 2;
 const BASE_Y = WORLD_H / 2;
-const BASE_PERIMETER = 560; // rayon visuel de la "grande base" autour du centre
-const TURRET_X = BASE_X;     // legacy, gardé pour compat
+const BASE_PERIMETER = 560;
+const TURRET_X = BASE_X;
 const TURRET_Y = BASE_Y;
 const USERNAME_RE = /^[a-zA-Z0-9_-]{3,20}$/;
 
-const ACTION_TICK_MS = 10 * 1000;          // +1 toutes les 10 secondes
-const ACTION_MAX_DURATION_MS = 60 * 60 * 1000; // 1 heure max par activation
+const ACTION_TICK_MS = 10 * 1000;
+const ACTION_MAX_DURATION_MS = 60 * 60 * 1000;
 const HISTORY_LIMIT = 10;
 
-// Système de vagues d'ennemis
-const WAVE_CHECK_INTERVAL_MS = 60 * 1000;  // check toutes les minutes
-const WAVE_PROBABILITY = 0.35;             // 35% de chance par check
-const WAVE_WARNING_MS = 10 * 1000;         // 10s d'alerte avant le spawn
-const ENEMY_SPEED = 70;                    // px/s
+const WAVE_CHECK_INTERVAL_MS = 60 * 1000;
+const WAVE_PROBABILITY = 0.35;
+const WAVE_WARNING_MS = 10 * 1000;
+const ENEMY_SPEED = 70;
 const ENEMY_MIN = 3;
 const ENEMY_MAX = 6;
-const ENEMY_LEVELS_AVAILABLE = [1]; // pour l'instant uniquement Ship_LVL_1
+const ENEMY_LEVELS_AVAILABLE = [1];
 
 const CATEGORIES = ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE'];
 const CATEGORY_TO_COLUMN = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILITAIRE: 'utilitaire' };
 
-// ============ Configuration des éléments interactifs ============
+// ============ Templates d'éléments (instanciés par Amiral) ============
 
 const TURRET_ACTIONS = [
   { id: 'tir',        label: 'Améliorer Tir',   category: 'PUISSANCE' },
@@ -48,29 +47,28 @@ const BASE_ACTIONS = [
 const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }];
 
 const ASTEROID_HP_MAX     = 240;
-const ASTEROID_RESPAWN_MS = 20 * 60 * 1000;  // 20 minutes
+const ASTEROID_RESPAWN_MS = 20 * 60 * 1000;
 const TURRET_HP_MAX       = 200;
 const BASE_HP_MAX         = 400;
 const BASE_ESSENCE_MAX    = 400;
 
-// Hélper polaire : place un élément à (angle radians, distance px) du centre.
 function poly(angleRad, dist) {
   return { x: Math.round(BASE_X + Math.cos(angleRad) * dist), y: Math.round(BASE_Y + Math.sin(angleRad) * dist) };
 }
-const TURRET_D = 260;     // rayon des tourelles
-const ASTEROID_D = 470;   // rayon des astéroïdes
-const ELEMENTS = (() => {
+const TURRET_D = 260;
+const ASTEROID_D = 470;
+const ASTEROID_VARIANT_COUNT = 15;
+
+const ELEMENT_TEMPLATES = (() => {
   const list = [
     { id: 'base-1', type: 'base', x: BASE_X, y: BASE_Y, label: 'BASE', actions: BASE_ACTIONS },
   ];
-  // 3 tourelles en triangle équilatéral (haut, bas-gauche, bas-droit)
   const turretAngles = [-Math.PI/2, Math.PI*5/6, Math.PI/6];
   const turretLabels = ['TOURELLE NORD', 'TOURELLE SO', 'TOURELLE SE'];
   turretAngles.forEach((a, i) => {
     const p = poly(a, TURRET_D);
     list.push({ id: `turret-${i + 1}`, type: 'turret', x: p.x, y: p.y, label: turretLabels[i], actions: TURRET_ACTIONS });
   });
-  // 8 astéroïdes répartis tous les 45° (alternance matériaux/radius)
   const subtypes = ['materiaux', 'radius'];
   const scales = [1.0, 1.1, 1.2, 0.9, 1.0, 0.95, 1.0, 1.05];
   for (let i = 0; i < 8; i++) {
@@ -89,51 +87,80 @@ const ELEMENTS = (() => {
   return list;
 })();
 
-// Attribution d'un variant graphique aléatoire (1..15) à chaque astéroïde au démarrage
-const ASTEROID_VARIANT_COUNT = 15;
-for (const el of ELEMENTS) {
-  if (el.type === 'asteroid') {
-    el.variant = String(1 + Math.floor(Math.random() * ASTEROID_VARIANT_COUNT)).padStart(2, '0');
-  }
+function buildElementsForAmiral() {
+  return ELEMENT_TEMPLATES.map(t => {
+    const el = { ...t };
+    if (el.type === 'asteroid') {
+      el.variant = String(1 + Math.floor(Math.random() * ASTEROID_VARIANT_COUNT)).padStart(2, '0');
+    }
+    return el;
+  });
 }
-const ELEMENT_BY_ID = Object.fromEntries(ELEMENTS.map(e => [e.id, e]));
 
-// État runtime par élément (en mémoire — repop au boot via initElementState)
-const elementStates = new Map();
-function initElementState(el) {
+function initStateFor(el) {
   if (el.type === 'base') {
-    elementStates.set(el.id, { hp: BASE_HP_MAX, hpMax: BASE_HP_MAX, essence: BASE_ESSENCE_MAX, essenceMax: BASE_ESSENCE_MAX });
-  } else if (el.type === 'turret') {
-    elementStates.set(el.id, { hp: TURRET_HP_MAX, hpMax: TURRET_HP_MAX, puissance: 0, range: 0 });
-  } else if (el.type === 'asteroid') {
-    elementStates.set(el.id, { hp: ASTEROID_HP_MAX, hpMax: ASTEROID_HP_MAX, subtype: el.subtype, destroyedAt: null, respawnsAt: null });
+    return { hp: BASE_HP_MAX, hpMax: BASE_HP_MAX, essence: BASE_ESSENCE_MAX, essenceMax: BASE_ESSENCE_MAX };
   }
+  if (el.type === 'turret') {
+    return { hp: TURRET_HP_MAX, hpMax: TURRET_HP_MAX, puissance: 0, range: 0 };
+  }
+  if (el.type === 'asteroid') {
+    return { hp: ASTEROID_HP_MAX, hpMax: ASTEROID_HP_MAX, subtype: el.subtype, destroyedAt: null, respawnsAt: null };
+  }
+  return {};
 }
-for (const el of ELEMENTS) initElementState(el);
 
-// Ressources globales (faction)
-const factionResources = { materiaux: 0, radius: 0 };
-
-function getPublicElementState(id) {
-  const s = elementStates.get(id);
-  if (!s) return null;
-  return { id, ...s };
-}
-function getAllElementStates() {
-  return ELEMENTS.map(e => getPublicElementState(e.id));
-}
+// ============ DB schema ============
 
 const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 const db = new Database(path.join(dataDir, 'voidfaction.db'));
 db.pragma('journal_mode = WAL');
+
+// Détection migration : si la table users existe SANS amiral_id, on reset (changement de contrat).
+function needsReset() {
+  const usersExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
+  if (!usersExists) return false;
+  const cols = db.prepare("PRAGMA table_info(users)").all();
+  return !cols.find(c => c.name === 'amiral_id');
+}
+
+if (needsReset()) {
+  console.log('[migration] Refonte Amiraux : reset des utilisateurs et tables liées.');
+  db.exec(`
+    DROP TABLE IF EXISTS active_actions;
+    DROP TABLE IF EXISTS user_progress;
+    DROP TABLE IF EXISTS action_log;
+    DROP TABLE IF EXISTS sessions;
+    DROP TABLE IF EXISTS users;
+  `);
+}
+
 db.exec(`
   CREATE TABLE IF NOT EXISTS state (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+
+  CREATE TABLE IF NOT EXISTS amirals (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    username TEXT UNIQUE NOT NULL,
+    password_hash TEXT NOT NULL,
+    created_at INTEGER NOT NULL,
+    grid_x INTEGER NOT NULL,
+    grid_y INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS amiral_sessions (
+    token TEXT PRIMARY KEY,
+    amiral_id INTEGER NOT NULL,
+    created_at INTEGER NOT NULL,
+    FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
+  );
+
   CREATE TABLE IF NOT EXISTS users (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     username TEXT UNIQUE NOT NULL,
     password_hash TEXT NOT NULL,
-    created_at INTEGER NOT NULL
+    created_at INTEGER NOT NULL,
+    amiral_id INTEGER NOT NULL,
+    FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
   );
   CREATE TABLE IF NOT EXISTS sessions (
     token TEXT PRIMARY KEY,
@@ -162,6 +189,7 @@ db.exec(`
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     user_id INTEGER NOT NULL,
     username TEXT NOT NULL,
+    amiral_id INTEGER NOT NULL,
     element_id TEXT NOT NULL,
     action_id TEXT NOT NULL,
     category TEXT NOT NULL,
@@ -169,25 +197,29 @@ db.exec(`
     at INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS idx_action_log_time ON action_log (at DESC);
+  CREATE INDEX IF NOT EXISTS idx_action_log_amiral ON action_log (amiral_id, at DESC);
 `);
 db.prepare("INSERT OR IGNORE INTO state (key, value) VALUES ('resource', '0')").run();
 
-// Migration : ajoute amiral_name si pas encore present (signups choisissent un Amiral)
-{
-  const cols = db.prepare("PRAGMA table_info(users)").all();
-  if (!cols.find(c => c.name === 'amiral_name')) {
-    db.exec("ALTER TABLE users ADD COLUMN amiral_name TEXT");
-  }
-}
+// Prepared statements
+const stmtGetState           = db.prepare('SELECT value FROM state WHERE key = ?');
+const stmtSetState           = db.prepare('UPDATE state SET value = ? WHERE key = ?');
 
-const stmtGetState         = db.prepare('SELECT value FROM state WHERE key = ?');
-const stmtSetState         = db.prepare('UPDATE state SET value = ? WHERE key = ?');
-const stmtInsertUser       = db.prepare('INSERT INTO users (username, password_hash, created_at, amiral_name) VALUES (?, ?, ?, ?)');
-const stmtGetUserByName    = db.prepare('SELECT id, username, password_hash FROM users WHERE username = ?');
-const stmtGetUserById      = db.prepare('SELECT id, username FROM users WHERE id = ?');
-const stmtInsertSession    = db.prepare('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)');
-const stmtGetSession       = db.prepare('SELECT user_id FROM sessions WHERE token = ?');
-const stmtDeleteSession    = db.prepare('DELETE FROM sessions WHERE token = ?');
+const stmtInsertAmiral       = db.prepare('INSERT INTO amirals (username, password_hash, created_at, grid_x, grid_y) VALUES (?, ?, ?, ?, ?)');
+const stmtGetAmiralByName    = db.prepare('SELECT id, username, password_hash, grid_x, grid_y FROM amirals WHERE username = ?');
+const stmtGetAmiralById      = db.prepare('SELECT id, username, grid_x, grid_y FROM amirals WHERE id = ?');
+const stmtAllAmirals         = db.prepare('SELECT id, username, grid_x, grid_y FROM amirals');
+const stmtAmiralGridUsed     = db.prepare('SELECT 1 AS x FROM amirals WHERE grid_x = ? AND grid_y = ?');
+const stmtInsertAmiralSess   = db.prepare('INSERT INTO amiral_sessions (token, amiral_id, created_at) VALUES (?, ?, ?)');
+const stmtGetAmiralSess      = db.prepare('SELECT amiral_id FROM amiral_sessions WHERE token = ?');
+const stmtDeleteAmiralSess   = db.prepare('DELETE FROM amiral_sessions WHERE token = ?');
+
+const stmtInsertUser         = db.prepare('INSERT INTO users (username, password_hash, created_at, amiral_id) VALUES (?, ?, ?, ?)');
+const stmtGetUserByName      = db.prepare('SELECT id, username, password_hash, amiral_id FROM users WHERE username = ?');
+const stmtGetUserById        = db.prepare('SELECT id, username, amiral_id FROM users WHERE id = ?');
+const stmtInsertSession      = db.prepare('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)');
+const stmtGetSession         = db.prepare('SELECT user_id FROM sessions WHERE token = ?');
+const stmtDeleteSession      = db.prepare('DELETE FROM sessions WHERE token = ?');
 
 const stmtEnsureProgress = db.prepare('INSERT OR IGNORE INTO user_progress (user_id) VALUES (?)');
 const stmtGetProgress    = db.prepare('SELECT puissance, defensif, utilitaire, total FROM user_progress WHERE user_id = ?');
@@ -195,8 +227,11 @@ const stmtIncPuissance   = db.prepare('UPDATE user_progress SET puissance = puis
 const stmtIncDefensif    = db.prepare('UPDATE user_progress SET defensif  = defensif  + ?, total = total + ? WHERE user_id = ?');
 const stmtIncUtilitaire  = db.prepare('UPDATE user_progress SET utilitaire = utilitaire + ?, total = total + ? WHERE user_id = ?');
 
-const stmtGetActiveAction = db.prepare('SELECT user_id, element_id, action_id, category, started_at, last_settled_at FROM active_actions WHERE user_id = ?');
-const stmtAllActiveActions = db.prepare('SELECT user_id, element_id, action_id, category, started_at, last_settled_at FROM active_actions');
+const stmtGetActiveAction  = db.prepare('SELECT user_id, element_id, action_id, category, started_at, last_settled_at FROM active_actions WHERE user_id = ?');
+const stmtAllActiveActions = db.prepare(`
+  SELECT a.user_id, a.element_id, a.action_id, a.category, a.started_at, a.last_settled_at, u.amiral_id, u.username
+  FROM active_actions a JOIN users u ON u.id = a.user_id
+`);
 const stmtUpsertActiveAction = db.prepare(`
   INSERT INTO active_actions (user_id, element_id, action_id, category, started_at, last_settled_at)
   VALUES (?, ?, ?, ?, ?, ?)
@@ -208,42 +243,19 @@ const stmtUpsertActiveAction = db.prepare(`
     last_settled_at = excluded.last_settled_at
 `);
 const stmtDeleteActiveAction = db.prepare('DELETE FROM active_actions WHERE user_id = ?');
-const stmtUpdateLastSettled = db.prepare('UPDATE active_actions SET last_settled_at = ? WHERE user_id = ?');
+const stmtUpdateLastSettled  = db.prepare('UPDATE active_actions SET last_settled_at = ? WHERE user_id = ?');
+const stmtActiveOnElement    = db.prepare('SELECT a.user_id, a.action_id, a.category FROM active_actions a JOIN users u ON u.id = a.user_id WHERE a.element_id = ? AND u.amiral_id = ?');
 
-const stmtInsertActionLog = db.prepare('INSERT INTO action_log (user_id, username, element_id, action_id, category, event_type, at) VALUES (?, ?, ?, ?, ?, ?, ?)');
-const stmtRecentActionLog = db.prepare("SELECT username, element_id, action_id, category, event_type, at FROM action_log WHERE event_type = 'activate' ORDER BY at DESC LIMIT ?");
-
-const stmtAllActiveElements = db.prepare(`SELECT a.element_id, a.action_id, a.category, u.username FROM active_actions a JOIN users u ON u.id = a.user_id`);
+const stmtInsertActionLog   = db.prepare('INSERT INTO action_log (user_id, username, amiral_id, element_id, action_id, category, event_type, at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)');
+const stmtRecentActionLog   = db.prepare("SELECT username, element_id, action_id, category, event_type, at FROM action_log WHERE event_type = 'activate' AND amiral_id = ? ORDER BY at DESC LIMIT ?");
+const stmtActiveElementsBy  = db.prepare(`
+  SELECT a.element_id, a.action_id, a.category, u.username
+  FROM active_actions a JOIN users u ON u.id = a.user_id
+  WHERE u.amiral_id = ?
+`);
 
 const getResource = () => parseInt(stmtGetState.get('resource').value, 10);
 const setResource = (n) => stmtSetState.run(String(n), 'resource');
-
-function incrementCategory(uid, category, n) {
-  if (n <= 0) return;
-  if (category === 'PUISSANCE')      stmtIncPuissance.run(n, n, uid);
-  else if (category === 'DEFENSIF')  stmtIncDefensif.run(n, n, uid);
-  else if (category === 'UTILITAIRE') stmtIncUtilitaire.run(n, n, uid);
-}
-
-function getProgressFor(uid) {
-  stmtEnsureProgress.run(uid);
-  return stmtGetProgress.get(uid);
-}
-
-function getRecentActionHistory() {
-  return stmtRecentActionLog.all(HISTORY_LIMIT).map(r => ({
-    username: r.username,
-    element_id: r.element_id,
-    action_id: r.action_id,
-    category: r.category,
-    at: r.at
-  }));
-}
-
-function getAllActiveElementStates() {
-  // Pour chaque élément actif, retourne { element_id, action_id, category, username }
-  return stmtAllActiveElements.all();
-}
 
 function hashPassword(password) {
   const salt = crypto.randomBytes(16);
@@ -267,16 +279,102 @@ function userFromToken(token) {
   if (!row) return null;
   return stmtGetUserById.get(row.user_id) || null;
 }
-
-// Spawn du vaisseau Amiral : au sud de la base centrale pour ne pas la chevaucher
-const ship = { x: WORLD_W / 2, y: WORLD_H / 2 + 230, rotation: 0 };
-let streamerSocketId = null;
-let streamerDisplayName = null; // nom affichable de l'Amiral connecté (saisi à l'auth)
-let currentWave = null;  // wave en cours (null si aucune)
-
-function getCurrentAmirals() {
-  return streamerDisplayName ? [{ name: streamerDisplayName }] : [];
+function amiralFromToken(token) {
+  if (typeof token !== 'string' || !token) return null;
+  const row = stmtGetAmiralSess.get(token);
+  if (!row) return null;
+  return stmtGetAmiralById.get(row.amiral_id) || null;
 }
+
+// ============ Runtime par Amiral ============
+
+// Map<amiral_id, AmiralRuntime>
+const amiralsRuntime = new Map();
+
+function getOrCreateAmiralRuntime(amiral) {
+  let rt = amiralsRuntime.get(amiral.id);
+  if (rt) return rt;
+  const elements = buildElementsForAmiral();
+  const elementStates = new Map();
+  for (const el of elements) elementStates.set(el.id, initStateFor(el));
+  rt = {
+    id: amiral.id,
+    username: amiral.username,
+    gridX: amiral.grid_x,
+    gridY: amiral.grid_y,
+    socketId: null,
+    online: false,
+    ship: { x: WORLD_W / 2, y: WORLD_H / 2 + 230, rotation: 0 },
+    elements,
+    elementById: Object.fromEntries(elements.map(e => [e.id, e])),
+    elementStates,
+    factionResources: { materiaux: 0, radius: 0 },
+    currentWave: null
+  };
+  amiralsRuntime.set(amiral.id, rt);
+  return rt;
+}
+
+// Précharge tous les amiraux (élements en mémoire dès le boot)
+for (const a of stmtAllAmirals.all()) getOrCreateAmiralRuntime(a);
+
+function publicElementState(rt, id) {
+  const s = rt.elementStates.get(id);
+  if (!s) return null;
+  return { id, ...s };
+}
+function allElementStates(rt) {
+  return rt.elements.map(e => publicElementState(rt, e.id));
+}
+function activeElementStatesForAmiral(amiralId) {
+  return stmtActiveElementsBy.all(amiralId);
+}
+function recentHistoryForAmiral(amiralId) {
+  return stmtRecentActionLog.all(amiralId, HISTORY_LIMIT).map(r => ({
+    username: r.username,
+    element_id: r.element_id,
+    action_id: r.action_id,
+    category: r.category,
+    at: r.at
+  }));
+}
+
+function amiralRoom(amiralId) { return `amiral-${amiralId}`; }
+
+function getOnlineAmiralsList() {
+  const out = [];
+  for (const rt of amiralsRuntime.values()) {
+    if (rt.online) out.push({ name: rt.username });
+  }
+  return out;
+}
+
+// Allocation de case en spirale : cherche la plus proche du centre non utilisée
+function nextFreeGridCell() {
+  const used = new Set(stmtAllAmirals.all().map(a => `${a.grid_x},${a.grid_y}`));
+  // Spirale carrée : on parcourt les anneaux r = 0, 1, 2, ...
+  for (let r = 0; r < 1000; r++) {
+    if (r === 0) {
+      if (!used.has('0,0')) return { x: 0, y: 0 };
+      continue;
+    }
+    const cells = [];
+    // top row (y = -r)
+    for (let x = -r; x <= r; x++) cells.push([x, -r]);
+    // right col (x = r, y from -r+1 to r)
+    for (let y = -r + 1; y <= r; y++) cells.push([r, y]);
+    // bottom row (y = r, x from r-1 down to -r)
+    for (let x = r - 1; x >= -r; x--) cells.push([x, r]);
+    // left col (x = -r, y from r-1 down to -r+1)
+    for (let y = r - 1; y >= -r + 1; y--) cells.push([-r, y]);
+    for (const [x, y] of cells) {
+      if (!used.has(`${x},${y}`)) return { x, y };
+    }
+  }
+  return null;
+}
+
+// ============ HTTP / Socket ============
 
 const app = express();
 app.use(express.json());
@@ -291,7 +389,56 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 app.get('/api/amiraux', (_req, res) => {
-  res.json({ amiraux: getCurrentAmirals() });
+  res.json({ amiraux: getOnlineAmiralsList() });
+});
+
+app.post('/api/amiral/signup', (req, res) => {
+  const { username, password, masterCode } = req.body || {};
+  if (typeof masterCode !== 'string' || masterCode !== STREAMER_PASSWORD) {
+    return res.status(403).json({ ok: false, error: 'Code maître incorrect' });
+  }
+  if (typeof username !== 'string' || !USERNAME_RE.test(username)) {
+    return res.status(400).json({ ok: false, error: 'Pseudo invalide (3-20 caractères, alphanumériques)' });
+  }
+  if (typeof password !== 'string' || password.length < 6 || password.length > 200) {
+    return res.status(400).json({ ok: false, error: 'Mot de passe : 6 caractères minimum' });
+  }
+  const existing = stmtGetAmiralByName.get(username);
+  if (existing) return res.status(409).json({ ok: false, error: 'Ce pseudo Amiral est déjà pris' });
+  const cell = nextFreeGridCell();
+  if (!cell) return res.status(503).json({ ok: false, error: 'Plus de cases disponibles' });
+  try {
+    const info = stmtInsertAmiral.run(username, hashPassword(password), Date.now(), cell.x, cell.y);
+    const amiral = stmtGetAmiralById.get(info.lastInsertRowid);
+    getOrCreateAmiralRuntime(amiral);
+    const token = newToken();
+    stmtInsertAmiralSess.run(token, amiral.id, Date.now());
+    res.json({ ok: true, token, username, gridX: cell.x, gridY: cell.y });
+  } catch (e) {
+    console.error('[amiral signup] erreur:', e?.code || '', e?.message || e);
+    res.status(500).json({ ok: false, error: 'Erreur serveur: ' + (e?.code || e?.message || 'inconnue') });
+  }
+});
+
+app.post('/api/amiral/login', (req, res) => {
+  const { username, password } = req.body || {};
+  if (typeof username !== 'string' || typeof password !== 'string') {
+    return res.status(400).json({ ok: false, error: 'Identifiants manquants' });
+  }
+  const amiral = stmtGetAmiralByName.get(username);
+  if (!amiral || !verifyPassword(password, amiral.password_hash)) {
+    return res.status(401).json({ ok: false, error: 'Identifiants incorrects' });
+  }
+  getOrCreateAmiralRuntime(amiral);
+  const token = newToken();
+  stmtInsertAmiralSess.run(token, amiral.id, Date.now());
+  res.json({ ok: true, token, username: amiral.username, gridX: amiral.grid_x, gridY: amiral.grid_y });
+});
+
+app.post('/api/amiral/logout', (req, res) => {
+  const { token } = req.body || {};
+  if (typeof token === 'string') stmtDeleteAmiralSess.run(token);
+  res.json({ ok: true });
 });
 
 app.post('/api/signup', (req, res) => {
@@ -302,21 +449,21 @@ app.post('/api/signup', (req, res) => {
   if (typeof password !== 'string' || password.length < 6 || password.length > 200) {
     return res.status(400).json({ ok: false, error: 'Mot de passe : 6 caractères minimum' });
   }
-  const amirals = getCurrentAmirals();
-  if (amirals.length === 0) {
-    return res.status(409).json({ ok: false, error: 'Aucun Amiral en ligne — création de compte impossible pour l\'instant' });
-  }
-  if (typeof amiralName !== 'string' || !amirals.find(a => a.name === amiralName)) {
+  if (typeof amiralName !== 'string' || !amiralName) {
     return res.status(400).json({ ok: false, error: 'Choisis un Amiral à rejoindre' });
   }
+  const amiral = stmtGetAmiralByName.get(amiralName);
+  if (!amiral) return res.status(400).json({ ok: false, error: 'Amiral inconnu' });
+  const rt = amiralsRuntime.get(amiral.id);
+  if (!rt || !rt.online) return res.status(409).json({ ok: false, error: 'Cet Amiral n\'est pas en ligne' });
   const existing = stmtGetUserByName.get(username);
   if (existing) return res.status(409).json({ ok: false, error: 'Ce pseudo est déjà pris' });
   try {
-    const info = stmtInsertUser.run(username, hashPassword(password), Date.now(), amiralName);
+    const info = stmtInsertUser.run(username, hashPassword(password), Date.now(), amiral.id);
     stmtEnsureProgress.run(info.lastInsertRowid);
     const token = newToken();
     stmtInsertSession.run(token, info.lastInsertRowid, Date.now());
-    res.json({ ok: true, token, username, amiralName });
+    res.json({ ok: true, token, username, amiralName: amiral.username });
   } catch (e) {
     console.error('[signup] erreur:', e?.code || '', e?.message || e);
     res.status(500).json({ ok: false, error: 'Erreur serveur: ' + (e?.code || e?.message || 'inconnue') });
@@ -348,20 +495,56 @@ const server = http.createServer(app);
 const io = new Server(server);
 
 io.use((socket, next) => {
-  const token = socket.handshake.auth?.token;
-  const user = userFromToken(token);
-  if (user) {
-    socket.data.userId = user.id;
-    socket.data.username = user.username;
+  const auth = socket.handshake.auth || {};
+  // Tentative d'auth Amiral via amiralToken
+  if (typeof auth.amiralToken === 'string' && auth.amiralToken) {
+    const amiral = amiralFromToken(auth.amiralToken);
+    if (amiral) {
+      socket.data.amiralId = amiral.id;
+      socket.data.amiralUsername = amiral.username;
+    }
+  }
+  // Tentative d'auth Joueur via token
+  if (typeof auth.token === 'string' && auth.token) {
+    const user = userFromToken(auth.token);
+    if (user) {
+      socket.data.userId = user.id;
+      socket.data.username = user.username;
+      socket.data.userAmiralId = user.amiral_id;
+    }
   }
   next();
 });
 
-// Mémoire : association user_id -> socket pour les notifications
 const socketsByUser = new Map();
 
+function broadcastAmiraux() {
+  io.emit('amirals:update', { amiraux: getOnlineAmiralsList() });
+}
+
 io.on('connection', (socket) => {
-  if (socket.data.userId) {
+  let amiralIdForRoom = null;
+
+  if (socket.data.amiralId) {
+    const rt = amiralsRuntime.get(socket.data.amiralId);
+    if (rt) {
+      // Si un autre socket pilote déjà cet Amiral, on kick l'ancien
+      if (rt.socketId && rt.socketId !== socket.id) {
+        const prev = io.sockets.sockets.get(rt.socketId);
+        if (prev) {
+          prev.data.amiralId = null;
+          prev.emit('streamer:kicked');
+        }
+      }
+      rt.socketId = socket.id;
+      rt.online = true;
+      socket.join(amiralRoom(rt.id));
+      amiralIdForRoom = rt.id;
+      broadcastAmiraux();
+    }
+  } else if (socket.data.userId && socket.data.userAmiralId) {
+    socket.join(amiralRoom(socket.data.userAmiralId));
+    amiralIdForRoom = socket.data.userAmiralId;
     if (!socketsByUser.has(socket.data.userId)) socketsByUser.set(socket.data.userId, new Set());
     socketsByUser.get(socket.data.userId).add(socket);
   }
@@ -369,21 +552,26 @@ io.on('connection', (socket) => {
   const userActiveAction = socket.data.userId ? stmtGetActiveAction.get(socket.data.userId) : null;
   const userProgress = socket.data.userId ? getProgressFor(socket.data.userId) : null;
 
+  const rtForInit = socket.data.amiralId
+    ? amiralsRuntime.get(socket.data.amiralId)
+    : (socket.data.userAmiralId ? amiralsRuntime.get(socket.data.userAmiralId) : null);
+
   socket.emit('init', {
     resource: getResource(),
-    ship,
+    ship: rtForInit ? rtForInit.ship : null,
     user: socket.data.userId ? { username: socket.data.username } : null,
-    history: getRecentActionHistory(),
-    elements: ELEMENTS,
-    elementStates: getAllElementStates(),
-    factionResources: { ...factionResources },
+    amiral: socket.data.amiralId ? { username: socket.data.amiralUsername, gridX: rtForInit?.gridX, gridY: rtForInit?.gridY } : null,
+    history: rtForInit ? recentHistoryForAmiral(rtForInit.id) : [],
+    elements: rtForInit ? rtForInit.elements : [],
+    elementStates: rtForInit ? allElementStates(rtForInit) : [],
+    factionResources: rtForInit ? { ...rtForInit.factionResources } : { materiaux: 0, radius: 0 },
     activeAction: userActiveAction || null,
     actionDurationMs: ACTION_MAX_DURATION_MS,
     actionTickMs: ACTION_TICK_MS,
     progress: userProgress,
-    activeElements: getAllActiveElementStates(),
+    activeElements: rtForInit ? activeElementStatesForAmiral(rtForInit.id) : [],
     world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y },
-    currentWave: currentWave && currentWave.endsAt > Date.now() ? currentWave : null,
+    currentWave: rtForInit && rtForInit.currentWave && rtForInit.currentWave.endsAt > Date.now() ? rtForInit.currentWave : null,
     buildTime: BUILD_TIME
   });
 
@@ -391,35 +579,36 @@ io.on('connection', (socket) => {
     const respond = (payload) => { if (typeof cb === 'function') cb(payload); };
     const uid = socket.data.userId;
     if (!uid) return respond({ ok: false, error: 'auth' });
+    const amiralId = socket.data.userAmiralId;
+    const rt = amiralsRuntime.get(amiralId);
+    if (!rt) return respond({ ok: false, error: 'amiral inconnu' });
+    if (!rt.online) return respond({ ok: false, error: 'amiral hors-ligne' });
     const elementId = String(data?.elementId || '');
     const actionId = String(data?.actionId || '');
-    const el = ELEMENT_BY_ID[elementId];
+    const el = rt.elementById[elementId];
     if (!el) return respond({ ok: false, error: 'element inconnu' });
     const action = el.actions.find(a => a.id === actionId);
     if (!action) return respond({ ok: false, error: 'action inconnue' });
-    // Refuse les activations sur un astéroïde détruit
-    const st = elementStates.get(elementId);
+    const st = rt.elementStates.get(elementId);
     if (st && el.type === 'asteroid' && st.hp <= 0) {
       return respond({ ok: false, error: 'asteroïde détruit (respawn en cours)' });
     }
 
     const now = Date.now();
-    // Si une action est déjà active, on la solde puis on l'efface
     const prev = stmtGetActiveAction.get(uid);
     if (prev) {
-      settleAction(prev, now);
-      stmtInsertActionLog.run(uid, socket.data.username, prev.element_id, prev.action_id, prev.category, 'deactivate', now);
+      settleAction(prev, now, rt);
+      stmtInsertActionLog.run(uid, socket.data.username, amiralId, prev.element_id, prev.action_id, prev.category, 'deactivate', now);
     }
 
     stmtUpsertActiveAction.run(uid, elementId, actionId, action.category, now, now);
-    stmtInsertActionLog.run(uid, socket.data.username, elementId, actionId, action.category, 'activate', now);
+    stmtInsertActionLog.run(uid, socket.data.username, amiralId, elementId, actionId, action.category, 'activate', now);
 
     const newAction = stmtGetActiveAction.get(uid);
     const progress = getProgressFor(uid);
 
-    // Broadcast l'état des éléments à tout le monde, et l'action perso au joueur
-    io.emit('elements:update', { activeElements: getAllActiveElementStates() });
-    io.emit('history:new', { username: socket.data.username, element_id: elementId, action_id: actionId, category: action.category, at: now });
+    io.to(amiralRoom(amiralId)).emit('elements:update', { activeElements: activeElementStatesForAmiral(amiralId) });
+    io.to(amiralRoom(amiralId)).emit('history:new', { username: socket.data.username, element_id: elementId, action_id: actionId, category: action.category, at: now });
     socket.emit('action:state', { activeAction: newAction, progress });
     respond({ ok: true });
   });
@@ -428,59 +617,40 @@ io.on('connection', (socket) => {
     const respond = (payload) => { if (typeof cb === 'function') cb(payload); };
     const uid = socket.data.userId;
     if (!uid) return respond({ ok: false, error: 'auth' });
+    const amiralId = socket.data.userAmiralId;
+    const rt = amiralsRuntime.get(amiralId);
     const prev = stmtGetActiveAction.get(uid);
     if (!prev) return respond({ ok: true });
     const now = Date.now();
-    settleAction(prev, now);
+    if (rt) settleAction(prev, now, rt);
     stmtDeleteActiveAction.run(uid);
-    stmtInsertActionLog.run(uid, socket.data.username, prev.element_id, prev.action_id, prev.category, 'deactivate', now);
+    stmtInsertActionLog.run(uid, socket.data.username, amiralId, prev.element_id, prev.action_id, prev.category, 'deactivate', now);
     const progress = getProgressFor(uid);
-    io.emit('elements:update', { activeElements: getAllActiveElementStates() });
+    if (amiralId) io.to(amiralRoom(amiralId)).emit('elements:update', { activeElements: activeElementStatesForAmiral(amiralId) });
     socket.emit('action:state', { activeAction: null, progress });
     respond({ ok: true });
   });
 
-  socket.on('streamer:auth', (data, cb) => {
-    if (typeof cb !== 'function') return;
-    if (data?.password !== STREAMER_PASSWORD) {
-      cb({ ok: false, error: 'Mot de passe incorrect' });
-      return;
-    }
-    const rawName = String(data?.name || '').trim();
-    if (!rawName || rawName.length < 2 || rawName.length > 24 || !/^[\w \-'.]{2,24}$/.test(rawName)) {
-      cb({ ok: false, error: 'Nom Amiral invalide (2-24 caractères)' });
-      return;
-    }
-    if (streamerSocketId && streamerSocketId !== socket.id) {
-      const prev = io.sockets.sockets.get(streamerSocketId);
-      if (prev) {
-        prev.data.isStreamer = false;
-        prev.emit('streamer:kicked');
-      }
-    }
-    streamerSocketId = socket.id;
-    streamerDisplayName = rawName;
-    socket.data.isStreamer = true;
-    socket.data.streamerName = rawName;
-    io.emit('amirals:update', { amiraux: getCurrentAmirals() });
-    cb({ ok: true, name: rawName });
-  });
-
   socket.on('streamer:ship', (data) => {
-    if (!socket.data.isStreamer) return;
+    if (!socket.data.amiralId) return;
+    const rt = amiralsRuntime.get(socket.data.amiralId);
+    if (!rt) return;
     if (typeof data?.x !== 'number' || typeof data?.y !== 'number' || typeof data?.rotation !== 'number') return;
     if (!Number.isFinite(data.x) || !Number.isFinite(data.y) || !Number.isFinite(data.rotation)) return;
-    ship.x = Math.max(0, Math.min(WORLD_W, data.x));
-    ship.y = Math.max(0, Math.min(WORLD_H, data.y));
-    ship.rotation = data.rotation;
-    socket.broadcast.emit('ship', ship);
+    rt.ship.x = Math.max(0, Math.min(WORLD_W, data.x));
+    rt.ship.y = Math.max(0, Math.min(WORLD_H, data.y));
+    rt.ship.rotation = data.rotation;
+    socket.broadcast.to(amiralRoom(rt.id)).emit('ship', rt.ship);
   });
 
   socket.on('disconnect', () => {
-    if (socket.id === streamerSocketId) {
-      streamerSocketId = null;
-      streamerDisplayName = null;
-      io.emit('amirals:update', { amiraux: getCurrentAmirals() });
+    if (socket.data.amiralId) {
+      const rt = amiralsRuntime.get(socket.data.amiralId);
+      if (rt && rt.socketId === socket.id) {
+        rt.socketId = null;
+        rt.online = false;
+        broadcastAmiraux();
+      }
     }
     if (socket.data.userId) {
       const set = socketsByUser.get(socket.data.userId);
@@ -492,13 +662,11 @@ io.on('connection', (socket) => {
   });
 });
 
-// Applique l'effet d'une action sur l'état de l'élément cible (1 tick = 1 unité).
-// Retourne true si l'effet a été appliqué, false si l'élément n'existe plus ou n'est pas exploitable.
-function applyActionEffect(actionId, element) {
-  const state = elementStates.get(element.id);
-  if (!state) return false;
+// ============ Logique d'effet ============
 
-  // Astéroïde détruit → minage inopérant
+function applyActionEffect(rt, actionId, element) {
+  const state = rt.elementStates.get(element.id);
+  if (!state) return false;
   if (element.type === 'asteroid' && state.hp <= 0) return false;
 
   switch (actionId) {
@@ -518,53 +686,57 @@ function applyActionEffect(actionId, element) {
       return true;
     case 'minage':
       state.hp = Math.max(0, state.hp - 1);
-      if (state.subtype === 'materiaux') factionResources.materiaux += 1;
-      else if (state.subtype === 'radius') factionResources.radius += 1;
-      if (state.hp <= 0) destroyAsteroid(element.id);
+      if (state.subtype === 'materiaux') rt.factionResources.materiaux += 1;
+      else if (state.subtype === 'radius') rt.factionResources.radius += 1;
+      if (state.hp <= 0) destroyAsteroid(rt, element.id);
       return true;
     default:
       return false;
   }
 }
 
-// Détruit un astéroïde : marque l'état, désactive les actions des joueurs qui le minaient,
-// et programme un respawn 20 minutes plus tard.
-function destroyAsteroid(id) {
-  const state = elementStates.get(id);
+function destroyAsteroid(rt, id) {
+  const state = rt.elementStates.get(id);
   if (!state) return;
   state.destroyedAt = Date.now();
   state.respawnsAt = state.destroyedAt + ASTEROID_RESPAWN_MS;
-  io.emit('asteroid:destroyed', { id, respawnsAt: state.respawnsAt });
-  console.log(`[asteroid] ${id} détruit, respawn à ${new Date(state.respawnsAt).toISOString()}`);
-  // Désactiver toutes les actions actives sur cet astéroïde
-  const affected = db.prepare('SELECT user_id, action_id, category FROM active_actions WHERE element_id = ?').all(id);
+  io.to(amiralRoom(rt.id)).emit('asteroid:destroyed', { id, respawnsAt: state.respawnsAt });
+  console.log(`[amiral ${rt.username}] asteroïde ${id} détruit, respawn à ${new Date(state.respawnsAt).toISOString()}`);
+  const affected = stmtActiveOnElement.all(id, rt.id);
   for (const a of affected) {
     stmtDeleteActiveAction.run(a.user_id);
-    stmtInsertActionLog.run(a.user_id, '', id, a.action_id, a.category, 'expire', Date.now());
+    stmtInsertActionLog.run(a.user_id, '', rt.id, id, a.action_id, a.category, 'expire', Date.now());
     const sockets = socketsByUser.get(a.user_id);
     if (sockets) {
       const progress = getProgressFor(a.user_id);
       for (const s of sockets) s.emit('action:state', { activeAction: null, progress, expired: true });
     }
   }
-  // Programmer le respawn
-  setTimeout(() => respawnAsteroid(id), ASTEROID_RESPAWN_MS);
+  setTimeout(() => respawnAsteroid(rt, id), ASTEROID_RESPAWN_MS);
 }
 
-function respawnAsteroid(id) {
-  const state = elementStates.get(id);
+function respawnAsteroid(rt, id) {
+  const state = rt.elementStates.get(id);
   if (!state) return;
   state.hp = state.hpMax;
   state.destroyedAt = null;
   state.respawnsAt = null;
-  io.emit('asteroid:respawned', { id, state: getPublicElementState(id) });
-  console.log(`[asteroid] ${id} respawn`);
+  io.to(amiralRoom(rt.id)).emit('asteroid:respawned', { id, state: publicElementState(rt, id) });
+  console.log(`[amiral ${rt.username}] asteroïde ${id} respawn`);
 }
 
-// Solde une action active : crédite les points écoulés depuis last_settled_at jusqu'à now
-// (ou jusqu'à started_at + 1h si dépassé), met à jour les compteurs joueur + global +
-// applique les effets sur l'élément ciblé.
-function settleAction(action, now) {
+function incrementCategory(uid, category, n) {
+  if (n <= 0) return;
+  if (category === 'PUISSANCE')      stmtIncPuissance.run(n, n, uid);
+  else if (category === 'DEFENSIF')  stmtIncDefensif.run(n, n, uid);
+  else if (category === 'UTILITAIRE') stmtIncUtilitaire.run(n, n, uid);
+}
+function getProgressFor(uid) {
+  stmtEnsureProgress.run(uid);
+  return stmtGetProgress.get(uid);
+}
+
+function settleAction(action, now, rt) {
   const cap = action.started_at + ACTION_MAX_DURATION_MS;
   const settledThrough = Math.min(now, cap);
   const elapsedSinceLast = settledThrough - action.last_settled_at;
@@ -576,47 +748,49 @@ function settleAction(action, now) {
   incrementCategory(action.user_id, action.category, delta);
   const newRes = getResource() + delta;
   setResource(newRes);
-  // Applique l'effet sur l'élément : N ticks = N applications
-  const element = ELEMENT_BY_ID[action.element_id];
+  const element = rt.elementById[action.element_id];
   if (element) {
     for (let i = 0; i < delta; i++) {
-      const applied = applyActionEffect(action.action_id, element);
-      // Si la cible devient inactive (asteroïde HP=0) on arrête d'appliquer
+      const applied = applyActionEffect(rt, action.action_id, element);
       if (!applied) break;
     }
   }
   return delta;
 }
 
-// Tick périodique : solde toutes les actions actives, expire celles >1h, broadcast la ressource
 let lastBroadcastResource = -1;
 function tickActions() {
   const now = Date.now();
   const all = stmtAllActiveActions.all();
-  let anyChange = false;
+  const dirtyAmiraux = new Set();
   const expiredUserIds = [];
   for (const a of all) {
-    const delta = settleAction(a, now);
-    if (delta > 0) anyChange = true;
+    const rt = amiralsRuntime.get(a.amiral_id);
+    if (!rt) continue;
+    const delta = settleAction(a, now, rt);
+    if (delta > 0) dirtyAmiraux.add(a.amiral_id);
     if (now >= a.started_at + ACTION_MAX_DURATION_MS) {
       stmtDeleteActiveAction.run(a.user_id);
-      stmtInsertActionLog.run(a.user_id, '', a.element_id, a.action_id, a.category, 'expire', now);
+      stmtInsertActionLog.run(a.user_id, a.username, a.amiral_id, a.element_id, a.action_id, a.category, 'expire', now);
       expiredUserIds.push(a.user_id);
-      anyChange = true;
+      dirtyAmiraux.add(a.amiral_id);
     }
   }
-  if (anyChange) {
+  if (dirtyAmiraux.size > 0) {
     const res = getResource();
     if (res !== lastBroadcastResource) {
       io.emit('resource', { resource: res });
       lastBroadcastResource = res;
     }
-    io.emit('elements:update', {
-      activeElements: getAllActiveElementStates(),
-      states: getAllElementStates(),
-      faction: { ...factionResources }
-    });
-    // Pour chaque user actif, notifier sa nouvelle progression personnelle
+    for (const amiralId of dirtyAmiraux) {
+      const rt = amiralsRuntime.get(amiralId);
+      if (!rt) continue;
+      io.to(amiralRoom(amiralId)).emit('elements:update', {
+        activeElements: activeElementStatesForAmiral(amiralId),
+        states: allElementStates(rt),
+        faction: { ...rt.factionResources }
+      });
+    }
     const stillActive = stmtAllActiveActions.all();
     for (const a of stillActive) {
       const sockets = socketsByUser.get(a.user_id);
@@ -625,7 +799,6 @@ function tickActions() {
       const activeAction = stmtGetActiveAction.get(a.user_id);
       for (const s of sockets) s.emit('action:state', { activeAction, progress });
     }
-    // Pour ceux qui viennent d'expirer
     for (const uid of expiredUserIds) {
       const sockets = socketsByUser.get(uid);
       if (!sockets) continue;
@@ -634,33 +807,23 @@ function tickActions() {
     }
   }
 }
-
 setInterval(tickActions, ACTION_TICK_MS);
 
-// ============ Vagues d'ennemis ============
+// ============ Vagues (par Amiral en ligne) ============
 
-function rollWave() {
-  // Si une vague est encore en cours (warning ou ennemis en vol), on saute
-  if (currentWave && currentWave.endsAt > Date.now()) return;
+function rollWaveFor(rt) {
+  if (rt.currentWave && rt.currentWave.endsAt > Date.now()) return;
   if (Math.random() > WAVE_PROBABILITY) return;
 
   const count = ENEMY_MIN + Math.floor(Math.random() * (ENEMY_MAX - ENEMY_MIN + 1));
   const baseAngle = Math.random() * Math.PI * 2;
-  // Spread plus large : ennemis répartis sur un arc d'environ 110° pour éviter
-  // qu'ils soient superposés
   const spread = 1.9;
-
-  // Cible : tourelle (40%) ou astéroïde (60%)
-  const asteroids = ELEMENTS.filter(e => e.type === 'asteroid');
-  const target = Math.random() < 0.4
-    ? ELEMENT_BY_ID['turret-1']
-    : asteroids[Math.floor(Math.random() * asteroids.length)];
-
+  const asteroids = rt.elements.filter(e => e.type === 'asteroid');
+  const target = Math.random() < 0.4 ? rt.elementById['turret-1'] : asteroids[Math.floor(Math.random() * asteroids.length)];
   const cx = WORLD_W / 2;
   const cy = WORLD_H / 2;
-  const r = Math.max(WORLD_W, WORLD_H) * 1.2; // au-delà du bord
+  const r = Math.max(WORLD_W, WORLD_H) * 1.2;
   const margin = 80;
-
   const now = Date.now();
   const spawnAt = now + WAVE_WARNING_MS;
   const enemies = [];
@@ -676,18 +839,16 @@ function rollWave() {
     if (travelMs > maxTravel) maxTravel = travelMs;
     const level = ENEMY_LEVELS_AVAILABLE[Math.floor(Math.random() * ENEMY_LEVELS_AVAILABLE.length)];
     enemies.push({
-      id: `e-${now}-${i}`,
+      id: `e-${rt.id}-${now}-${i}`,
       level,
       spawnX, spawnY,
       targetX: target.x, targetY: target.y,
       travelMs: Math.round(travelMs),
-      // Décalage de spawn de 0-3.5s pour que les ennemis n'arrivent pas tous en même temps
       spawnOffsetMs: Math.floor(Math.random() * 3500)
     });
   }
-
-  currentWave = {
-    id: `w-${now}`,
+  rt.currentWave = {
+    id: `w-${rt.id}-${now}`,
     startedAt: now,
     warningEndsAt: spawnAt,
     spawnAt,
@@ -695,34 +856,36 @@ function rollWave() {
     targetLabel: target.label,
     edgeAngle: baseAngle,
     enemies,
-    // Buffer de 2 min : les ennemis orbitent et tirent jusqu'à être détruits par les tourelles.
-    // S'il n'y a pas d'action Tir active, ils peuvent rester très longtemps. La bannière "EN COURS"
-    // reste affichée pendant ce temps pour signaler la menace.
     endsAt: spawnAt + Math.ceil(maxTravel) + 120000
   };
-  io.emit('wave:incoming', currentWave);
-  console.log(`[wave] ${currentWave.id} — ${count} ennemis vers ${target.id} (angle ${baseAngle.toFixed(2)} rad)`);
+  io.to(amiralRoom(rt.id)).emit('wave:incoming', rt.currentWave);
+  console.log(`[amiral ${rt.username}] wave ${rt.currentWave.id} — ${count} ennemis vers ${target.id}`);
 }
 
-setInterval(rollWave, WAVE_CHECK_INTERVAL_MS);
-
+function rollWaves() {
+  for (const rt of amiralsRuntime.values()) {
+    if (rt.online) rollWaveFor(rt);
+  }
+}
+setInterval(rollWaves, WAVE_CHECK_INTERVAL_MS);
 
 server.listen(PORT, () => {
   console.log(`VoidFaction écoute sur le port ${PORT}`);
   const fromEnv = !!process.env.STREAMER_PASSWORD;
-  console.log(`Amiral : STREAMER_PASSWORD source=${fromEnv ? 'env' : 'défaut'}, longueur=${STREAMER_PASSWORD.length}`);
+  console.log(`Amiral : STREAMER_PASSWORD (code maître) source=${fromEnv ? 'env' : 'défaut'}, longueur=${STREAMER_PASSWORD.length}`);
   try {
     const testFile = path.join(dataDir, '.write-test');
     fs.writeFileSync(testFile, String(Date.now()));
     fs.unlinkSync(testFile);
     const fromEnvDir = !!process.env.DATA_DIR;
     const userCount = db.prepare('SELECT COUNT(*) AS n FROM users').get().n;
+    const amiralCount = db.prepare('SELECT COUNT(*) AS n FROM amirals').get().n;
     if (!fromEnvDir) {
       console.warn(`⚠️  DB : dataDir=${dataDir} (DATA_DIR non défini → stockage ÉPHÉMÈRE, perdu à chaque déploiement)`);
     } else {
       console.log(`DB : dataDir=${dataDir} (DATA_DIR=env, écriture OK)`);
     }
-    console.log(`DB : ${userCount} utilisateur(s) existant(s) au démarrage`);
+    console.log(`DB : ${amiralCount} amiral(aux), ${userCount} joueur(s) au démarrage`);
   } catch (e) {
     console.error(`DB : dataDir=${dataDir} ÉCHEC ÉCRITURE:`, e?.code || e?.message);
   }
