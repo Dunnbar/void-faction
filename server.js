@@ -552,9 +552,19 @@ io.on('connection', (socket) => {
   const userActiveAction = socket.data.userId ? stmtGetActiveAction.get(socket.data.userId) : null;
   const userProgress = socket.data.userId ? getProgressFor(socket.data.userId) : null;
 
-  const rtForInit = socket.data.amiralId
+  // 1) Amiral connecté -> son propre monde
+  // 2) Joueur affilié -> monde de son Amiral
+  // 3) Visiteur anonyme / joueur non-affilié -> premier Amiral en ligne (vue lecture seule)
+  let rtForInit = socket.data.amiralId
     ? amiralsRuntime.get(socket.data.amiralId)
     : (socket.data.userAmiralId ? amiralsRuntime.get(socket.data.userAmiralId) : null);
+  if (!rtForInit) {
+    for (const rt of amiralsRuntime.values()) { if (rt.online) { rtForInit = rt; break; } }
+  }
+  // Le visiteur anonyme rejoint la room de l'Amiral observé pour voir les events en live
+  if (rtForInit && !socket.data.amiralId && !socket.data.userAmiralId) {
+    socket.join(amiralRoom(rtForInit.id));
+  }
 
   socket.emit('init', {
     resource: getResource(),
