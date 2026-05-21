@@ -554,12 +554,15 @@ io.on('connection', (socket) => {
 
   // 1) Amiral connecté -> son propre monde
   // 2) Joueur affilié -> monde de son Amiral
-  // 3) Visiteur anonyme / joueur non-affilié -> premier Amiral en ligne (vue lecture seule)
+  // 3) Visiteur anonyme / joueur non-affilié -> premier Amiral en ligne, sinon premier en DB
   let rtForInit = socket.data.amiralId
     ? amiralsRuntime.get(socket.data.amiralId)
     : (socket.data.userAmiralId ? amiralsRuntime.get(socket.data.userAmiralId) : null);
   if (!rtForInit) {
     for (const rt of amiralsRuntime.values()) { if (rt.online) { rtForInit = rt; break; } }
+  }
+  if (!rtForInit) {
+    rtForInit = amiralsRuntime.values().next().value || null;
   }
   // Le visiteur anonyme rejoint la room de l'Amiral observé pour voir les events en live
   if (rtForInit && !socket.data.amiralId && !socket.data.userAmiralId) {
