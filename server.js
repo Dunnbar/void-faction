@@ -74,16 +74,19 @@ const ELEMENT_TEMPLATES = (() => {
     const p = poly(a, TURRET_D);
     list.push({ id: `turret-${i + 1}`, type: 'turret', x: p.x, y: p.y, label: turretLabels[i], actions: TURRET_ACTIONS });
   });
-  // 4 materiaux groupes a droite (arc -3π/8 -> 3π/8), 4 radius groupes a gauche (arc 5π/8 -> 11π/8)
+  // 4 materiaux serres a droite, 4 radius serres a gauche (chaque groupe centre sur son axe)
   const scales = [1.0, 1.1, 1.2, 0.9, 1.0, 0.95, 1.0, 1.05];
+  const ASTEROID_GROUP_STEP = Math.PI / 12;  // 15 deg entre asteroides du meme groupe
+  // Centrage : startAngle = centre - 1.5 * step (pour 4 asteroides)
+  const halfSpan = 1.5 * ASTEROID_GROUP_STEP;
   const groupConfigs = [
-    { subtype: 'materiaux', startAngle: -3 * Math.PI / 8 },  // cote droit
-    { subtype: 'radius',    startAngle:  5 * Math.PI / 8 }   // cote gauche
+    { subtype: 'materiaux', startAngle: 0 - halfSpan },        // centre a 0 (droite)
+    { subtype: 'radius',    startAngle: Math.PI - halfSpan }   // centre a π (gauche)
   ];
   let idx = 0;
   for (const cfg of groupConfigs) {
     for (let k = 0; k < 4; k++) {
-      const angle = cfg.startAngle + k * (Math.PI / 4);
+      const angle = cfg.startAngle + k * ASTEROID_GROUP_STEP;
       const p = poly(angle, ASTEROID_D);
       list.push({
         id: `asteroid-${idx}`,
