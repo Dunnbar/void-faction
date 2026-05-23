@@ -130,15 +130,29 @@ function initStateFor(el) {
 
 const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(dataDir, { recursive: true });
-const db = new Database(path.join(dataDir, 'voidfaction.db'));
+const dbFilePath = path.join(dataDir, 'voidfaction.db');
+const dbExistedBeforeBoot = fs.existsSync(dbFilePath);
+let dbSizeBeforeBoot = 0;
+try { dbSizeBeforeBoot = dbExistedBeforeBoot ? fs.statSync(dbFilePath).size : 0; } catch {}
+console.log(`[boot] DB file ${dbFilePath} : ${dbExistedBeforeBoot ? `EXISTANT (${dbSizeBeforeBoot} octets)` : 'absent -> sera cree'}`);
+const db = new Database(dbFilePath);
 db.pragma('journal_mode = WAL');
 
 // Détection migration : si la table users existe SANS amiral_id, on reset (changement de contrat).
 function needsReset() {
   const usersExists = db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='users'").get();
-  if (!usersExists) return false;
+  if (!usersExists) {
+    console.log('[migration] table users absente -> creation complete (pas de reset)');
+    return false;
+  }
   const cols = db.prepare("PRAGMA table_info(users)").all();
-  return !cols.find(c => c.name === 'amiral_id');
+  const hasAmiralId = !!cols.find(c => c.name === 'amiral_id');
+  if (hasAmiralId) {
+    console.log('[migration] table users OK (amiral_id present) -> conservation des donnees');
+    return false;
+  }
+  console.log('[migration] table users ANCIEN schema (sans amiral_id) -> reset necessaire');
+  return true;
 }
 
 if (needsReset()) {
