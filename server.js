@@ -104,7 +104,7 @@ function buildElementsForAmiral() {
 
 function initStateFor(el) {
   if (el.type === 'base') {
-    return { hp: BASE_HP_MAX, hpMax: BASE_HP_MAX, essence: BASE_ESSENCE_MAX, essenceMax: BASE_ESSENCE_MAX };
+    return { hp: BASE_HP_MAX, hpMax: BASE_HP_MAX, essence: BASE_ESSENCE_MAX, essenceMax: BASE_ESSENCE_MAX, bornAt: Date.now() };
   }
   if (el.type === 'turret') {
     return { hp: TURRET_HP_MAX, hpMax: TURRET_HP_MAX, puissance: 0, range: 0 };
@@ -406,6 +406,7 @@ function getDemoRuntime() {
   return demoRuntime;
 }
 
+const DAY_MS = 24 * 60 * 60 * 1000;
 function publicElementState(rt, id) {
   const s = rt.elementStates.get(id);
   if (!s) return null;
@@ -425,7 +426,42 @@ function publicElementState(rt, id) {
       };
     }
   }
+  // Base : on calcule le nombre de jours depuis sa naissance
+  if (el && el.type === 'base') {
+    return {
+      id, ...s,
+      daysAlive: Math.floor((Date.now() - (s.bornAt || Date.now())) / DAY_MS)
+    };
+  }
   return { id, ...s };
+}
+
+// Renaissance de la base : reset HP/essence/bornAt et broadcast l'event
+function rebirthBase(rt) {
+  const baseEl = rt.elements.find(e => e.type === 'base');
+  if (!baseEl) return;
+  const state = rt.elementStates.get(baseEl.id);
+  if (!state) return;
+  state.hp = state.hpMax;
+  state.essence = state.essenceMax;
+  state.bornAt = Date.now();
+  io.to(amiralRoom(rt.id)).emit('base:reborn', { id: baseEl.id, state: publicElementState(rt, baseEl.id) });
+  console.log(`[amiral ${rt.username}] base ${baseEl.id} renaissance (jour 0)`);
+}
+
+// Hook pour appliquer des degats a la base (futur : tirs ennemis sur la base).
+// Si HP tombe a 0 -> renaissance avec compteur de jours reset.
+function applyBaseDamage(rt, dmg) {
+  const baseEl = rt.elements.find(e => e.type === 'base');
+  if (!baseEl) return;
+  const state = rt.elementStates.get(baseEl.id);
+  if (!state || dmg <= 0) return;
+  state.hp = Math.max(0, state.hp - dmg);
+  if (state.hp <= 0) {
+    rebirthBase(rt);
+  } else {
+    io.to(amiralRoom(rt.id)).emit('elements:update', { states: [publicElementState(rt, baseEl.id)] });
+  }
 }
 function allElementStates(rt) {
   return rt.elements.map(e => publicElementState(rt, e.id));

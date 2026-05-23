@@ -410,6 +410,11 @@ function wireSocketEvents() {
       if (states[i]) elementStates.set(id, states[i]);
     }
   });
+  socket.on('base:reborn', (data) => {
+    if (data?.state) elementStates.set(data.id, data.state);
+    const scene = game?.scene.getScene('main');
+    if (scene && scene.scene.isActive()) scene.applyAllElementStates();
+  });
   socket.on('wave:incoming', (wave) => {
     const scene = game?.scene.getScene('main');
     if (scene && scene.scene.isActive()) scene.handleWaveIncoming(wave);
@@ -843,6 +848,12 @@ class MainScene extends Phaser.Scene {
         this.add.text(el.x, el.y + 120, el.label, {
           fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af'
         }).setOrigin(0.5);
+        // Compteur "JOUR X" au-dessus du sprite
+        this.baseDaysLabel = this.add.text(el.x, el.y - 130, 'JOUR 0', {
+          fontFamily: 'Consolas, monospace', fontSize: '14px', color: '#9bd0ff',
+          stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
+        }).setOrigin(0.5);
+        this.baseElementId = el.id;
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
         this.elementHpBars.set(el.id, this.makeHpBar(el.x, el.y - 88, 120, 0x4af));
@@ -881,6 +892,13 @@ class MainScene extends Phaser.Scene {
     }
     for (const el of serverElements) {
       if (el.type === 'turret') this.updateTurretAppearance(el.id);
+    }
+    // Met a jour le label "JOUR X" de la base
+    if (this.baseDaysLabel && this.baseElementId) {
+      const baseState = elementStates.get(this.baseElementId);
+      if (baseState && typeof baseState.daysAlive === 'number') {
+        this.baseDaysLabel.setText(`JOUR ${baseState.daysAlive}`);
+      }
     }
   }
 
