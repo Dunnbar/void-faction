@@ -80,6 +80,7 @@ let history = [];
 let socket = null;
 let authenticated = false;
 let knownBuildTime = null;
+let amiralDisplayName = 'AMIRAL';  // pseudo affiche sous le vaisseau (rempli par init)
 
 function triggerVersionReload() {
   console.log('%c[VoidFaction] Nouvelle version détectée — rechargement…', 'color:#f80; font-weight:bold; font-size:14px');
@@ -213,7 +214,7 @@ function showWaveBanner(wave, warningRemainingMs) {
     const now = Date.now();
     const remaining = wave.warningEndsAt - now;
     if (remaining > 0) {
-      cdEl.textContent = `${Math.ceil(remaining / 1000)}s`;
+      cdEl.textContent = formatWaveCountdown(remaining);
       banner.classList.add('warning');
       banner.classList.remove('active');
     } else if (now < wave.endsAt) {
@@ -228,7 +229,17 @@ function showWaveBanner(wave, warningRemainingMs) {
     }
   };
   update();
-  waveBannerInterval = setInterval(update, 250);
+  waveBannerInterval = setInterval(update, 1000);
+}
+
+function formatWaveCountdown(ms) {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h${String(m).padStart(2,'0')}`;
+  if (m > 0) return `${m}m${String(s).padStart(2,'0')}s`;
+  return `${s}s`;
 }
 
 function renderFactionResources() {
@@ -600,8 +611,10 @@ function connectSocket() {
     renderBars();
     renderFactionResources();
     renderHistory();
+    amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) {
+      if (scene.shipLabel) scene.shipLabel.setText(amiralDisplayName);
       scene.setShipState(data.ship);
       scene.setupElements(serverElements);
       scene.applyAllElementStates();
@@ -725,7 +738,9 @@ function triggerCaptainForWave(wave) {
   const warnMs = Math.max(0, wave.warningEndsAt - now);
   const totalRemaining = Math.max(0, wave.endsAt - now);
   if (warnMs > 0) {
-    showCaptain(`<span class="danger">⚠ ENNEMIS DÉTECTÉS</span><br>Cible : ${target}<br>Tenez vos positions !`, warnMs + 800);
+    // Captain affiche brievement (15s max) ; la banniere de wave reste pour le compte a rebours
+    const captainDurationMs = Math.min(15000, warnMs + 800);
+    showCaptain(`<span class="danger">⚠ ENNEMIS DÉTECTÉS</span><br>Cible : ${target}<br>Tenez vos positions !`, captainDurationMs);
     // Bascule sur un message "engagement" une fois la phase d'alerte terminee
     setTimeout(() => {
       if (Date.now() < wave.endsAt - 1500) {
@@ -819,7 +834,7 @@ class MainScene extends Phaser.Scene {
     this.ship._hpMax = 100;
     this.shipHpBar = this.makeHpBar(this.ship.x, this.ship.y - 40, 60, 0x4fdb73);
     this.shipHpBar.setDepth(11);
-    this.shipLabel = this.add.text(this.ship.x, this.ship.y - 56, 'AMIRAL', {
+    this.shipLabel = this.add.text(this.ship.x, this.ship.y - 56, amiralDisplayName, {
       fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af',
       stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(11);

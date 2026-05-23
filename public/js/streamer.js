@@ -107,6 +107,7 @@ signupForm.addEventListener('submit', (e) => {
 let lastActiveElements = [];
 let elementStates = new Map();
 let factionResources = { materiaux: 0, radius: 0 };
+let amiralDisplayName = 'AMIRAL';  // pseudo affiche sous le vaisseau
 let activeAction = null;  // action active de l'Amiral (slot unique)
 let amiralProgress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
 let serverElementsRef = null;  // alias vers le tableau d'elements (mis a jour dans init)
@@ -262,7 +263,9 @@ function triggerCaptainForWave(wave) {
   const warnMs = Math.max(0, wave.warningEndsAt - now);
   const totalRemaining = Math.max(0, wave.endsAt - now);
   if (warnMs > 0) {
-    showCaptain(`<span class="danger">⚠ ENNEMIS DÉTECTÉS</span><br>Cible : ${target}<br>Tenez vos positions !`, warnMs + 800);
+    // Captain affiche brievement (15s max), la banniere de wave reste pour le countdown long
+    const captainDurationMs = Math.min(15000, warnMs + 800);
+    showCaptain(`<span class="danger">⚠ ENNEMIS DÉTECTÉS</span><br>Cible : ${target}<br>Tenez vos positions !`, captainDurationMs);
     setTimeout(() => {
       if (Date.now() < wave.endsAt - 1500) {
         showCaptain(`<span class="danger">L'ENNEMI EST LÀ !</span><br>Tirez sur les hostiles !`, Math.max(1500, wave.endsAt - Date.now() - 600));
@@ -293,7 +296,8 @@ function showWaveBanner(wave) {
   const update = () => {
     const now = Date.now();
     if (now < wave.warningEndsAt) {
-      cdEl.textContent = `${Math.ceil((wave.warningEndsAt - now) / 1000)}s`;
+      const remMs = wave.warningEndsAt - now;
+      cdEl.textContent = formatWaveCountdown(remMs);
       banner.classList.add('warning'); banner.classList.remove('active');
     } else if (now < wave.endsAt) {
       cdEl.textContent = 'EN COURS';
@@ -305,7 +309,17 @@ function showWaveBanner(wave) {
     }
   };
   update();
-  waveBannerInterval = setInterval(update, 250);
+  waveBannerInterval = setInterval(update, 1000);
+}
+
+function formatWaveCountdown(ms) {
+  const totalSec = Math.max(0, Math.ceil(ms / 1000));
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  const s = totalSec % 60;
+  if (h > 0) return `${h}h${String(m).padStart(2,'0')}`;
+  if (m > 0) return `${m}m${String(s).padStart(2,'0')}s`;
+  return `${s}s`;
 }
 
 function wireSocketEvents() {
@@ -338,6 +352,10 @@ function wireSocketEvents() {
     factionResources = data.factionResources || factionResources;
     activeAction = data.activeAction || null;
     amiralProgress = data.progress || amiralProgress;
+    // Pseudo de l'Amiral sur le vaisseau (le sien). Stocke pour utilisation au demarrage de la scene
+    amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
+    const sceneForLabel = game?.scene.getScene('main');
+    if (sceneForLabel && sceneForLabel.shipLabel) sceneForLabel.shipLabel.setText(amiralDisplayName);
     if (data.world) {
       WORLD_W = data.world.width;
       WORLD_H = data.world.height;
@@ -570,8 +588,8 @@ class MainScene extends Phaser.Scene {
     this.ship.setDrag(0.92);
     this.ship.setMaxVelocity(140);
 
-    // Label "AMIRAL" qui suit le vaisseau
-    this.shipLabel = this.add.text(this.ship.x, this.ship.y - 56, 'AMIRAL', {
+    // Pseudo de l'Amiral qui suit le vaisseau
+    this.shipLabel = this.add.text(this.ship.x, this.ship.y - 56, amiralDisplayName, {
       fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#ff8044',
       stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(11);

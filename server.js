@@ -24,7 +24,7 @@ const HISTORY_LIMIT = 10;
 
 const WAVE_CHECK_INTERVAL_MS = 60 * 1000;
 const WAVE_PROBABILITY = 0.35;
-const WAVE_WARNING_MS = 10 * 1000;
+const WAVE_WARNING_MS = 40 * 60 * 1000;  // 40 min de preavis avant l'arrivee des ennemis
 const ENEMY_SPEED = 40;
 const ENEMY_MIN = 3;
 const ENEMY_MAX = 6;
@@ -744,7 +744,8 @@ io.on('connection', (socket) => {
     resource: getResource(),
     ship: rtForInit ? rtForInit.ship : null,
     user: socket.data.userId ? { username: socket.data.username } : null,
-    amiral: socket.data.amiralId ? { username: socket.data.amiralUsername, gridX: rtForInit?.gridX, gridY: rtForInit?.gridY } : null,
+    amiral: socket.data.amiralId ? { username: socket.data.amiralUsername, gridX: rtForInit?.gridX, gridY: rtForInit?.gridY, isOwn: true } : null,
+    watchedAmiral: rtForInit && rtForInit.username ? { username: rtForInit.username, gridX: rtForInit.gridX, gridY: rtForInit.gridY } : null,
     history: rtForInit ? recentHistoryForAmiral(rtForInit.id) : [],
     elements: rtForInit ? rtForInit.elements : [],
     elementStates: rtForInit ? allElementStates(rtForInit) : [],
