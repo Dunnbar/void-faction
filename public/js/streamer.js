@@ -623,7 +623,7 @@ class MainScene extends Phaser.Scene {
     this.destMarker = this.add.circle(0, 0, 14, 0x4f8aff, 0.0).setStrokeStyle(2, 0x4f8aff, 0.9);
     this.destination = null;
 
-    // Clic droit = définir la destination
+    // Clic droit = définir la destination + reaccroche la camera au vaisseau
     this.input.mouse.disableContextMenu();
     this.input.on('pointerdown', (pointer) => {
       if (pointer.rightButtonDown()) {
@@ -637,7 +637,45 @@ class MainScene extends Phaser.Scene {
           duration: 240,
           ease: 'Back.easeOut'
         });
+        // Reaccroche la camera au vaisseau si elle avait ete liberee par un drag
+        if (this.ship) this.cameras.main.startFollow(this.ship, true, 0.08, 0.08);
       }
+    });
+
+    // Drag-to-pan (clic gauche maintenu) : panoramique style MOBA, libere la camera du vaisseau
+    this._panState = { active: false, lastX: 0, lastY: 0, moved: 0, pendingMenu: null };
+    const DRAG_THRESHOLD_PX = 6;
+    this.input.on('pointerdown', (pointer) => {
+      if (pointer.button !== 0) return;
+      this._panState.active = true;
+      this._panState.lastX = pointer.x;
+      this._panState.lastY = pointer.y;
+      this._panState.moved = 0;
+    });
+    this.input.on('pointermove', (pointer) => {
+      if (!this._panState.active || !pointer.isDown || !pointer.leftButtonDown()) return;
+      const dx = pointer.x - this._panState.lastX;
+      const dy = pointer.y - this._panState.lastY;
+      this._panState.lastX = pointer.x;
+      this._panState.lastY = pointer.y;
+      this._panState.moved += Math.hypot(dx, dy);
+      if (this._panState.moved > DRAG_THRESHOLD_PX) {
+        const cam = this.cameras.main;
+        // Detache la camera du vaisseau pour pouvoir librement panoter
+        cam.stopFollow();
+        cam.scrollX -= dx / cam.zoom;
+        cam.scrollY -= dy / cam.zoom;
+      }
+    });
+    this.input.on('pointerup', (pointer) => {
+      if (pointer.button !== 0) return;
+      const wasPanning = this._panState.moved > DRAG_THRESHOLD_PX;
+      if (!wasPanning && this._panState.pendingMenu) {
+        openActionMenu(this._panState.pendingMenu.id, this._panState.pendingMenu.event);
+      }
+      this._panState.active = false;
+      this._panState.moved = 0;
+      this._panState.pendingMenu = null;
     });
 
     this.lastSend = 0;
@@ -803,7 +841,8 @@ class MainScene extends Phaser.Scene {
           .setInteractive({ useHandCursor: true });
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
-          openActionMenu(el.id, pointer.event);
+          // Defer : on memorise l'intent ; le menu s'ouvrira au pointerup si pas de drag
+          if (this._panState) this._panState.pendingMenu = { id: el.id, event: pointer.event };
         });
         const dir = (i % 2 === 0) ? 1 : -1;
         this.tweens.add({
@@ -827,7 +866,8 @@ class MainScene extends Phaser.Scene {
           .setInteractive({ useHandCursor: true });
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
-          openActionMenu(el.id, pointer.event);
+          // Defer : on memorise l'intent ; le menu s'ouvrira au pointerup si pas de drag
+          if (this._panState) this._panState.pendingMenu = { id: el.id, event: pointer.event };
         });
         sprite._baseRotation = baseRot;
         const amp = 0.15;
@@ -849,7 +889,8 @@ class MainScene extends Phaser.Scene {
           .setInteractive({ useHandCursor: true });
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
-          openActionMenu(el.id, pointer.event);
+          // Defer : on memorise l'intent ; le menu s'ouvrira au pointerup si pas de drag
+          if (this._panState) this._panState.pendingMenu = { id: el.id, event: pointer.event };
         });
         this.baseElementId = el.id;
         this.elementSprites.set(el.id, sprite);

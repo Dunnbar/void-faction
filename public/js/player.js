@@ -852,6 +852,41 @@ class MainScene extends Phaser.Scene {
       this.applyFitZoom();
     });
 
+    // Drag-to-pan (style MOBA) : clic gauche maintenu + deplacement = panoramique de la carte
+    // Si le mouvement est inferieur a un seuil, on traite comme un clic et on ouvre le menu d'action de l'element vise.
+    this._panState = { active: false, lastX: 0, lastY: 0, moved: 0, pendingMenu: null };
+    const DRAG_THRESHOLD_PX = 6;
+    this.input.on('pointerdown', (pointer) => {
+      if (pointer.button !== 0) return;
+      this._panState.active = true;
+      this._panState.lastX = pointer.x;
+      this._panState.lastY = pointer.y;
+      this._panState.moved = 0;
+    });
+    this.input.on('pointermove', (pointer) => {
+      if (!this._panState.active || !pointer.isDown || !pointer.leftButtonDown()) return;
+      const dx = pointer.x - this._panState.lastX;
+      const dy = pointer.y - this._panState.lastY;
+      this._panState.lastX = pointer.x;
+      this._panState.lastY = pointer.y;
+      this._panState.moved += Math.hypot(dx, dy);
+      if (this._panState.moved > DRAG_THRESHOLD_PX) {
+        const cam = this.cameras.main;
+        cam.scrollX -= dx / cam.zoom;
+        cam.scrollY -= dy / cam.zoom;
+      }
+    });
+    this.input.on('pointerup', (pointer) => {
+      if (pointer.button !== 0) return;
+      const wasPanning = this._panState.moved > DRAG_THRESHOLD_PX;
+      if (!wasPanning && this._panState.pendingMenu) {
+        openActionMenu(this._panState.pendingMenu.id, this._panState.pendingMenu.event);
+      }
+      this._panState.active = false;
+      this._panState.moved = 0;
+      this._panState.pendingMenu = null;
+    });
+
     // Si l'init est déjà arrivée avant que create() ne tourne, on applique maintenant
     if (serverElements.length > 0) {
       this.setupElements(serverElements);
@@ -1114,7 +1149,8 @@ class MainScene extends Phaser.Scene {
         });
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
-          openActionMenu(el.id, pointer.event);
+          // Defer : on memorise l'intent ; le menu s'ouvrira au pointerup si pas de drag
+          if (this._panState) this._panState.pendingMenu = { id: el.id, event: pointer.event };
         });
         sprite._asteroidVariant = variant;
         this.elementSprites.set(el.id, sprite);
@@ -1143,7 +1179,8 @@ class MainScene extends Phaser.Scene {
         sprite._turretId = el.id;
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
-          openActionMenu(el.id, pointer.event);
+          // Defer : on memorise l'intent ; le menu s'ouvrira au pointerup si pas de drag
+          if (this._panState) this._panState.pendingMenu = { id: el.id, event: pointer.event };
         });
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
@@ -1156,7 +1193,8 @@ class MainScene extends Phaser.Scene {
           .setInteractive({ useHandCursor: true });
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
-          openActionMenu(el.id, pointer.event);
+          // Defer : on memorise l'intent ; le menu s'ouvrira au pointerup si pas de drag
+          if (this._panState) this._panState.pendingMenu = { id: el.id, event: pointer.event };
         });
         this.baseElementId = el.id;
         this.elementSprites.set(el.id, sprite);
