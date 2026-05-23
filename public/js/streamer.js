@@ -815,20 +815,7 @@ class MainScene extends Phaser.Scene {
         sprite._asteroidVariant = variant;
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
-        // Barre commune : seul le premier asteroide de chaque subtype en a une
-        if (!groupBarSubtypes.has(el.subtype)) {
-          groupBarSubtypes.add(el.subtype);
-          const barColor = el.subtype === 'radius' ? 0x88e0c8 : 0xffd24f;
-          const barW = 140;
-          const bar = this.makeHpBar(el.x, el.y - visibleSize * 0.5 - 28, barW, barColor);
-          const labelTxt = el.subtype === 'radius' ? 'ASTÉROÏDES RADIUS' : 'ASTÉROÏDES MATÉRIAUX';
-          this.add.text(el.x, el.y - visibleSize * 0.5 - 44, labelTxt, {
-            fontFamily: 'Consolas, monospace', fontSize: '10px',
-            color: el.subtype === 'radius' ? '#88e0c8' : '#ffd24f',
-            stroke: '#000', strokeThickness: 2
-          }).setOrigin(0.5);
-          this.elementHpBars.set(el.id, bar);
-        }
+        // Pas de barre HP visible sur les asteroides : l'info est dans le menu d'action au clic
       } else if (el.type === 'turret') {
         const highlight = this.add.circle(el.x, el.y, 60, 0xff4f6d, 0)
           .setStrokeStyle(2, 0xff4f6d, 0);
@@ -864,9 +851,6 @@ class MainScene extends Phaser.Scene {
           if (pointer.button !== 0) return;
           openActionMenu(el.id, pointer.event);
         });
-        this.add.text(el.x, el.y + 120, el.label, {
-          fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af'
-        }).setOrigin(0.5);
         this.baseElementId = el.id;
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
