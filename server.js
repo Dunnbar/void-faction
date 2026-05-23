@@ -1069,9 +1069,9 @@ setInterval(tickActions, ACTION_TICK_MS);
 
 // ============ Vagues (par Amiral en ligne) ============
 
-function rollWaveFor(rt) {
+function rollWaveFor(rt, force = false) {
   if (rt.currentWave && rt.currentWave.endsAt > Date.now()) return;
-  if (Math.random() > WAVE_PROBABILITY) return;
+  if (!force && Math.random() > WAVE_PROBABILITY) return;
 
   const count = ENEMY_MIN + Math.floor(Math.random() * (ENEMY_MAX - ENEMY_MIN + 1));
   const baseAngle = Math.random() * Math.PI * 2;
@@ -1140,12 +1140,72 @@ function rollWaveFor(rt) {
   }
 }
 
-function rollWaves() {
+// ============ Planning des vagues : horaires fixes (TZ Europe/Paris par defaut) ============
+// Jour : 5 vagues entre 9h et 22h, spawn aleatoire dans la fenetre d'1h qui suit chaque slot
+// Nuit : 1 seule vague entre 2h et 6h, spawn aleatoire dans la fenetre de 4h
+// On peut surclasser la TZ via env var GAME_TZ
+const GAME_TZ = process.env.GAME_TZ || 'Europe/Paris';
+const DAY_WAVE_SLOT_HOURS = [9, 12, 15, 18, 21];       // chaque slot ouvre une fenetre [h, h+1]
+const NIGHT_WAVE_WINDOW   = { startHour: 2, endHour: 6 };
+
+const tzPartsFmt = new Intl.DateTimeFormat('en-CA', {
+  timeZone: GAME_TZ,
+  year: 'numeric', month: '2-digit', day: '2-digit',
+  hour: '2-digit', minute: '2-digit', hour12: false
+});
+function tzNow() {
+  const now = new Date();
+  const parts = tzPartsFmt.formatToParts(now);
+  const get = (t) => parseInt(parts.find(p => p.type === t)?.value || '0', 10);
+  const year = get('year'), month = get('month'), day = get('day');
+  const hour = get('hour'), minute = get('minute');
+  return {
+    dateKey: `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
+    hour, minute,
+    minuteOfDay: hour * 60 + minute
+  };
+}
+
+function ensureWaveSchedule(rt, t) {
+  if (rt.waveScheduleDay === t.dateKey) return;
+  rt.waveScheduleDay = t.dateKey;
+  rt.waveFiredSlots = new Set();
+  rt.waveSchedule = new Map();
+  for (const h of DAY_WAVE_SLOT_HOURS) {
+    const scheduled = h * 60 + Math.floor(Math.random() * 60);
+    rt.waveSchedule.set(`day${h}`, { scheduled, slotEnd: h * 60 + 60 });
+  }
+  const nightStartMin = NIGHT_WAVE_WINDOW.startHour * 60;
+  const nightEndMin   = NIGHT_WAVE_WINDOW.endHour * 60;
+  const nightScheduled = nightStartMin + Math.floor(Math.random() * (nightEndMin - nightStartMin));
+  rt.waveSchedule.set('night', { scheduled: nightScheduled, slotEnd: nightEndMin });
+
+  const fmtMin = m => `${Math.floor(m/60)}h${String(m%60).padStart(2,'0')}`;
+  const summary = [...rt.waveSchedule.entries()].map(([k, v]) => `${k}@${fmtMin(v.scheduled)}`).join(', ');
+  console.log(`[amiral ${rt.username}] planning vagues ${t.dateKey} (${GAME_TZ}) : ${summary}`);
+}
+
+function tickWaveScheduler() {
+  const t = tzNow();
   for (const rt of amiralsRuntime.values()) {
-    if (rt.online) rollWaveFor(rt);
+    if (!rt.online) continue;
+    ensureWaveSchedule(rt, t);
+    for (const [slotKey, { scheduled, slotEnd }] of rt.waveSchedule.entries()) {
+      if (rt.waveFiredSlots.has(slotKey)) continue;
+      if (t.minuteOfDay >= scheduled && t.minuteOfDay < slotEnd) {
+        rt.waveFiredSlots.add(slotKey);
+        rollWaveFor(rt, true);
+      } else if (t.minuteOfDay >= slotEnd) {
+        // Slot dépassé (server eteint pendant la fenetre, ou Amiral pas en ligne au bon moment)
+        // → on marque comme "fired" pour ne pas declencher en retard ; il sera reschedule demain
+        rt.waveFiredSlots.add(slotKey);
+      }
+    }
   }
 }
-setInterval(rollWaves, WAVE_CHECK_INTERVAL_MS);
+setInterval(tickWaveScheduler, 60 * 1000);
+// Tick initial des le boot pour planifier la journee en cours
+tickWaveScheduler();
 
 // ============ Countdown naturel des groupes d'asteroides ============
 // Toutes les secondes : decrement chaque groupe non detruit de 1000 ms.
