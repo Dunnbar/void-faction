@@ -1141,7 +1141,7 @@ function rollWaveFor(rt, force = false) {
 }
 
 // ============ Planning des vagues : horaires fixes (TZ Europe/Paris par defaut) ============
-// Jour : 5 vagues entre 9h et 22h, spawn aleatoire dans la fenetre d'1h qui suit chaque slot
+// Jour : 5 vagues entre 9h et 23h, spawn aleatoire dans la fenetre de 2h qui suit chaque slot
 // Nuit : 1 seule vague entre 2h et 6h, spawn aleatoire dans la fenetre de 4h
 // On peut surclasser la TZ via env var GAME_TZ
 const GAME_TZ = process.env.GAME_TZ || 'Europe/Paris';
@@ -1171,9 +1171,11 @@ function ensureWaveSchedule(rt, t) {
   rt.waveScheduleDay = t.dateKey;
   rt.waveFiredSlots = new Set();
   rt.waveSchedule = new Map();
+  // Fenetre de 2h par slot (windows : [9h-11h], [12h-14h], [15h-17h], [18h-20h], [21h-23h])
+  const DAY_WINDOW_MIN = 120;
   for (const h of DAY_WAVE_SLOT_HOURS) {
-    const scheduled = h * 60 + Math.floor(Math.random() * 60);
-    rt.waveSchedule.set(`day${h}`, { scheduled, slotEnd: h * 60 + 60 });
+    const scheduled = h * 60 + Math.floor(Math.random() * DAY_WINDOW_MIN);
+    rt.waveSchedule.set(`day${h}`, { scheduled, slotEnd: h * 60 + DAY_WINDOW_MIN });
   }
   const nightStartMin = NIGHT_WAVE_WINDOW.startHour * 60;
   const nightEndMin   = NIGHT_WAVE_WINDOW.endHour * 60;
