@@ -142,6 +142,7 @@ function openActionMenu(elementId, anchor) {
     const st = elementStates.get(elementId);
     if (st) {
       const parts = [];
+      if (el.type === 'base' && typeof st.daysAlive === 'number') parts.push(`Jour <strong>${st.daysAlive}</strong>`);
       if (st.hp !== undefined && el.type !== 'asteroid') parts.push(`HP <strong>${st.hp}</strong>/${st.hpMax}`);
       if (st.puissance !== undefined) parts.push(`Puissance <strong>${st.puissance}</strong>`);
       if (st.range !== undefined) parts.push(`Visée <strong>${st.range}</strong>`);
@@ -848,11 +849,6 @@ class MainScene extends Phaser.Scene {
         this.add.text(el.x, el.y + 120, el.label, {
           fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af'
         }).setOrigin(0.5);
-        // Compteur "JOUR X" au-dessus du sprite
-        this.baseDaysLabel = this.add.text(el.x, el.y - 130, 'JOUR 0', {
-          fontFamily: 'Consolas, monospace', fontSize: '14px', color: '#9bd0ff',
-          stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
-        }).setOrigin(0.5);
         this.baseElementId = el.id;
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
@@ -892,13 +888,6 @@ class MainScene extends Phaser.Scene {
     }
     for (const el of serverElements) {
       if (el.type === 'turret') this.updateTurretAppearance(el.id);
-    }
-    // Met a jour le label "JOUR X" de la base
-    if (this.baseDaysLabel && this.baseElementId) {
-      const baseState = elementStates.get(this.baseElementId);
-      if (baseState && typeof baseState.daysAlive === 'number') {
-        this.baseDaysLabel.setText(`JOUR ${baseState.daysAlive}`);
-      }
     }
   }
 

@@ -74,20 +74,27 @@ const ELEMENT_TEMPLATES = (() => {
     const p = poly(a, TURRET_D);
     list.push({ id: `turret-${i + 1}`, type: 'turret', x: p.x, y: p.y, label: turretLabels[i], actions: TURRET_ACTIONS });
   });
-  const subtypes = ['materiaux', 'radius'];
+  // 4 materiaux groupes a droite (arc -3π/8 -> 3π/8), 4 radius groupes a gauche (arc 5π/8 -> 11π/8)
   const scales = [1.0, 1.1, 1.2, 0.9, 1.0, 0.95, 1.0, 1.05];
-  for (let i = 0; i < 8; i++) {
-    const angle = (i / 8) * Math.PI * 2;
-    const p = poly(angle, ASTEROID_D);
-    const subtype = subtypes[i % 2];
-    list.push({
-      id: `asteroid-${i}`,
-      type: 'asteroid',
-      subtype,
-      x: p.x, y: p.y, scale: scales[i],
-      label: `ASTÉROÏDE (${subtype})`,
-      actions: MINING_ACTION
-    });
+  const groupConfigs = [
+    { subtype: 'materiaux', startAngle: -3 * Math.PI / 8 },  // cote droit
+    { subtype: 'radius',    startAngle:  5 * Math.PI / 8 }   // cote gauche
+  ];
+  let idx = 0;
+  for (const cfg of groupConfigs) {
+    for (let k = 0; k < 4; k++) {
+      const angle = cfg.startAngle + k * (Math.PI / 4);
+      const p = poly(angle, ASTEROID_D);
+      list.push({
+        id: `asteroid-${idx}`,
+        type: 'asteroid',
+        subtype: cfg.subtype,
+        x: p.x, y: p.y, scale: scales[idx],
+        label: `ASTÉROÏDE (${cfg.subtype})`,
+        actions: MINING_ACTION
+      });
+      idx++;
+    }
   }
   return list;
 })();
