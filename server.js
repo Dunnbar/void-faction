@@ -724,15 +724,17 @@ io.on('connection', (socket) => {
 
   // 1) Amiral connecté -> son propre monde
   // 2) Joueur affilié -> monde de son Amiral
-  // 3) Visiteur anonyme / joueur non-affilié -> premier Amiral en ligne, sinon premier en DB
+  // 3) Visiteur anonyme / joueur non-affilié -> Amiral ALEATOIRE parmi les online (sinon parmi tous)
   let rtForInit = socket.data.amiralId
     ? amiralsRuntime.get(socket.data.amiralId)
     : (socket.data.userAmiralId ? amiralsRuntime.get(socket.data.userAmiralId) : null);
   if (!rtForInit) {
-    for (const rt of amiralsRuntime.values()) { if (rt.online) { rtForInit = rt; break; } }
+    const onlineList = [...amiralsRuntime.values()].filter(rt => rt.online);
+    if (onlineList.length > 0) rtForInit = onlineList[Math.floor(Math.random() * onlineList.length)];
   }
   if (!rtForInit) {
-    rtForInit = amiralsRuntime.values().next().value || null;
+    const allList = [...amiralsRuntime.values()];
+    if (allList.length > 0) rtForInit = allList[Math.floor(Math.random() * allList.length)];
   }
   if (!rtForInit) {
     rtForInit = getDemoRuntime();
