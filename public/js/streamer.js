@@ -603,9 +603,17 @@ class MainScene extends Phaser.Scene {
     this._userZoomFactor = 1.0; // démarre à la vue d'ensemble pour voir tout le périmètre
     this.applyFitZoom();
     this.scale.on('resize', () => this.onResize());
-    this.input.on('wheel', (_p, _g, _dx, deltaY) => {
+    this.input.on('wheel', (pointer, _g, _dx, deltaY) => {
+      // Coords monde du point sous le curseur AVANT le zoom
+      const worldX = pointer.worldX;
+      const worldY = pointer.worldY;
       this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
       this.applyFitZoom();
+      // Le follow doit etre detache pour qu'on puisse positionner la camera ailleurs que sur le vaisseau
+      const cam = this.cameras.main;
+      cam.stopFollow();
+      cam.scrollX = worldX - pointer.x / cam.zoom;
+      cam.scrollY = worldY - pointer.y / cam.zoom;
     });
 
     this.thrust = this.add.particles(0, 0, 'thrust', {

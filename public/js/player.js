@@ -808,9 +808,10 @@ class MainScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#04060a');
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
-    this.cameras.main.centerOn(WORLD_W / 2, WORLD_H / 2);
     this._userZoomFactor = 1.0;
     this.applyFitZoom();
+    // Centrage sur la base APRES le zoom (sinon le scroll calcule avec le mauvais zoom decale la vue)
+    this.cameras.main.centerOn(BASE_X, BASE_Y);
     this.scale.on('resize', () => this.onResize());
 
     // Background parallax (background_04 : fond fixe + planètes parallax)
@@ -847,9 +848,16 @@ class MainScene extends Phaser.Scene {
     this.waveWarnIcon = null;
 
     // Zoom à la molette (zoomFactor relatif au "fit" qui s'adapte aux resize)
-    this.input.on('wheel', (_pointer, _gos, _dx, deltaY) => {
+    this.input.on('wheel', (pointer, _gos, _dx, deltaY) => {
+      // Coords monde du point sous le curseur AVANT le zoom
+      const worldX = pointer.worldX;
+      const worldY = pointer.worldY;
       this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
       this.applyFitZoom();
+      // Re-ajuste le scroll pour que ce point reste sous le curseur apres le zoom
+      const cam = this.cameras.main;
+      cam.scrollX = worldX - pointer.x / cam.zoom;
+      cam.scrollY = worldY - pointer.y / cam.zoom;
     });
 
     // Drag-to-pan (style MOBA) : clic gauche maintenu + deplacement = panoramique de la carte
