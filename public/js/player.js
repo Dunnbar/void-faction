@@ -808,7 +808,8 @@ class MainScene extends Phaser.Scene {
   create() {
     this.cameras.main.setBackgroundColor('#04060a');
     this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
-    this._userZoomFactor = 1.0;
+    // Demarrage legerement zoome (1.5x du fit) pour laisser de la marge au drag-to-pan
+    this._userZoomFactor = 1.5;
     this.applyFitZoom();
     // Centrage sur la base APRES le zoom (sinon le scroll calcule avec le mauvais zoom decale la vue)
     this.cameras.main.centerOn(BASE_X, BASE_Y);
@@ -872,7 +873,9 @@ class MainScene extends Phaser.Scene {
       this._panState.moved = 0;
     });
     this.input.on('pointermove', (pointer) => {
-      if (!this._panState.active || !pointer.isDown || !pointer.leftButtonDown()) return;
+      // _panState.active passe a true sur pointerdown gauche et false sur pointerup
+      // -> pas besoin de revérifier les boutons ici (et `pointer.isDown` peut filtrer faussement)
+      if (!this._panState.active) return;
       const dx = pointer.x - this._panState.lastX;
       const dy = pointer.y - this._panState.lastY;
       this._panState.lastX = pointer.x;

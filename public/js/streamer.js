@@ -661,7 +661,7 @@ class MainScene extends Phaser.Scene {
       this._panState.moved = 0;
     });
     this.input.on('pointermove', (pointer) => {
-      if (!this._panState.active || !pointer.isDown || !pointer.leftButtonDown()) return;
+      if (!this._panState.active) return;
       const dx = pointer.x - this._panState.lastX;
       const dy = pointer.y - this._panState.lastY;
       this._panState.lastX = pointer.x;
