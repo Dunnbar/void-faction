@@ -98,7 +98,31 @@ const resourceEl = document.getElementById('resource');
 const userLineEl = document.getElementById('userLine');
 const userLabelEl = document.getElementById('userLabel');
 const authBtn = document.getElementById('authBtn');
+const soundBtn = document.getElementById('soundBtn');
 const historyListEl = document.getElementById('historyList');
+
+// ============ Toggle son (visuel + flag global, pas encore branche sur des audio) ============
+window.gameSoundMuted = localStorage.getItem('voidfaction:muted') === '1';
+function applySoundButtonState() {
+  if (!soundBtn) return;
+  if (window.gameSoundMuted) {
+    soundBtn.classList.remove('sound-on');
+    soundBtn.classList.add('sound-off');
+    soundBtn.title = 'Activer le son';
+  } else {
+    soundBtn.classList.remove('sound-off');
+    soundBtn.classList.add('sound-on');
+    soundBtn.title = 'Couper le son';
+  }
+}
+applySoundButtonState();
+if (soundBtn) {
+  soundBtn.addEventListener('click', () => {
+    window.gameSoundMuted = !window.gameSoundMuted;
+    localStorage.setItem('voidfaction:muted', window.gameSoundMuted ? '1' : '0');
+    applySoundButtonState();
+  });
+}
 const activeActionRow = document.getElementById('activeAction');
 const activeActionName = document.getElementById('activeActionName');
 const activeActionTimer = document.getElementById('activeActionTimer');
