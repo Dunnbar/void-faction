@@ -279,45 +279,66 @@
       border-radius: 4px; font-size: 12px; opacity: 0.7; pointer-events: none;
     }
 
-    /* Auth modal (inchangé) */
+    /* Auth modal : asset cover background en backdrop + cover box pour le panneau */
     #authModal {
-      position: fixed; inset: 0; background: rgba(0, 0, 0, 0.85);
+      position: fixed; inset: 0;
+      background: rgba(0, 0, 0, 0.55) url('/assets/PNG/User%20interfaces/landing%20Screen/cover%20background.png') no-repeat center;
+      background-size: cover; background-blend-mode: darken;
       display: flex; align-items: center; justify-content: center; z-index: 200;
     }
     #authModal.hidden { display: none; }
     .modal-box {
-      background: #0a1424; border: 1px solid var(--c-frame); border-radius: 6px;
-      box-shadow: 0 0 32px rgba(74, 175, 255, 0.4);
-      padding: 24px 28px; min-width: 320px; position: relative;
+      position: relative;
+      width: 480px; height: 460px;
+      background: url('/assets/PNG/User%20interfaces/landing%20Screen/cover%20box%20.png') no-repeat center;
+      background-size: 100% 100%;
+      padding: 70px 70px 80px 70px;
+      box-sizing: border-box;
+      display: flex; flex-direction: column;
     }
-    .modal-box h2 { margin: 0 0 6px 0; color: var(--c-frame); font-size: 16px; }
-    .modal-box .subtitle { margin: 0 0 16px 0; font-size: 12px; opacity: 0.7; }
-    .tabs { display: flex; gap: 2px; margin-bottom: 16px; border-bottom: 1px solid #1a3050; }
+    .modal-box h2 { margin: 0 0 4px 0; color: var(--c-frame); font-size: 16px; text-align: center; }
+    .modal-box .subtitle { margin: 0 0 12px 0; font-size: 11px; opacity: 0.75; text-align: center; }
+    .tabs { display: flex; gap: 2px; margin-bottom: 12px; border-bottom: 1px solid rgba(74, 175, 255, 0.3); }
     .tab {
       flex: 1; background: transparent; border: 0; color: #aaa;
-      font-family: inherit; font-size: 13px; padding: 8px; cursor: pointer;
+      font-family: inherit; font-size: 12px; padding: 6px; cursor: pointer;
       border-bottom: 2px solid transparent;
     }
     .tab.active { color: var(--c-frame); border-bottom-color: var(--c-frame); }
-    .modal-box form { display: flex; flex-direction: column; gap: 10px; }
+    .modal-box form { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
     .modal-box form.hidden { display: none; }
-    .modal-box input {
-      background: #000; color: #fff; border: 1px solid var(--c-frame); padding: 8px 10px;
-      font-family: monospace; font-size: 13px; border-radius: 3px;
+    .modal-box input,
+    .modal-box select {
+      background: rgba(0, 0, 0, 0.65); color: #fff; border: 1px solid var(--c-frame); padding: 6px 9px;
+      font-family: monospace; font-size: 12px; border-radius: 3px;
     }
-    .modal-box input:focus { outline: none; border-color: #6cf; }
-    .modal-box button[type="submit"] {
-      background: var(--c-frame); color: #000; border: 0; padding: 8px 16px;
-      font-family: monospace; cursor: pointer; font-weight: bold; border-radius: 3px;
-      margin-top: 4px;
+    .modal-box input:focus,
+    .modal-box select:focus { outline: none; border-color: #6cf; }
+    /* Bouton image start game btn pour les submit (Connexion / Inscription / Déconnexion) */
+    .modal-box button[type="submit"],
+    .modal-box .img-btn {
+      align-self: center;
+      width: 220px; height: 110px;
+      background: url('/assets/PNG/User%20interfaces/landing%20Screen/start%20game%20btn.png') no-repeat center;
+      background-size: contain;
+      border: 0; padding: 0 0 28px 0;
+      color: #fff; font-family: 'Consolas', monospace; font-weight: bold;
+      font-size: 13px; letter-spacing: 1px; text-transform: uppercase;
+      text-shadow: 0 1px 2px rgba(0,0,0,0.85);
+      cursor: pointer; margin-top: 4px;
     }
-    .modal-box button[type="submit"]:hover { background: #6cf; }
-    #authError { color: #f44; font-size: 12px; min-height: 16px; margin: 0; }
+    .modal-box button[type="submit"]:active,
+    .modal-box .img-btn:active {
+      background-image: url('/assets/PNG/User%20interfaces/landing%20Screen/start%20game%20btn%20pressed.png');
+      transform: translateY(1px);
+    }
+    #authError { color: #ff8a8a; font-size: 11px; min-height: 14px; margin: 4px 0 0 0; text-align: center; }
     #authClose {
-      position: absolute; top: 8px; right: 12px; background: transparent;
-      border: 0; color: #888; font-size: 20px; cursor: pointer;
+      position: absolute; top: 18px; right: 22px; background: transparent;
+      border: 0; color: #fff; font-size: 22px; cursor: pointer;
+      text-shadow: 0 1px 3px rgba(0,0,0,0.9); z-index: 1;
     }
-    #authClose:hover { color: #fff; }
+    #authClose:hover { color: #6cf; }
 
     /* Menu d'action (popup contextuel sur clic d'un élément) */
     #actionMenu {
