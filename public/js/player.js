@@ -81,6 +81,7 @@ let socket = null;
 let authenticated = false;
 let knownBuildTime = null;
 let amiralDisplayName = 'AMIRAL';  // pseudo affiche sous le vaisseau (rempli par init)
+let amiralIsOnline = true;  // true si l'Amiral observé est connecté (sinon vaisseau semi-transparent)
 
 function triggerVersionReload() {
   console.log('%c[VoidFaction] Nouvelle version détectée — rechargement…', 'color:#f80; font-weight:bold; font-size:14px');
@@ -614,10 +615,13 @@ function connectSocket() {
     renderFactionResources();
     renderHistory();
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
+    amiralIsOnline = data.watchedAmiral?.online !== false;
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) {
       if (scene.shipLabel) scene.shipLabel.setText(amiralDisplayName);
       scene.setShipState(data.ship);
+      if (scene.ship) scene.ship.setAlpha(amiralIsOnline ? 1 : 0.45);
+      if (scene.shipLabel) scene.shipLabel.setAlpha(amiralIsOnline ? 1 : 0.45);
       scene.setupElements(serverElements);
       scene.applyAllElementStates();
       scene.drawBasePerimeter();
@@ -728,8 +732,17 @@ function connectSocket() {
   });
 
   // Liste des Amiraux connectés met à jour le dropdown si la modal est ouverte
-  socket.on('amirals:update', () => {
+  socket.on('amirals:update', (data) => {
     if (authModal && !authModal.classList.contains('hidden')) refreshAmiralSelect();
+    // Vaisseau semi-transparent si l'Amiral observe est offline
+    const onlineList = Array.isArray(data?.amiraux) ? data.amiraux : [];
+    const isOnline = onlineList.some(a => a.name === amiralDisplayName);
+    amiralIsOnline = isOnline;
+    const scene = game.scene.getScene('main');
+    if (scene && scene.scene.isActive()) {
+      if (scene.ship) scene.ship.setAlpha(isOnline ? 1 : 0.45);
+      if (scene.shipLabel) scene.shipLabel.setAlpha(isOnline ? 1 : 0.45);
+    }
   });
 }
 
@@ -842,6 +855,9 @@ class MainScene extends Phaser.Scene {
       fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#4af',
       stroke: '#000', strokeThickness: 3, fontStyle: 'bold'
     }).setOrigin(0.5).setDepth(11);
+    // Si l'Amiral observé est offline, on grise le vaisseau pour le signaler
+    this.ship.setAlpha(amiralIsOnline ? 1 : 0.45);
+    this.shipLabel.setAlpha(amiralIsOnline ? 1 : 0.45);
 
     // Cercle de "grande base" (rayon visuel autour du centre)
     this.drawBasePerimeter();

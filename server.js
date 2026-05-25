@@ -776,7 +776,7 @@ io.on('connection', (socket) => {
     ship: rtForInit ? rtForInit.ship : null,
     user: socket.data.userId ? { username: socket.data.username } : null,
     amiral: socket.data.amiralId ? { username: socket.data.amiralUsername, gridX: rtForInit?.gridX, gridY: rtForInit?.gridY, isOwn: true } : null,
-    watchedAmiral: rtForInit && rtForInit.username ? { username: rtForInit.username, gridX: rtForInit.gridX, gridY: rtForInit.gridY } : null,
+    watchedAmiral: rtForInit && rtForInit.username ? { username: rtForInit.username, gridX: rtForInit.gridX, gridY: rtForInit.gridY, online: !!rtForInit.online } : null,
     history: rtForInit ? recentHistoryForAmiral(rtForInit.id) : [],
     elements: rtForInit ? rtForInit.elements : [],
     elementStates: rtForInit ? allElementStates(rtForInit) : [],
