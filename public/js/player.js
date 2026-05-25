@@ -443,15 +443,17 @@ async function refreshAmiralSelect() {
     const amiraux = Array.isArray(body?.amiraux) ? body.amiraux : [];
     sel.innerHTML = '';
     if (amiraux.length === 0) {
-      sel.innerHTML = '<option value="">— Aucun Amiral en ligne —</option>';
+      sel.innerHTML = '<option value="">— Aucun Amiral inscrit —</option>';
       sel.disabled = true;
       if (warn) warn.classList.remove('hidden');
       if (submitBtn) submitBtn.disabled = true;
     } else {
-      for (const a of amiraux) {
+      // Online d'abord, offline ensuite ; chaque entree taggee
+      const sorted = [...amiraux].sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0));
+      for (const a of sorted) {
         const opt = document.createElement('option');
         opt.value = a.name;
-        opt.textContent = a.name;
+        opt.textContent = a.online ? `${a.name} (en ligne)` : `${a.name} (hors-ligne)`;
         sel.appendChild(opt);
       }
       sel.disabled = false;

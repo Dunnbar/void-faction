@@ -522,6 +522,15 @@ function getOnlineAmiralsList() {
   }
   return out;
 }
+// Liste exhaustive (online + offline) pour le dropdown de signup
+function getAllAmiralsList() {
+  const out = [];
+  for (const rt of amiralsRuntime.values()) {
+    if (rt.id === 0) continue; // exclure le runtime demo
+    out.push({ name: rt.username, online: !!rt.online });
+  }
+  return out;
+}
 
 // Allocation de case en spirale : cherche la plus proche du centre non utilisée
 function nextFreeGridCell() {
@@ -563,7 +572,9 @@ app.use(express.static(path.join(__dirname, 'public'), {
 }));
 
 app.get('/api/amiraux', (_req, res) => {
-  res.json({ amiraux: getOnlineAmiralsList() });
+  // Renvoie TOUS les amiraux (online + offline) pour permettre l'inscription joueur
+  // meme si l'Amiral n'est pas connecte au moment du signup
+  res.json({ amiraux: getAllAmiralsList() });
 });
 
 app.post('/api/amiral/signup', (req, res) => {
@@ -628,8 +639,9 @@ app.post('/api/signup', (req, res) => {
   }
   const amiral = stmtGetAmiralByName.get(amiralName);
   if (!amiral) return res.status(400).json({ ok: false, error: 'Amiral inconnu' });
-  const rt = amiralsRuntime.get(amiral.id);
-  if (!rt || !rt.online) return res.status(409).json({ ok: false, error: 'Cet Amiral n\'est pas en ligne' });
+  // L'Amiral peut etre offline au moment du signup ; les actions seront juste bloquees
+  // tant qu'il ne se connecte pas (verif faite dans action:activate)
+  getOrCreateAmiralRuntime(amiral); // s'assure que le runtime existe
   const existing = stmtGetUserByName.get(username);
   if (existing) return res.status(409).json({ ok: false, error: 'Ce pseudo est déjà pris' });
   try {
