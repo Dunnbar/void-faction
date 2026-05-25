@@ -518,6 +518,7 @@ class MainScene extends Phaser.Scene {
     this.load.image('ship', SHIP_ASSET);
     this.load.image('mothership-base', '/assets/Spaceships/PNG/enemy_mothership.png');
     this.load.spritesheet('shield', '/assets/Weapons/PNG/shield_frames.png', { frameWidth: 280, frameHeight: 280 });
+    this.load.spritesheet('rocket-flame', '/assets/Weapons/PNG/rocket_flame_animation.png', { frameWidth: 12, frameHeight: 46 });
     for (let i = 0; i < 10; i++) {
       const n = String(i).padStart(3, '0');
       this.load.image(`ship-fr-${n}`, `/assets/PNG/Ship_01/Exhaust/Exhaust_1_2_${n}.png`);
@@ -583,6 +584,13 @@ class MainScene extends Phaser.Scene {
     this.ship.play('ship-thrust');
     this.ship._hp = 100;
     this.ship._hpMax = 100;
+
+    // Flamme de reacteur attachee a l'arriere du vaisseau (sprite anime 7 frames)
+    this.shipFlame = this.add.sprite(this.ship.x, this.ship.y, 'rocket-flame', 0)
+      .setScale(0.8)
+      .setOrigin(0.5, 0) // top de la flamme = point d'ancrage (la flamme tombe vers le bas)
+      .setDepth(this.ship.depth - 1);
+    this.shipFlame.play('rocket-flame-loop');
     this.shipHpBar = this.makeHpBar(this.ship.x, this.ship.y - 40, 60, 0x4fdb73);
     this.shipHpBar.setDepth(11);
     this.ship.setDamping(true);
@@ -731,6 +739,13 @@ class MainScene extends Phaser.Scene {
       Array.from({ length: count }, (_, i) => ({ key: `${prefix}${String(i).padStart(pad || 3, '0')}` }));
     if (!this.anims.exists('ship-thrust')) {
       this.anims.create({ key: 'ship-thrust', frames: mkFrames('ship-fr-', 10, 3), frameRate: 24, repeat: -1 });
+    }
+    if (!this.anims.exists('rocket-flame-loop')) {
+      this.anims.create({
+        key: 'rocket-flame-loop',
+        frames: this.anims.generateFrameNumbers('rocket-flame', { start: 0, end: 6 }),
+        frameRate: 18, repeat: -1
+      });
     }
     for (const lvl of ENEMY_LEVELS) {
       const thr = `enemy${lvl}-thrust`;
@@ -1307,6 +1322,16 @@ class MainScene extends Phaser.Scene {
     if (this.shipHpBar) {
       this.shipHpBar.x = this.ship.x;
       this.shipHpBar.y = this.ship.y - 40;
+    }
+    // Sync de la flamme de reacteur : positionnee a l'arriere du vaisseau, alignee avec sa rotation
+    if (this.shipFlame) {
+      // Le sprite-ship pointe selon ship.rotation + SHIP_SPRITE_OFFSET (compensation texture).
+      // L'arriere du vaisseau est dans la direction opposee a son "forward".
+      const rearAngle = this.ship.rotation + Math.PI / 2; // direction "vers l'arriere" du sprite ship
+      const offset = 18; // distance entre le centre du vaisseau et le point d'attache de la flamme
+      this.shipFlame.x = this.ship.x + Math.cos(rearAngle) * offset;
+      this.shipFlame.y = this.ship.y + Math.sin(rearAngle) * offset;
+      this.shipFlame.rotation = rearAngle - Math.PI / 2; // la flamme natural points down (+Y)
     }
 
     // Déplacement vers la destination : contrôleur proportionnel.
