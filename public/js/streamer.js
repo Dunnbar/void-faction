@@ -872,15 +872,22 @@ class MainScene extends Phaser.Scene {
           if (this._panState) this._panState.pendingMenu = { id: el.id, event: pointer.event };
         });
         sprite._baseRotation = baseRot;
-        // Patrouille visuelle : rotation entre 0 et 45° (π/4) depuis l'angle d'origine,
-        // duree 5s par demi-cycle (full yoyo = 10s)
+        // Patrouille discrete : toutes les 5s, tire un angle aleatoire entre baseRot et baseRot + π/4 ;
+        // la tourelle pivote vers cet angle (transition courte) puis y reste jusqu'au prochain tirage.
         const PATROL_AMP = Math.PI / 4;
-        sprite._patrolTween = this.tweens.add({
-          targets: sprite,
-          rotation: { from: baseRot, to: baseRot + PATROL_AMP },
-          duration: 5000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
-          delay: Math.floor(Math.random() * 2000)
-        });
+        const pickNewPatrolTarget = () => {
+          if (!sprite.active || sprite._targetingEnemy) return;
+          const target = baseRot + Math.random() * PATROL_AMP;
+          if (sprite._patrolTween) sprite._patrolTween.stop();
+          sprite._patrolTween = this.tweens.add({
+            targets: sprite,
+            rotation: target,
+            duration: 800,
+            ease: 'Sine.easeInOut'
+          });
+        };
+        pickNewPatrolTarget();
+        sprite._patrolEvent = this.time.addEvent({ delay: 5000, loop: true, callback: pickNewPatrolTarget });
         sprite._turretId = el.id;
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
@@ -950,7 +957,9 @@ class MainScene extends Phaser.Scene {
       const range = turretRangePx(state);
       const target = this.findNearestEnemyInRange(sprite.x, sprite.y, range);
       if (target) {
-        if (sprite._patrolTween && !sprite._patrolTween.paused) sprite._patrolTween.pause();
+        // Stoppe la patrouille pour ne pas se battre avec le tween
+        if (sprite._patrolTween) sprite._patrolTween.stop();
+        sprite._targetingEnemy = true;
         const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, target.x, target.y);
         sprite.rotation = a + Math.PI / 2;
         if (!sprite._lastShotAt) sprite._lastShotAt = 0;
@@ -963,7 +972,8 @@ class MainScene extends Phaser.Scene {
           sprite._lastShotAt = now;
         }
       } else {
-        if (sprite._patrolTween && sprite._patrolTween.paused) sprite._patrolTween.resume();
+        // Pas d'ennemi : la patrouille reprend au prochain tick du timer (max 5s)
+        sprite._targetingEnemy = false;
       }
     }
   }
