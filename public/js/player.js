@@ -1167,15 +1167,8 @@ class MainScene extends Phaser.Scene {
           .setRotation(Math.random() * Math.PI * 2)
           .setTint(tint)
           .setInteractive({ useHandCursor: true });
-        // Rotation continue tres lente (~110-200s par cycle) avec NEAREST filter pour
-        // attenuer la vibration due au non-centrage des frames
-        const dir = (i % 2 === 0) ? 1 : -1;
-        this.tweens.add({
-          targets: sprite,
-          rotation: sprite.rotation + dir * Math.PI * 2,
-          duration: 110000 + (i * 12000),
-          repeat: -1
-        });
+        // Asteroides statiques : rotation aleatoire fixee a l'init, pas d'animation
+
         sprite.on('pointerdown', (pointer) => {
           if (pointer.button !== 0) return;
           // Defer : on memorise l'intent ; le menu s'ouvrira au pointerup si pas de drag
@@ -1196,13 +1189,13 @@ class MainScene extends Phaser.Scene {
           .setRotation(baseRot)
           .setInteractive({ useHandCursor: true });
         sprite._baseRotation = baseRot;
-        // Patrouille : oscillation lente +/- 9° autour de l'orientation outward
-        const amp = 0.15;
-        const dur = 7000 + Math.floor(Math.random() * 4000);
+        // Patrouille visuelle : rotation entre 0 et 45° (π/4) depuis l'angle d'origine,
+        // duree 5s par demi-cycle (full yoyo = 10s)
+        const PATROL_AMP = Math.PI / 4;
         sprite._patrolTween = this.tweens.add({
           targets: sprite,
-          rotation: { from: baseRot - amp, to: baseRot + amp },
-          duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+          rotation: { from: baseRot, to: baseRot + PATROL_AMP },
+          duration: 5000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
           delay: Math.floor(Math.random() * 2000)
         });
         sprite._turretId = el.id;

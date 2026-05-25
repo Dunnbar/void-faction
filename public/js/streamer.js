@@ -852,13 +852,7 @@ class MainScene extends Phaser.Scene {
           // Defer : on memorise l'intent ; le menu s'ouvrira au pointerup si pas de drag
           if (this._panState) this._panState.pendingMenu = { id: el.id, event: pointer.event };
         });
-        const dir = (i % 2 === 0) ? 1 : -1;
-        this.tweens.add({
-          targets: sprite,
-          rotation: sprite.rotation + dir * Math.PI * 2,
-          duration: 110000 + (i * 12000),
-          repeat: -1
-        });
+        // Asteroides statiques : rotation aleatoire fixee a l'init, pas d'animation
         sprite._asteroidVariant = variant;
         this.elementSprites.set(el.id, sprite);
         this.elementHighlights.set(el.id, highlight);
@@ -878,12 +872,13 @@ class MainScene extends Phaser.Scene {
           if (this._panState) this._panState.pendingMenu = { id: el.id, event: pointer.event };
         });
         sprite._baseRotation = baseRot;
-        const amp = 0.15;
-        const dur = 7000 + Math.floor(Math.random() * 4000);
+        // Patrouille visuelle : rotation entre 0 et 45° (π/4) depuis l'angle d'origine,
+        // duree 5s par demi-cycle (full yoyo = 10s)
+        const PATROL_AMP = Math.PI / 4;
         sprite._patrolTween = this.tweens.add({
           targets: sprite,
-          rotation: { from: baseRot - amp, to: baseRot + amp },
-          duration: dur, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
+          rotation: { from: baseRot, to: baseRot + PATROL_AMP },
+          duration: 5000, yoyo: true, repeat: -1, ease: 'Sine.easeInOut',
           delay: Math.floor(Math.random() * 2000)
         });
         sprite._turretId = el.id;
