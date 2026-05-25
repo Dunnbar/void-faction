@@ -152,14 +152,17 @@ function getElement(id) {
 // ============ Rendu HUD ============
 
 function updateUserLine() {
+  const authBtnLabel = document.getElementById('authBtnLabel');
   if (authenticated && username) {
     userLabelEl.textContent = username;
     userLineEl.classList.remove('anon');
-    authBtn.textContent = 'Déconnexion';
+    if (authBtnLabel) authBtnLabel.textContent = username;
+    authBtn.title = `Connecté en ${username} — clic pour déconnexion`;
   } else {
     userLabelEl.textContent = 'Visiteur';
     userLineEl.classList.add('anon');
-    authBtn.textContent = 'Se connecter';
+    if (authBtnLabel) authBtnLabel.textContent = 'Connexion';
+    authBtn.title = 'Cliquer pour se connecter';
   }
 }
 
@@ -305,24 +308,14 @@ function refreshActiveActionTimer() {
   activeActionTimer.textContent = remaining > 0 ? `⏳ ${formatDuration(remaining)} restant` : 'Expiration imminente…';
 }
 
-function renderHistory(freshTimestamp) {
-  if (!history.length) {
-    historyListEl.innerHTML = '<li class="empty">Aucune action pour le moment</li>';
-    return;
-  }
-  historyListEl.innerHTML = history.map((h) => {
-    const fresh = (h.at === freshTimestamp) ? ' class="fresh"' : '';
-    const el = getElement(h.element_id);
-    const actionDef = el?.actions.find(a => a.id === h.action_id);
-    const label = actionDef ? actionDef.label : h.action_id;
-    const target = el ? el.label : h.element_id;
-    return `<li${fresh}><span class="hu">${escapeHtml(h.username)}</span><span class="hev"><span class="cat-tag ${h.category}">${h.category[0]}</span> ${escapeHtml(label)} sur ${escapeHtml(target)}</span><span class="ht">${formatAgo(h.at)}</span></li>`;
-  }).join('');
+function renderHistory(_freshTimestamp) {
+  // Le panneau d'activite recente est retire de l'UI pour l'instant ; on garde la fonction
+  // comme no-op pour que les call sites existants ne plantent pas.
+  if (!historyListEl) return;
 }
 
 setInterval(() => {
   refreshActiveActionTimer();
-  if (history.length) renderHistory();
 }, 1000);
 
 // ============ Menu d'action ============

@@ -141,31 +141,28 @@
     .bar.DEFENSIF   .head .name, .bar.DEFENSIF   .head .icon  { color: var(--c-defensif); }
     .bar.UTILITAIRE .head .name, .bar.UTILITAIRE .head .icon  { color: var(--c-utilitaire); }
 
-    /* Historique d'activité (droite) */
-    #historyPanel {
-      position: fixed; top: 12px; right: 12px; z-index: 10;
-      background: rgba(0, 20, 40, 0.92); border: 1px solid var(--c-frame); border-radius: 4px;
-      box-shadow: 0 0 12px rgba(74, 175, 255, 0.3);
-      font-size: 12px; min-width: 260px; max-width: 320px;
-      pointer-events: none;
+    /* Bouton profil / connexion (image asset, top-right) */
+    .auth-image-btn {
+      position: fixed; top: 14px; right: 14px; z-index: 20;
+      width: 130px; height: 132px; padding: 0; border: 0;
+      background: url('/assets/PNG/User%20interfaces/landing%20Screen/guest%20btn.png') no-repeat center;
+      background-size: contain;
+      cursor: pointer;
+      display: flex; align-items: flex-end; justify-content: center;
+      filter: drop-shadow(0 0 6px rgba(74, 175, 255, 0.5));
+      transition: transform 0.05s ease;
     }
-    #historyPanel .history-header {
-      color: var(--c-frame); padding: 6px 10px; border-bottom: 1px solid #1a3050;
-      font-size: 11px; letter-spacing: 1px;
+    .auth-image-btn:hover { filter: drop-shadow(0 0 10px rgba(74, 175, 255, 0.8)); }
+    .auth-image-btn:active,
+    .auth-image-btn.pressed {
+      background-image: url('/assets/PNG/User%20interfaces/landing%20Screen/guest%20btn%20pressed.png');
+      transform: translateY(1px);
     }
-    #historyList { list-style: none; margin: 0; padding: 4px 0; max-height: 280px; overflow: hidden; }
-    #historyList li {
-      display: flex; align-items: baseline; gap: 8px; padding: 3px 10px;
-    }
-    #historyList li:nth-child(odd) { background: rgba(74, 175, 255, 0.05); }
-    #historyList .hu { color: #fff; font-weight: bold; min-width: 70px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    #historyList .hev { color: #ccc; flex: 1; }
-    #historyList .ht { color: var(--c-frame); opacity: 0.8; font-size: 10px; white-space: nowrap; }
-    #historyList .empty { color: #888; padding: 8px 10px; font-style: italic; }
-    #historyList li.fresh { animation: flashIn 0.6s ease-out; }
-    @keyframes flashIn {
-      from { background: rgba(74, 255, 248, 0.4); }
-      to { background: rgba(74, 175, 255, 0.05); }
+    .auth-image-btn .auth-label {
+      font-family: 'Consolas', monospace; font-size: 12px; font-weight: bold;
+      color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.9);
+      padding-bottom: 14px; pointer-events: none;
+      max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
     }
 
     /* Commandant qui parle pendant les vagues */
@@ -400,7 +397,6 @@
   <div id="hud">
     <div class="line" id="userLine">
       <span><svg class="icon"><use href="#ic-user"/></svg> <strong id="userLabel">Visiteur</strong></span>
-      <button id="authBtn">Se connecter</button>
     </div>
     <div class="line resources-line">
       <span class="res-cell"><svg class="icon"><use href="#ic-materiaux"/></svg> Matériaux : <strong id="factionMateriaux">0</strong></span>
@@ -420,10 +416,10 @@
     </div>
   </div>
 
-  <div id="historyPanel">
-    <div class="history-header">▸ ACTIVITÉ RÉCENTE</div>
-    <ul id="historyList"><li class="empty">Connexion…</li></ul>
-  </div>
+  <!-- Bouton profil / connexion (top-right) -->
+  <button id="authBtn" class="auth-image-btn" type="button" title="Connexion / Profil">
+    <span class="auth-label" id="authBtnLabel">Connexion</span>
+  </button>
 
   <div id="waveBanner" class="hidden">
     <svg class="icon"><use href="#ic-pulse"/></svg>
