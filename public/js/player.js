@@ -800,6 +800,7 @@ class MainScene extends Phaser.Scene {
   preload() {
     this.load.image('ship', SHIP_ASSET);
     this.load.image('mothership-base', '/assets/Spaceships/PNG/enemy_mothership.png');
+    this.load.spritesheet('shield', '/assets/Weapons/PNG/shield_frames.png', { frameWidth: 280, frameHeight: 280 });
     // Frames d'exhaust pour le vaisseau Amiral (Ship_01, variant 2 = grosse flamme)
     for (let i = 0; i < 10; i++) {
       const n = String(i).padStart(3, '0');
@@ -1125,30 +1126,22 @@ class MainScene extends Phaser.Scene {
   drawBasePerimeter() {
     if (this.basePerimeterGfx) this.basePerimeterGfx.destroy();
     if (this.basePerimeterHalo) this.basePerimeterHalo.destroy();
-    // Halo intérieur diffus (sous tous les assets, juste au-dessus du parallax)
-    const halo = this.add.graphics().setDepth(-60);
-    halo.fillStyle(0x4af, 0.07);
-    halo.fillCircle(BASE_X, BASE_Y, BASE_PERIMETER);
-    halo.fillStyle(0x4af, 0.04);
-    halo.fillCircle(BASE_X, BASE_Y, BASE_PERIMETER * 1.05);
-    this.basePerimeterHalo = halo;
-    // Cercle stroke + dashed
-    const g = this.add.graphics().setDepth(-50);
-    g.lineStyle(4, 0x4af, 0.7);
-    g.strokeCircle(BASE_X, BASE_Y, BASE_PERIMETER);
-    g.lineStyle(1.5, 0x4af, 0.35);
-    for (let i = 0; i < 24; i++) {
-      const a0 = (i / 24) * Math.PI * 2;
-      const a1 = a0 + Math.PI / 36;
-      g.beginPath();
-      g.arc(BASE_X, BASE_Y, BASE_PERIMETER - 22, a0, a1);
-      g.strokePath();
+    if (this.shieldSprite) this.shieldSprite.destroy();
+    if (!this.anims.exists('shield-pulse')) {
+      this.anims.create({
+        key: 'shield-pulse',
+        frames: this.anims.generateFrameNumbers('shield', { start: 0, end: 5 }),
+        frameRate: 8, repeat: -1
+      });
     }
-    this.basePerimeterGfx = g;
-    this.tweens.add({
-      targets: g, alpha: { from: 0.85, to: 1.0 },
-      yoyo: true, repeat: -1, duration: 3000, ease: 'Sine.easeInOut'
-    });
+    const SHIELD_FRAME_SIZE = 280;
+    const targetDiameter = BASE_PERIMETER * 2;
+    const scale = targetDiameter / SHIELD_FRAME_SIZE;
+    this.shieldSprite = this.add.sprite(BASE_X, BASE_Y, 'shield', 0)
+      .setScale(scale)
+      .setDepth(-50)
+      .setAlpha(0.85);
+    this.shieldSprite.play('shield-pulse');
   }
 
   setupElements(elements) {
