@@ -61,7 +61,7 @@ function poly(angleRad, dist) {
   return { x: Math.round(BASE_X + Math.cos(angleRad) * dist), y: Math.round(BASE_Y + Math.sin(angleRad) * dist) };
 }
 const TURRET_D = 260;
-const ASTEROID_D = 470;
+const ASTEROID_D = 700;
 const ASTEROID_VARIANT_COUNT = 15;
 
 const ELEMENT_TEMPLATES = (() => {
