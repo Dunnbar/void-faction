@@ -56,6 +56,7 @@ const ASTEROID_HP_MAX     = 240;  // legacy, gardé pour eventuel fallback
 const TURRET_HP_MAX       = 200;
 const BASE_HP_MAX         = 400;
 const BASE_ESSENCE_MAX    = 400;
+const BASE_HIT_DMG        = 3;    // degats par tir ennemi atteignant la base (tempo lent)
 
 function poly(angleRad, dist) {
   return { x: Math.round(BASE_X + Math.cos(angleRad) * dist), y: Math.round(BASE_Y + Math.sin(angleRad) * dist) };
@@ -859,6 +860,15 @@ io.on('connection', (socket) => {
     rt.ship.y = Math.max(0, Math.min(WORLD_H, data.y));
     rt.ship.rotation = data.rotation;
     socket.broadcast.to(amiralRoom(rt.id)).emit('ship', rt.ship);
+  });
+
+  // Tir ennemi atteignant la base : seul le client Amiral (streameur) fait autorite.
+  // Le serveur applique un degat fixe (le client ne dicte pas la valeur).
+  socket.on('streamer:base_hit', () => {
+    if (!socket.data.amiralId) return;
+    const rt = amiralsRuntime.get(socket.data.amiralId);
+    if (!rt) return;
+    applyBaseDamage(rt, BASE_HIT_DMG);
   });
 
   socket.on('disconnect', () => {

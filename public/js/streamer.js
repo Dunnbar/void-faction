@@ -390,7 +390,8 @@ function wireSocketEvents() {
   socket.on('elements:update', (data) => {
     lastActiveElements = data.activeElements || [];
     if (Array.isArray(data.states)) {
-      elementStates = new Map(data.states.map(s => [s.id, s]));
+      // Fusion (pas de remplacement) : les broadcasts partiels (base, asteroides) ne doivent pas s'ecraser
+      for (const s of data.states) elementStates.set(s.id, s);
     }
     if (data.faction) factionResources = data.faction;
     const scene = game?.scene.getScene('main');
@@ -1080,13 +1081,12 @@ class MainScene extends Phaser.Scene {
         sprite.y = cy + Math.sin(sprite._orbitAngle) * orbitR;
         const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2);
         sprite.rotation = tangent + Math.PI / 2;
-        // Tir sur la cible hostile (jamais sur la base)
-        if (mode !== 'base') {
-          if (!sprite._lastFireAt) sprite._lastFireAt = now - Math.random() * ENEMY_FIRE_MS;
-          if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) {
-            this.fireEnemyShot(sprite, cx, cy);
-            sprite._lastFireAt = now;
-          }
+        // Tir sur la cible (base incluse : les degats base sont appliques cote serveur)
+        if (!sprite._lastFireAt) sprite._lastFireAt = now - Math.random() * ENEMY_FIRE_MS;
+        if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) {
+          this.fireEnemyShot(sprite, cx, cy);
+          sprite._lastFireAt = now;
+          if (mode === 'base') socket.emit('streamer:base_hit');
         }
       }
 
