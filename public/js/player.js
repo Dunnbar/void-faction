@@ -16,6 +16,12 @@ const ENEMY_ASSETS = {
   1: '/assets/PNG/Ship_02/Ship_LVL_1.png'
 };
 const ENEMY_SCALE = 0.045; // ennemis plus discrets
+// IA ennemie : cap sur la base par defaut, engagement des cibles croisees dans la range.
+const ENEMY_SPEED_PX     = 40;   // px/s (aligne sur ENEMY_SPEED serveur)
+const ENEMY_DETECT_RANGE = 340;  // rayon de detection d'une cible a engager
+const ENEMY_ORBIT_R_MIN  = 90;
+const ENEMY_ORBIT_R_MAX  = 160;
+const ENEMY_FIRE_MS      = 5000;
 // Tourelles : niveau visuel derive de la puissance (palier de 10)
 const GUN_LEVELS = 10;
 const GUN_SCALE = 0.55;
@@ -969,20 +975,93 @@ class MainScene extends Phaser.Scene {
       }
     }
     this.updateTurretTargeting();
-    this.updateEnemyOrbits(delta);
+    this.updateEnemies(delta);
   }
 
-  updateEnemyOrbits(delta) {
+  // Cibles hostiles qu'un ennemi peut engager : asteroides vivants, tourelles, vaisseau du joueur.
+  collectEnemyTargets() {
+    const targets = [];
+    if (this.elementSprites) {
+      for (const el of serverElements) {
+        if (el.type === 'asteroid') {
+          const s = this.elementSprites.get(el.id);
+          if (s && s.active && s.alpha > 0.5) targets.push({ kind: 'asteroid', sprite: s });
+        } else if (el.type === 'turret') {
+          const s = this.elementSprites.get(el.id);
+          if (s && s.active) targets.push({ kind: 'turret', sprite: s });
+        }
+      }
+    }
+    if (this.ship && this.ship.active) targets.push({ kind: 'ship', sprite: this.ship });
+    return targets;
+  }
+
+  updateEnemies(delta) {
     if (!this.enemies) return;
     const dtSec = (delta || 16) / 1000;
+    const now = this.time.now;
+    const targets = this.collectEnemyTargets();
     for (const sprite of this.enemies) {
-      if (!sprite._isOrbiting || !sprite._target) continue;
-      sprite._orbitAngle += sprite._orbitSpeed * dtSec;
-      sprite.x = sprite._target.x + Math.cos(sprite._orbitAngle) * sprite._orbitRadius;
-      sprite.y = sprite._target.y + Math.sin(sprite._orbitAngle) * sprite._orbitRadius;
-      const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2);
-      sprite.rotation = tangent + Math.PI / 2;
-      // HP bar suit l'ennemi
+      if (!sprite.active) continue;
+
+      // Cible hostile la plus proche dans la range de detection
+      let best = null, bestDist = ENEMY_DETECT_RANGE;
+      for (const t of targets) {
+        const d = Phaser.Math.Distance.Between(sprite.x, sprite.y, t.sprite.x, t.sprite.y);
+        if (d < bestDist) { best = t; bestDist = d; }
+      }
+
+      let mode, cx, cy, orbitR;
+      if (best) {
+        mode = best.kind;
+        cx = best.sprite.x; cy = best.sprite.y;
+        orbitR = sprite._orbitRadius;
+        // Nouvelle cible : on casse la trajectoire et on (re)part en approche
+        if (sprite._engageRef !== best.sprite) {
+          sprite._engageRef = best.sprite;
+          sprite._engaging = false;
+        }
+      } else {
+        // Aucune cible : on file vers la base centrale (orbite sans degats une fois arrive)
+        if (sprite._engageRef !== 'base') {
+          sprite._engageRef = 'base';
+          sprite._engaging = false;
+        }
+        mode = 'base';
+        cx = BASE_X; cy = BASE_Y;
+        orbitR = BASE_PERIMETER + sprite._orbitRadius;
+      }
+
+      const distToCenter = Phaser.Math.Distance.Between(sprite.x, sprite.y, cx, cy);
+      if (!sprite._engaging && distToCenter > orbitR + 6) {
+        // Phase d'approche : on fonce en ligne droite vers la cible
+        const dx = cx - sprite.x, dy = cy - sprite.y;
+        const dn = distToCenter || 1;
+        const step = ENEMY_SPEED_PX * dtSec;
+        sprite.x += (dx / dn) * step;
+        sprite.y += (dy / dn) * step;
+        sprite.rotation = Math.atan2(dy, dx) + Math.PI / 2;
+      } else {
+        // Phase d'orbite (a l'entree, on cale l'angle sur la position d'approche courante)
+        if (!sprite._engaging) {
+          sprite._engaging = true;
+          sprite._orbitAngle = Math.atan2(sprite.y - cy, sprite.x - cx);
+        }
+        sprite._orbitAngle += sprite._orbitSpeed * dtSec;
+        sprite.x = cx + Math.cos(sprite._orbitAngle) * orbitR;
+        sprite.y = cy + Math.sin(sprite._orbitAngle) * orbitR;
+        const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2);
+        sprite.rotation = tangent + Math.PI / 2;
+        // Tir sur la cible hostile (jamais sur la base)
+        if (mode !== 'base') {
+          if (!sprite._lastFireAt) sprite._lastFireAt = now - Math.random() * ENEMY_FIRE_MS;
+          if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) {
+            this.fireEnemyShot(sprite, cx, cy);
+            sprite._lastFireAt = now;
+          }
+        }
+      }
+
       if (sprite._hpBar) {
         sprite._hpBar.x = sprite.x;
         sprite._hpBar.y = sprite.y - 38;
@@ -1484,60 +1563,20 @@ class MainScene extends Phaser.Scene {
       .setDepth(8);
     sprite.play(`enemy${level}-thrust`);
     sprite._level = level;
-    const angle = Math.atan2(e.targetY - e.spawnY, e.targetX - e.spawnX);
-    sprite.rotation = angle + Math.PI / 2;
-    this.enemies.add(sprite);
-
-    // L'ennemi vole vers un point près de la cible puis se met en orbite
-    const ORBIT_R_MIN = 90;
-    const ORBIT_R_MAX = 160;
-    const orbitRadius = ORBIT_R_MIN + Math.random() * (ORBIT_R_MAX - ORBIT_R_MIN);
-    const total = Math.hypot(e.targetX - e.spawnX, e.targetY - e.spawnY);
-    if (total <= orbitRadius + 10) {
-      this.startEnemyOrbit(sprite, e.targetX, e.targetY, orbitRadius);
-      return;
-    }
-    // Point d'entrée en orbite : sur la ligne d'approche, à orbitRadius de la cible
-    const ratio = (total - orbitRadius) / total;
-    const stopX = e.spawnX + (e.targetX - e.spawnX) * ratio;
-    const stopY = e.spawnY + (e.targetY - e.spawnY) * ratio;
-    const approachMs = e.travelMs * ratio;
-    sprite._approachTween = this.tweens.add({
-      targets: sprite,
-      x: stopX, y: stopY,
-      duration: approachMs, ease: 'Linear',
-      onComplete: () => this.startEnemyOrbit(sprite, e.targetX, e.targetY, orbitRadius)
-    });
-  }
-
-  startEnemyOrbit(sprite, tx, ty, orbitRadius) {
-    if (!sprite.active) return;
-    sprite._target = { x: tx, y: ty };
-    sprite._orbitRadius = orbitRadius;
-    sprite._orbitAngle = Math.atan2(sprite.y - ty, sprite.x - tx);
-    sprite._orbitSpeed = (0.20 + Math.random() * 0.20) * (Math.random() < 0.5 ? 1 : -1);
-    sprite._isOrbiting = true;
-    // HP de l'ennemi + barre rouge
     sprite._hp = sprite._hpMax = 30;
+    sprite._orbitRadius = ENEMY_ORBIT_R_MIN + Math.random() * (ENEMY_ORBIT_R_MAX - ENEMY_ORBIT_R_MIN);
+    sprite._orbitSpeed = (0.20 + Math.random() * 0.20) * (Math.random() < 0.5 ? 1 : -1);
+    sprite._engageRef = null;
+    sprite._engaging = false;
+    // Oriente d'emblee vers la base (cap par defaut)
+    sprite.rotation = Math.atan2(BASE_Y - e.spawnY, BASE_X - e.spawnX) + Math.PI / 2;
     sprite._hpBar = this.makeHpBar(sprite.x, sprite.y - 38, 40, 0xff3322);
     sprite._hpBar.setDepth(8);
-    // Tir toutes les 5s avec phase initiale random
-    const firstFireDelay = 800 + Math.floor(Math.random() * 2200);
-    this.time.delayedCall(firstFireDelay, () => {
-      if (!sprite.active) return;
-      this.fireEnemyShot(sprite, sprite._target.x, sprite._target.y);
-      sprite._fireEvent = this.time.addEvent({
-        delay: 5000, loop: true,
-        callback: () => {
-          if (sprite.active) this.fireEnemyShot(sprite, sprite._target.x, sprite._target.y);
-        }
-      });
-    });
-    // Plus de despawn : l'ennemi orbite jusqu'à destruction par les tourelles
+    this.enemies.add(sprite);
   }
 
   damageEnemy(sprite, dmg) {
-    if (!sprite.active || !sprite._isOrbiting) return;
+    if (!sprite.active) return;
     sprite._hp = Math.max(0, sprite._hp - dmg);
     // Refresh barre
     if (sprite._hpBar) {
@@ -1549,16 +1588,6 @@ class MainScene extends Phaser.Scene {
       sprite._hpBar.fill.fillColor = color;
     }
     if (sprite._hp <= 0) this.destroyEnemy(sprite);
-  }
-
-  destroyEnemy(sprite) {
-    if (!sprite.active) return;
-    sprite._isOrbiting = false;
-    if (sprite._fireEvent) sprite._fireEvent.remove();
-    if (sprite._hpBar) sprite._hpBar.destroy();
-    this.playEnemyExplosion(sprite.x, sprite.y, sprite._level || 1);
-    this.enemies.delete(sprite);
-    sprite.destroy();
   }
 
   fireEnemyShot(sprite, tx, ty) {
@@ -1575,7 +1604,7 @@ class MainScene extends Phaser.Scene {
 
   destroyEnemy(sprite) {
     if (!sprite.active) return;
-    if (sprite._fireEvent) sprite._fireEvent.remove();
+    if (sprite._hpBar) sprite._hpBar.destroy();
     this.playEnemyExplosion(sprite.x, sprite.y, sprite._level || 1);
     this.enemies.delete(sprite);
     sprite.destroy();
