@@ -55,7 +55,7 @@ const ASTEROID_RESPAWN_MS = 20 * 60 * 1000;
 const ASTEROID_HP_MAX     = 240;  // legacy, gardé pour eventuel fallback
 const TURRET_HP_MAX       = 200;
 const BASE_HP_MAX         = 400;
-const BASE_ESSENCE_MAX    = 400;
+const BASE_ESSENCE_MAX    = 720;   // 2h d'autonomie au drain de 1/10s (360/h)
 const BASE_HIT_DMG        = 3;    // degats par tir ennemi atteignant la base (tempo lent)
 
 function poly(angleRad, dist) {
