@@ -965,6 +965,9 @@ function destroyAsteroidGroup(rt, subtype) {
       }
     }
   }
+  // Rafraichit la liste des elements actifs pour TOUS les viewers (sinon le highlight
+  // "en cours de minage" reste affiche sur les asteroides detruits jusqu'au prochain tick).
+  io.to(amiralRoom(rt.id)).emit('elements:update', { activeElements: activeElementStatesForAmiral(rt.id) });
   setTimeout(() => respawnAsteroidGroup(rt, subtype), ASTEROID_RESPAWN_MS);
 }
 

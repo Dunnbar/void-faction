@@ -411,13 +411,17 @@ function wireSocketEvents() {
     if (scene && scene.scene.isActive()) scene.onAsteroidRespawned(data.id);
     if (data.state) elementStates.set(data.id, data.state);
   });
-  // Groupes : destruction/respawn de tous les asteroides d'un subtype
+  // Groupes : destruction/respawn de tous les asteroides d'un subtype.
+  // Un seul timer de respawn est affiche au centroide du groupe (cf. SharedScene).
   socket.on('asteroid:group_destroyed', (data) => {
     const scene = game?.scene.getScene('main');
     for (const id of (data.ids || [])) {
       if (scene && scene.scene.isActive()) scene.onAsteroidDestroyed(id, data.respawnsAt);
       const st = elementStates.get(id);
       if (st) { st.hp = 0; st.respawnsAt = data.respawnsAt; }
+    }
+    if (scene && scene.scene.isActive() && data.subtype) {
+      SharedScene.showGroupRespawnTimer(scene, data.subtype, data.respawnsAt);
     }
   });
   socket.on('asteroid:group_respawned', (data) => {
@@ -428,6 +432,9 @@ function wireSocketEvents() {
       const id = ids[i];
       if (scene && scene.scene.isActive()) scene.onAsteroidRespawned(id);
       if (states[i]) elementStates.set(id, states[i]);
+    }
+    if (scene && scene.scene.isActive() && data.subtype) {
+      SharedScene.clearGroupRespawnTimer(scene, data.subtype);
     }
   });
   socket.on('base:reborn', (data) => {
@@ -838,6 +845,7 @@ class MainScene extends Phaser.Scene {
     for (const h of this.elementHighlights.values()) h.destroy();
     if (this.elementHpBars) for (const b of this.elementHpBars.values()) b.destroy();
     if (this.elementRespawnTimers) for (const t of this.elementRespawnTimers.values()) t.destroy();
+    SharedScene.clearAllGroupRespawnTimers(this);
     this.elementSprites.clear();
     this.elementHighlights.clear();
     this.elementHpBars = new Map();
@@ -1129,47 +1137,18 @@ class MainScene extends Phaser.Scene {
     }
   }
 
-  onAsteroidDestroyed(id, respawnsAt) {
+  // Astero detruit (un seul). Animation visuelle uniquement ; le timer de respawn
+  // est gere au niveau du GROUPE dans le handler asteroid:group_destroyed.
+  onAsteroidDestroyed(id /*, respawnsAt */) {
     const sprite = this.elementSprites.get(id);
     const bar = this.elementHpBars.get(id);
-    if (sprite) {
-      this.explodeAt(sprite.x, sprite.y);
-      this.tweens.killTweensOf(sprite);
-      this.tweens.add({ targets: sprite, alpha: 0, scale: sprite.scale * 1.4, duration: 600, ease: 'Cubic.easeOut' });
-    }
-    if (bar) bar.setVisible(false);
-    if (sprite) {
-      const timer = this.add.text(sprite.x, sprite.y, '', {
-        fontFamily: 'Consolas, monospace', fontSize: '14px', color: '#88e0c8',
-        stroke: '#000', strokeThickness: 3, align: 'center'
-      }).setOrigin(0.5);
-      const update = () => {
-        const remaining = respawnsAt - Date.now();
-        if (remaining <= 0) { timer.destroy(); return; }
-        const m = Math.floor(remaining / 60000);
-        const s = Math.floor((remaining % 60000) / 1000);
-        timer.setText(`RESPAWN\n${m}m ${String(s).padStart(2,'0')}s`);
-      };
-      update();
-      const interval = setInterval(update, 1000);
-      timer.once('destroy', () => clearInterval(interval));
-      this.elementRespawnTimers.set(id, timer);
-    }
+    SharedScene.fadeAsteroidSprite(this, sprite, bar);
   }
 
   onAsteroidRespawned(id) {
     const sprite = this.elementSprites.get(id);
     const bar = this.elementHpBars.get(id);
-    const timer = this.elementRespawnTimers.get(id);
-    if (timer) { timer.destroy(); this.elementRespawnTimers.delete(id); }
-    if (sprite) {
-      this.tweens.killTweensOf(sprite);
-      sprite.setAlpha(0);
-      if (sprite._asteroidVariant) sprite.setFrame(0);
-      const scaleTarget = sprite.scale;
-      this.tweens.add({ targets: sprite, alpha: 1, scale: { from: scaleTarget * 0.5, to: scaleTarget }, duration: 500 });
-    }
-    if (bar) bar.setVisible(true);
+    SharedScene.restoreAsteroidSprite(this, sprite, bar);
     this.applyAllElementStates();
   }
 
