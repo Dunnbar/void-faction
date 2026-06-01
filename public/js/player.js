@@ -903,6 +903,17 @@ class MainScene extends Phaser.Scene {
     this.ship.play('ship-thrust');
     this.ship._hp = 100;
     this.ship._hpMax = 100;
+    // Cliquable : ouvre le menu d'actions du vaisseau (tir / portee, comme une tourelle).
+    // Hit area = cercle genereux en coords texture (vaisseau scale 0.035, sprite ~25px ecran).
+    this.ship.setInteractive({
+      hitArea: new Phaser.Geom.Circle(this.ship.width / 2, this.ship.height / 2, Math.max(this.ship.width, this.ship.height) * 0.7),
+      hitAreaCallback: Phaser.Geom.Circle.Contains,
+      useHandCursor: true
+    });
+    this.ship.on('pointerdown', (pointer) => {
+      if (pointer.button !== 0) return;
+      if (this._panState) this._panState.pendingMenu = { id: 'ship-1', event: pointer.event };
+    });
     // Flamme de reacteur attachee a l'arriere du vaisseau (sprite anime 7 frames)
     this.shipFlame = this.add.sprite(this.ship.x, this.ship.y, 'rocket-flame', 0)
       .setScale(0.8)
@@ -1004,6 +1015,7 @@ class MainScene extends Phaser.Scene {
       }
     }
     this.updateTurretTargeting();
+    this.updateShipTargeting();
     this.updateEnemies(delta);
   }
 
@@ -1141,6 +1153,26 @@ class MainScene extends Phaser.Scene {
     line.lineTo(enemySprite.x, enemySprite.y);
     line.strokePath();
     this.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
+  }
+
+  // Vaisseau : meme principe que les tourelles mais source mobile (this.ship).
+  // Stats derivees du nombre d'acteurs actifs sur 'tir'/'visee'. Independant de l'essence base.
+  updateShipTargeting() {
+    if (!this.ship || !this.ship.active || !this.enemies) return;
+    const state = elementStates.get('ship-1');
+    if (!state) return;
+    const range = turretRangePx(state);
+    const target = this.findNearestEnemyInRange(this.ship.x, this.ship.y, range);
+    if (!target) return;
+    const now = Date.now();
+    if (!this.ship._lastShotAt) this.ship._lastShotAt = 0;
+    const fireDelay = Math.max(1000, 2000 - (state.puissance || 0) * 30);
+    if (now - this.ship._lastShotAt >= fireDelay) {
+      const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
+      this.fireTurretLaser(this.ship, target);
+      this.damageEnemy(target, dmg);
+      this.ship._lastShotAt = now;
+    }
   }
 
   findNearestEnemyInRange(tx, ty, range) {

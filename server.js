@@ -45,6 +45,11 @@ const BASE_ACTIONS = [
   { id: 'remplir',    label: 'Remplir',    category: 'UTILITAIRE' }
 ];
 const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }];
+const SHIP_ACTIONS = [
+  { id: 'tir',   label: 'Améliorer Tir',    category: 'PUISSANCE' },
+  { id: 'visee', label: 'Améliorer Portée', category: 'PUISSANCE' }
+];
+const SHIP_HP_MAX = 100;
 
 // Astéroïdes : groupés par subtype, partagent une durée d'utilisation de 40 min.
 // La durée descend naturellement (1s par seconde), accélérée par les tirs ennemis.
@@ -68,6 +73,9 @@ const ASTEROID_VARIANT_COUNT = 15;
 const ELEMENT_TEMPLATES = (() => {
   const list = [
     { id: 'base-1', type: 'base', x: BASE_X, y: BASE_Y, label: 'BASE', actions: BASE_ACTIONS },
+    // Vaisseau de l'Amiral : entree d'element virtuelle (position dynamique cote ship sync).
+    // Permet d'attacher des actions (tir / portee) avec la meme mecanique que les tourelles.
+    { id: 'ship-1', type: 'ship', x: BASE_X, y: BASE_Y, label: 'VAISSEAU', actions: SHIP_ACTIONS },
   ];
   const turretAngles = [-Math.PI/2, Math.PI*5/6, Math.PI/6];
   const turretLabels = ['TOURELLE NORD', 'TOURELLE SO', 'TOURELLE SE'];
@@ -119,6 +127,9 @@ function initStateFor(el) {
   }
   if (el.type === 'turret') {
     return { hp: TURRET_HP_MAX, hpMax: TURRET_HP_MAX, puissance: 0, range: 0 };
+  }
+  if (el.type === 'ship') {
+    return { hp: SHIP_HP_MAX, hpMax: SHIP_HP_MAX, puissance: 0, range: 0 };
   }
   if (el.type === 'asteroid') {
     // L'etat per-asteroide ne contient que le subtype ; la duree partagee est dans rt.asteroidGroups
@@ -463,8 +474,8 @@ function publicElementState(rt, id) {
       };
     }
   }
-  // Tourelle : puissance et range derivees du nombre d'acteurs actifs (real-time, pas accumule).
-  if (el && el.type === 'turret') {
+  // Tourelle / Vaisseau : puissance et range derivees du nombre d'acteurs actifs.
+  if (el && (el.type === 'turret' || el.type === 'ship')) {
     return {
       id, ...s,
       puissance: countActorsOnAction(rt, id, 'tir'),
@@ -481,10 +492,12 @@ function publicElementState(rt, id) {
   return { id, ...s };
 }
 
-// Snapshot des etats publics de toutes les tourelles d'un amiral (utilise pour rediffuser
-// le bonus puissance/range derive du nombre d'acteurs actifs).
+// Snapshot des etats publics des elements dont les stats derivent des acteurs actifs
+// (tourelles + vaisseau). Utilise pour diffuser un bonus de puissance/portee en direct.
 function turretStatesPayload(rt) {
-  return rt.elements.filter(e => e.type === 'turret').map(e => publicElementState(rt, e.id));
+  return rt.elements
+    .filter(e => e.type === 'turret' || e.type === 'ship')
+    .map(e => publicElementState(rt, e.id));
 }
 
 // Renaissance de la base : reset HP/essence/bornAt et broadcast l'event
