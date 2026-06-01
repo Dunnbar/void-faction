@@ -876,7 +876,8 @@ class MainScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor('#04060a');
-    this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+    // Pas de setBounds : le vaisseau peut explorer au-dela du monde, et le viewer
+    // doit pouvoir le suivre librement en panotant.
     // Demarrage legerement zoome (1.5x du fit) pour laisser de la marge au drag-to-pan
     this._userZoomFactor = 1.5;
     this.applyFitZoom();

@@ -653,7 +653,8 @@ class MainScene extends Phaser.Scene {
     this.drawBasePerimeter();
 
     // Caméra : bornes du monde + follow ship + zoom relatif au fit
-    this.cameras.main.setBounds(0, 0, WORLD_W, WORLD_H);
+    // Pas de setBounds sur la camera : le vaisseau peut explorer librement
+    // au-dela des bornes du monde et la camera continue de le suivre.
     this.cameras.main.startFollow(this.ship, true, 0.08, 0.08);
     this._userZoomFactor = 1.0; // démarre à la vue d'ensemble pour voir tout le périmètre
     this.applyFitZoom();
@@ -1448,12 +1449,8 @@ class MainScene extends Phaser.Scene {
       this.ship.rotation = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.destination.x, this.destination.y) + SHIP_SPRITE_OFFSET;
     }
 
-    // Clamp aux bornes du monde (plus de wrap toroidal). Si le vaisseau atteint
-    // un bord, on tue sa vitesse dans cet axe pour qu'il ne reste pas colle a buter.
-    if (this.ship.x < 0) { this.ship.x = 0; this.ship.body.velocity.x = 0; }
-    else if (this.ship.x > WORLD_W) { this.ship.x = WORLD_W; this.ship.body.velocity.x = 0; }
-    if (this.ship.y < 0) { this.ship.y = 0; this.ship.body.velocity.y = 0; }
-    else if (this.ship.y > WORLD_H) { this.ship.y = WORLD_H; this.ship.body.velocity.y = 0; }
+    // Pas de bornes : le vaisseau peut explorer au-dela du monde. La camera n'est
+    // pas non plus bornee (cf. cameras.main.setBounds retire) pour suivre librement.
 
     if (time - this.lastSend > 50) {
       this.lastSend = time;
