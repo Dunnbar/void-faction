@@ -36,9 +36,9 @@ const CATEGORY_TO_COLUMN = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILI
 // ============ Templates d'éléments (instanciés par Amiral) ============
 
 const TURRET_ACTIONS = [
-  { id: 'tir',        label: 'Améliorer Tir',   category: 'PUISSANCE' },
-  { id: 'visee',      label: 'Améliorer Visée', category: 'PUISSANCE' },
-  { id: 'reparation', label: 'Réparation',      category: 'DEFENSIF'  }
+  { id: 'tir',        label: 'Améliorer Tir',    category: 'PUISSANCE' },
+  { id: 'visee',      label: 'Améliorer Portée', category: 'PUISSANCE' },
+  { id: 'reparation', label: 'Réparation',       category: 'DEFENSIF'  }
 ];
 const BASE_ACTIONS = [
   { id: 'reparation', label: 'Réparation', category: 'DEFENSIF'   },
@@ -432,6 +432,18 @@ function getDemoRuntime() {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+// Compte les acteurs (joueurs + amiral) actuellement actifs sur (elementId, actionId)
+// pour la runtime donnee. Utilise pour deriver puissance/range de tourelle a la volee.
+function countActorsOnAction(rt, elementId, actionId) {
+  const users = stmtActiveOnElement.all(elementId, rt.id);
+  const amir  = stmtAmiralActiveOnElement.all(elementId, rt.id);
+  let n = 0;
+  for (const a of users) if (a.action_id === actionId) n++;
+  for (const a of amir)  if (a.action_id === actionId) n++;
+  return n;
+}
+
 function publicElementState(rt, id) {
   const s = rt.elementStates.get(id);
   if (!s) return null;
@@ -451,6 +463,14 @@ function publicElementState(rt, id) {
       };
     }
   }
+  // Tourelle : puissance et range derivees du nombre d'acteurs actifs (real-time, pas accumule).
+  if (el && el.type === 'turret') {
+    return {
+      id, ...s,
+      puissance: countActorsOnAction(rt, id, 'tir'),
+      range:     countActorsOnAction(rt, id, 'visee')
+    };
+  }
   // Base : on calcule le nombre de jours depuis sa naissance
   if (el && el.type === 'base') {
     return {
@@ -459,6 +479,12 @@ function publicElementState(rt, id) {
     };
   }
   return { id, ...s };
+}
+
+// Snapshot des etats publics de toutes les tourelles d'un amiral (utilise pour rediffuser
+// le bonus puissance/range derive du nombre d'acteurs actifs).
+function turretStatesPayload(rt) {
+  return rt.elements.filter(e => e.type === 'turret').map(e => publicElementState(rt, e.id));
 }
 
 // Renaissance de la base : reset HP/essence/bornAt et broadcast l'event
@@ -827,7 +853,11 @@ io.on('connection', (socket) => {
     const newAction = getActiveActionForActor(actor);
     const progress = getProgressForActor(actor);
 
-    io.to(amiralRoom(rt.id)).emit('elements:update', { activeElements: activeElementStatesForAmiral(rt.id) });
+    io.to(amiralRoom(rt.id)).emit('elements:update', {
+      activeElements: activeElementStatesForAmiral(rt.id),
+      // Diffuse les etats de tourelles : leur puissance/range derive du nombre d'acteurs actifs.
+      states: turretStatesPayload(rt)
+    });
     io.to(amiralRoom(rt.id)).emit('history:new', { username: actor.displayName, element_id: elementId, action_id: actionId, category: action.category, at: now });
     socket.emit('action:state', { activeAction: newAction, progress });
     respond({ ok: true });
@@ -845,7 +875,13 @@ io.on('connection', (socket) => {
     deleteActiveActionForActor(actor);
     insertActorActionLog(actor, actor.amiralId, prev.element_id, prev.action_id, prev.category, 'deactivate', now);
     const progress = getProgressForActor(actor);
-    if (actor.amiralId) io.to(amiralRoom(actor.amiralId)).emit('elements:update', { activeElements: activeElementStatesForAmiral(actor.amiralId) });
+    if (actor.amiralId && rt) {
+      io.to(amiralRoom(actor.amiralId)).emit('elements:update', {
+        activeElements: activeElementStatesForAmiral(actor.amiralId),
+        // Diffuse les etats de tourelles : leur puissance/range derive du nombre d'acteurs actifs.
+        states: turretStatesPayload(rt)
+      });
+    }
     socket.emit('action:state', { activeAction: null, progress });
     respond({ ok: true });
   });
@@ -908,10 +944,10 @@ function applyActionEffect(rt, actionId, element) {
 
   switch (actionId) {
     case 'tir':
-      state.puissance = (state.puissance || 0) + 1;
-      return true;
     case 'visee':
-      state.range = (state.range || 0) + 1;
+      // Plus d'accumulation : le bonus de la tourelle est calcule dynamiquement
+      // a partir du nombre d'acteurs actifs (cf. publicElementState pour turret).
+      // On renvoie true pour que le tick continue de crediter la progression du joueur.
       return true;
     case 'reparation':
       if (state.hp >= state.hpMax) return false;

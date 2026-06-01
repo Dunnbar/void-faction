@@ -398,7 +398,7 @@ function openActionMenu(elementId, anchor) {
       if (el.type === 'base' && typeof st.daysAlive === 'number') parts.push(`Jour <strong>${st.daysAlive}</strong>`);
       if (st.hp !== undefined && el.type !== 'asteroid') parts.push(`HP <strong>${st.hp}</strong>/${st.hpMax}`);
       if (st.puissance !== undefined) parts.push(`Puissance <strong>${st.puissance}</strong>`);
-      if (st.range !== undefined) parts.push(`Visée <strong>${st.range}</strong>`);
+      if (st.range !== undefined) parts.push(`Portée <strong>${st.range}</strong>`);
       if (st.essence !== undefined) parts.push(`Essence <strong>${st.essence}</strong>/${st.essenceMax}`);
       if (st.subtype) parts.push(`Type <strong>${st.subtype === 'radius' ? 'Radius' : 'Matériaux'}</strong>`);
       statsEl.innerHTML = parts.join(' &middot; ');
