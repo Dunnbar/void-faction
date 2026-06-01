@@ -974,11 +974,15 @@ class MainScene extends Phaser.Scene {
   updateTurretTargeting() {
     if (!this.elementSprites || !this.enemies) return;
     const now = Date.now();
+    const powered = SharedScene.isBasePowered();
     for (const el of serverElements) {
       if (el.type !== 'turret') continue;
       const sprite = this.elementSprites.get(el.id);
       const state = elementStates.get(el.id);
       if (!sprite || !state) continue;
+      SharedScene.applyTurretPowerVisual(sprite, powered);
+      // Base hors tension : la tourelle est desactivee (la patrouille reprend naturellement).
+      if (!powered) { sprite._targetingEnemy = false; continue; }
       // Tourelle = défense autonome : tire en permanence sur l'ennemi le plus proche.
       // L'action 'tir' boost les degats via state.puissance.
       const range = turretRangePx(state);

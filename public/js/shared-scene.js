@@ -9,6 +9,33 @@
     return (typeof serverElements !== 'undefined') ? serverElements : [];
   }
 
+  function getStates() {
+    return (typeof elementStates !== 'undefined') ? elementStates : null;
+  }
+
+  // La base est alimentee tant qu'elle a de l'essence. Si l'etat est inconnu (init en cours),
+  // on retourne true par defaut pour ne pas couper les tourelles a tort.
+  function isBasePowered() {
+    const states = getStates();
+    if (!states) return true;
+    const baseEl = getElements().find(e => e.type === 'base');
+    if (!baseEl) return true;
+    const st = states.get(baseEl.id);
+    if (!st) return true;
+    return (st.essence || 0) > 0;
+  }
+
+  // Applique un tint grise sur une tourelle quand la base n'est plus alimentee.
+  // Idempotent : safe a rappeler chaque frame.
+  function applyTurretPowerVisual(sprite, powered) {
+    if (!sprite) return;
+    if (powered) {
+      if (sprite._powerTinted) { sprite.clearTint(); sprite._powerTinted = false; }
+    } else {
+      if (!sprite._powerTinted) { sprite.setTint(0x555566); sprite._powerTinted = true; }
+    }
+  }
+
   // Centroide des asteroides d'un groupe (subtype) en coordonnees monde.
   function groupCentroid(subtype) {
     const list = getElements().filter(e => e.type === 'asteroid' && e.subtype === subtype);
@@ -84,6 +111,8 @@
     clearGroupRespawnTimer,
     clearAllGroupRespawnTimers,
     fadeAsteroidSprite,
-    restoreAsteroidSprite
+    restoreAsteroidSprite,
+    isBasePowered,
+    applyTurretPowerVisual
   };
 })();

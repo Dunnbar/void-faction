@@ -1125,6 +1125,16 @@ function tickActions() {
       dirtyAmiraux.add(actor.amiralId);
     }
   }
+  // Drain d'essence : 1 par tick (toutes les 10s) sur la base de chaque amiral.
+  // L'essence alimente la base ; si elle tombe a 0, les tourelles sont desactivees (cote client).
+  for (const rt of amiralsRuntime.values()) {
+    const baseEl = rt.elements.find(e => e.type === 'base');
+    if (!baseEl) continue;
+    const state = rt.elementStates.get(baseEl.id);
+    if (!state || state.essence <= 0) continue;
+    state.essence = Math.max(0, state.essence - 1);
+    dirtyAmiraux.add(rt.id);
+  }
   if (dirtyAmiraux.size > 0) {
     const res = getResource();
     if (res !== lastBroadcastResource) {
