@@ -81,8 +81,8 @@ const ELEMENT_TEMPLATES = (() => {
   // Centrage : startAngle = centre - 1.5 * step (pour 4 asteroides)
   const halfSpan = 1.5 * ASTEROID_GROUP_STEP;
   const groupConfigs = [
-    { subtype: 'materiaux', startAngle: 0 - halfSpan },        // centre a 0 (droite)
-    { subtype: 'radius',    startAngle: Math.PI - halfSpan }   // centre a π (gauche)
+    { subtype: 'materiaux', startAngle: Math.PI / 4 - halfSpan },        // centre au sud-est (π/4)
+    { subtype: 'radius',    startAngle: -3 * Math.PI / 4 - halfSpan }    // centre au nord-ouest (-3π/4)
   ];
   let idx = 0;
   for (const cfg of groupConfigs) {
