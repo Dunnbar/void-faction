@@ -1448,10 +1448,12 @@ class MainScene extends Phaser.Scene {
       this.ship.rotation = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.destination.x, this.destination.y) + SHIP_SPRITE_OFFSET;
     }
 
-    if (this.ship.x < 0) this.ship.x = WORLD_W;
-    else if (this.ship.x > WORLD_W) this.ship.x = 0;
-    if (this.ship.y < 0) this.ship.y = WORLD_H;
-    else if (this.ship.y > WORLD_H) this.ship.y = 0;
+    // Clamp aux bornes du monde (plus de wrap toroidal). Si le vaisseau atteint
+    // un bord, on tue sa vitesse dans cet axe pour qu'il ne reste pas colle a buter.
+    if (this.ship.x < 0) { this.ship.x = 0; this.ship.body.velocity.x = 0; }
+    else if (this.ship.x > WORLD_W) { this.ship.x = WORLD_W; this.ship.body.velocity.x = 0; }
+    if (this.ship.y < 0) { this.ship.y = 0; this.ship.body.velocity.y = 0; }
+    else if (this.ship.y > WORLD_H) { this.ship.y = WORLD_H; this.ship.body.velocity.y = 0; }
 
     if (time - this.lastSend > 50) {
       this.lastSend = time;
