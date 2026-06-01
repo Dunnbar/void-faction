@@ -91,6 +91,20 @@
     }
     #captainAlert .bubble .msg { color: #fff; font-weight: bold; }
     #captainAlert .bubble .msg .danger { color: #ff7a7a; }
+    #baseClock {
+      position: fixed; top: 14px; left: 14px; z-index: 30;
+      padding: 8px 14px; border-radius: 4px;
+      background: rgba(0, 8, 20, 0.78);
+      border: 1px solid #2a4060;
+      font-family: 'Consolas', monospace; font-weight: bold; letter-spacing: 2px;
+      display: flex; flex-direction: column; gap: 2px;
+      pointer-events: none; color: #88aacc;
+    }
+    #baseClock.hidden { display: none; }
+    #baseClock .day { color: #ffd24f; font-size: 12px; }
+    #baseClock .time { font-size: 18px; font-variant-numeric: tabular-nums; }
+    #baseClock.day-mode .time { color: #ffc04f; text-shadow: 0 0 6px rgba(255, 192, 80, 0.45); }
+    #baseClock.night .time     { color: #4f9fff; text-shadow: 0 0 6px rgba(80, 160, 255, 0.5); }
     #waveBanner {
       position: fixed; top: 14px; left: 50%; transform: translateX(-50%);
       z-index: 30;
@@ -210,6 +224,7 @@
     <div class="line">Ressource de faction : <strong id="resource">0</strong></div>
     <div class="line">Clic droit — déplacer le vaisseau &nbsp;|&nbsp; Molette — zoom</div>
   </div>
+  <div id="baseClock" class="hidden"></div>
   <div id="waveBanner" class="hidden">
     <span>⚠ VAGUE EN APPROCHE — CIBLE</span>
     <span class="target"></span>

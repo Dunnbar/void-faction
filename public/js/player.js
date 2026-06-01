@@ -5,6 +5,25 @@ let BASE_Y = WORLD_H / 2;
 let BASE_PERIMETER = 560;
 let TURRET_X = BASE_X;
 let TURRET_Y = BASE_Y;
+let GAME_TZ_CLIENT = 'Europe/Paris';
+let baseClockInterval = null;
+
+// Met a jour le bandeau #baseClock (jour de la base + heure jeu coloree jour/nuit).
+// Demarre l'intervalle une seule fois ; safe a rappeler a chaque reconnexion.
+function startBaseClock() {
+  const el = document.getElementById('baseClock');
+  if (!el) return;
+  const tick = () => {
+    const baseEl = serverElements.find(e => e.type === 'base');
+    const state = baseEl ? elementStates.get(baseEl.id) : null;
+    if (!state) return;
+    SharedScene.updateBaseClock(el, state, GAME_TZ_CLIENT);
+    el.classList.remove('hidden');
+  };
+  tick();
+  if (baseClockInterval) return;
+  baseClockInterval = setInterval(tick, 1000);
+}
 const ZOOM_FACTOR_MIN = 0.85;
 const ZOOM_FACTOR_MAX = 2.5;
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
@@ -631,7 +650,9 @@ function connectSocket() {
       BASE_PERIMETER = data.world.basePerimeter ?? 560;
       TURRET_X = data.world.turretX;
       TURRET_Y = data.world.turretY;
+      GAME_TZ_CLIENT = data.world.gameTz || 'Europe/Paris';
     }
+    startBaseClock();
     updateUserLine();
     renderActiveAction();
     renderBars();

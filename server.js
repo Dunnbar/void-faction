@@ -787,7 +787,7 @@ io.on('connection', (socket) => {
     actionTickMs: ACTION_TICK_MS,
     progress: userProgress,
     activeElements: rtForInit ? activeElementStatesForAmiral(rtForInit.id) : [],
-    world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y },
+    world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y, gameTz: GAME_TZ },
     currentWave: rtForInit && rtForInit.currentWave && rtForInit.currentWave.endsAt > Date.now() ? rtForInit.currentWave : null,
     buildTime: BUILD_TIME
   });

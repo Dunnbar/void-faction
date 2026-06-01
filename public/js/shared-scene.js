@@ -25,6 +25,41 @@
     return (st.essence || 0) > 0;
   }
 
+  // Horloge jeu : lit l'heure dans le fuseau GAME_TZ (envoye par le serveur).
+  // Retourne { hour, minute, isNight, formatted: "HH:MM" }.
+  // Jour : 7h-21h, Nuit : 21h-7h.
+  const _clockFmtCache = new Map();
+  function getGameClock(tz) {
+    const zone = tz || 'Europe/Paris';
+    let fmt = _clockFmtCache.get(zone);
+    if (!fmt) {
+      fmt = new Intl.DateTimeFormat('en-GB', {
+        timeZone: zone, hour: '2-digit', minute: '2-digit', hour12: false
+      });
+      _clockFmtCache.set(zone, fmt);
+    }
+    const parts = fmt.formatToParts(new Date());
+    const h = parseInt(parts.find(p => p.type === 'hour')?.value || '0', 10);
+    const m = parseInt(parts.find(p => p.type === 'minute')?.value || '0', 10);
+    return {
+      hour: h,
+      minute: m,
+      isNight: (h < 7 || h >= 21),
+      formatted: `${String(h).padStart(2,'0')}:${String(m).padStart(2,'0')}`
+    };
+  }
+
+  // Met a jour le bandeau "JOUR N - HH:MM" dans un element DOM.
+  // baseState : etat de la base (avec daysAlive) ; tz : fuseau jeu.
+  function updateBaseClock(domEl, baseState, tz) {
+    if (!domEl) return;
+    const clock = getGameClock(tz);
+    const day = (baseState && Number.isFinite(baseState.daysAlive)) ? baseState.daysAlive : 0;
+    domEl.innerHTML = `<span class="day">JOUR ${day}</span><span class="time">${clock.formatted}</span>`;
+    domEl.classList.toggle('night', clock.isNight);
+    domEl.classList.toggle('day-mode', !clock.isNight);
+  }
+
   // Applique un tint grise sur une tourelle quand la base n'est plus alimentee.
   // Idempotent : safe a rappeler chaque frame.
   function applyTurretPowerVisual(sprite, powered) {
@@ -113,6 +148,8 @@
     fadeAsteroidSprite,
     restoreAsteroidSprite,
     isBasePowered,
-    applyTurretPowerVisual
+    applyTurretPowerVisual,
+    getGameClock,
+    updateBaseClock
   };
 })();
