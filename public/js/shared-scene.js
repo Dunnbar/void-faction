@@ -9,6 +9,61 @@
     return (typeof serverElements !== 'undefined') ? serverElements : [];
   }
 
+  // ===================== Systeme de "cases" (rooms facon Zelda) =====================
+  // Le monde est decoupe en une grille infinie de cases de WORLD_W x WORLD_H.
+  // La case (0,0) est la case d'origine (la base est en son centre). La camera ne
+  // suit PAS le vaisseau en continu : elle reste centree sur la case courante et
+  // bascule sur la case voisine quand le vaisseau franchit une frontiere (sort de l'ecran).
+  function caseDims() {
+    return {
+      w: (typeof WORLD_W !== 'undefined') ? WORLD_W : 2400,
+      h: (typeof WORLD_H !== 'undefined') ? WORLD_H : 1350
+    };
+  }
+  function caseOf(x, y) {
+    const { w, h } = caseDims();
+    return { i: Math.floor(x / w), j: Math.floor(y / h) };
+  }
+  function caseCenterCoords(i, j) {
+    const { w, h } = caseDims();
+    return { x: (i + 0.5) * w, y: (j + 0.5) * h };
+  }
+  // Centre la camera sur une case. animate=true : petit pan fluide (transition de case).
+  function centerCameraOnCase(scene, i, j, animate) {
+    const c = caseCenterCoords(i, j);
+    const cam = scene.cameras.main;
+    scene.tweens.killTweensOf(cam);
+    if (animate) {
+      scene.tweens.add({
+        targets: cam,
+        scrollX: c.x - 0.5 * cam.width / cam.zoom,
+        scrollY: c.y - 0.5 * cam.height / cam.zoom,
+        duration: 320, ease: 'Cubic.easeInOut'
+      });
+    } else {
+      cam.centerOn(c.x, c.y);
+    }
+  }
+  // Detecte un changement de case d'apres (x,y) du vaisseau et recadre si besoin.
+  // Premier appel (pas de case memorisee) : centrage instantane, sans animation.
+  // Retourne true si une transition a eu lieu.
+  function updateCaseCamera(scene, x, y) {
+    const cur = caseOf(x, y);
+    const prev = scene._currentCase;
+    if (!prev || prev.i !== cur.i || prev.j !== cur.j) {
+      const hadPrev = !!prev;
+      scene._currentCase = cur;
+      centerCameraOnCase(scene, cur.i, cur.j, hadPrev);
+      return true;
+    }
+    return false;
+  }
+  // Recadre sur la case courante (apres un zoom / resize) sans animation.
+  function recenterCurrentCase(scene) {
+    const c = scene._currentCase;
+    if (c) centerCameraOnCase(scene, c.i, c.j, false);
+  }
+
   function getStates() {
     return (typeof elementStates !== 'undefined') ? elementStates : null;
   }
@@ -150,6 +205,11 @@
     isBasePowered,
     applyTurretPowerVisual,
     getGameClock,
-    updateBaseClock
+    updateBaseClock,
+    caseOf,
+    caseCenterCoords,
+    centerCameraOnCase,
+    updateCaseCamera,
+    recenterCurrentCase
   };
 })();

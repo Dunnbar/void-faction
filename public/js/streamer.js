@@ -652,28 +652,18 @@ class MainScene extends Phaser.Scene {
     // Cercle "grande base"
     this.drawBasePerimeter();
 
-    // Caméra : bornes du monde + follow ship + zoom relatif au fit
-    // Pas de setBounds sur la camera : le vaisseau peut explorer librement
-    // au-dela des bornes du monde et la camera continue de le suivre.
-    this.cameras.main.startFollow(this.ship, true, 0.08, 0.08);
-    this._userZoomFactor = 1.0; // démarre à la vue d'ensemble pour voir tout le périmètre
+    // Caméra : systeme de "cases". La camera reste centree sur la case courante
+    // (WORLD_W x WORLD_H) et bascule sur la voisine quand le vaisseau franchit une
+    // frontiere (= sort de l'ecran). Pas de follow continu, pas de derive au zoom.
+    this._userZoomFactor = 1.0; // une case entiere tient a l'ecran
     this.applyFitZoom();
+    SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y); // centrage initial (case 0,0)
     this.scale.on('resize', () => this.onResize());
     this.input.on('wheel', (pointer, _g, _dx, deltaY) => {
-      const cam = this.cameras.main;
       this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
-      if (cam._follow) {
-        // Camera attachee au vaisseau : on zoome simplement, le centre reste sur le vaisseau.
-        // Sinon, sans bornes monde, dezoomer ferait deriver la vue loin de la base.
-        this.applyFitZoom();
-      } else {
-        // Camera detachee (apres un drag-pan) : on zoome autour du curseur (UX cartographique).
-        const worldX = pointer.worldX;
-        const worldY = pointer.worldY;
-        this.applyFitZoom();
-        cam.scrollX = worldX - pointer.x / cam.zoom;
-        cam.scrollY = worldY - pointer.y / cam.zoom;
-      }
+      this.applyFitZoom();
+      // On reste centre sur la case courante (le zoom ne fait pas deriver la vue).
+      SharedScene.recenterCurrentCase(this);
     });
 
     this.thrust = this.add.particles(0, 0, 'thrust', {
@@ -705,8 +695,8 @@ class MainScene extends Phaser.Scene {
           duration: 240,
           ease: 'Back.easeOut'
         });
-        // Reaccroche la camera au vaisseau si elle avait ete liberee par un drag
-        if (this.ship) this.cameras.main.startFollow(this.ship, true, 0.08, 0.08);
+        // Si la vue avait ete liberee par un drag, on recadre sur la case courante
+        SharedScene.recenterCurrentCase(this);
       }
     });
 
@@ -849,6 +839,7 @@ class MainScene extends Phaser.Scene {
     const h = this.scale.gameSize.height;
     this.cameras.main.setSize(w, h);
     this.applyFitZoom();
+    SharedScene.recenterCurrentCase(this);
     if (this.bgLayer01) this.bgLayer01.setPosition(w / 2, h / 2);
     this.updateParallaxBackground();
   }
@@ -1453,8 +1444,9 @@ class MainScene extends Phaser.Scene {
       this.ship.rotation = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.destination.x, this.destination.y) + SHIP_SPRITE_OFFSET;
     }
 
-    // Pas de bornes : le vaisseau peut explorer au-dela du monde. La camera n'est
-    // pas non plus bornee (cf. cameras.main.setBounds retire) pour suivre librement.
+    // Systeme de cases : si le vaisseau a franchi une frontiere, on bascule la camera
+    // sur la case voisine (transition fluide). Sinon la vue reste fixe sur la case.
+    SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
 
     if (time - this.lastSend > 50) {
       this.lastSend = time;

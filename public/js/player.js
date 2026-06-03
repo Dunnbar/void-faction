@@ -876,13 +876,12 @@ class MainScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor('#04060a');
-    // Pas de setBounds : le vaisseau peut explorer au-dela du monde, et le viewer
-    // doit pouvoir le suivre librement en panotant.
-    // Demarrage legerement zoome (1.5x du fit) pour laisser de la marge au drag-to-pan
-    this._userZoomFactor = 1.5;
+    // Systeme de "cases" : la camera reste centree sur la case du vaisseau observe
+    // et bascule sur la voisine quand il franchit une frontiere. Une case entiere
+    // tient a l'ecran (userZoomFactor = 1) pour qu'on ne perde jamais la base de vue.
+    this._userZoomFactor = 1.0;
     this.applyFitZoom();
-    // Centrage sur la base APRES le zoom (sinon le scroll calcule avec le mauvais zoom decale la vue)
-    this.cameras.main.centerOn(BASE_X, BASE_Y);
+    SharedScene.updateCaseCamera(this, this.ship ? this.ship.x : BASE_X, this.ship ? this.ship.y : BASE_Y);
     this.scale.on('resize', () => this.onResize());
 
     // Background parallax (background_04 : fond fixe + planètes parallax)
@@ -940,15 +939,10 @@ class MainScene extends Phaser.Scene {
 
     // Zoom à la molette (zoomFactor relatif au "fit" qui s'adapte aux resize)
     this.input.on('wheel', (pointer, _gos, _dx, deltaY) => {
-      // Coords monde du point sous le curseur AVANT le zoom
-      const worldX = pointer.worldX;
-      const worldY = pointer.worldY;
       this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
       this.applyFitZoom();
-      // Re-ajuste le scroll pour que ce point reste sous le curseur apres le zoom
-      const cam = this.cameras.main;
-      cam.scrollX = worldX - pointer.x / cam.zoom;
-      cam.scrollY = worldY - pointer.y / cam.zoom;
+      // On reste centre sur la case courante (le zoom ne fait pas deriver la vue).
+      SharedScene.recenterCurrentCase(this);
     });
 
     // Drag-to-pan (style MOBA) : clic gauche maintenu + deplacement = panoramique de la carte
@@ -1018,6 +1012,8 @@ class MainScene extends Phaser.Scene {
     this.updateTurretTargeting();
     this.updateShipTargeting();
     this.updateEnemies(delta);
+    // Systeme de cases : suit le vaisseau observe case par case (bascule a la frontiere).
+    if (this.ship) SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
   }
 
   // Cibles hostiles qu'un ennemi peut engager : asteroides vivants, tourelles, vaisseau du joueur.
@@ -1229,6 +1225,7 @@ class MainScene extends Phaser.Scene {
     const h = this.scale.gameSize.height;
     this.cameras.main.setSize(w, h);
     this.applyFitZoom();
+    SharedScene.recenterCurrentCase(this);
     if (this.bgLayer01) this.bgLayer01.setPosition(w / 2, h / 2);
     this.updateParallaxBackground();
   }
