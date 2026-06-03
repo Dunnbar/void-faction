@@ -844,27 +844,12 @@ class MainScene extends Phaser.Scene {
     this.updateParallaxBackground();
   }
 
+  // Pas de bouclier visuel autour de la base (la base n'a pas de shield).
+  // On nettoie d'eventuels restes ; BASE_PERIMETER reste utilise par l'IA ennemie.
   drawBasePerimeter() {
-    if (this.basePerimeterGfx) this.basePerimeterGfx.destroy();
-    if (this.basePerimeterHalo) this.basePerimeterHalo.destroy();
-    if (this.shieldSprite) this.shieldSprite.destroy();
-    // Animation shield si pas encore creee
-    if (!this.anims.exists('shield-pulse')) {
-      this.anims.create({
-        key: 'shield-pulse',
-        frames: this.anims.generateFrameNumbers('shield', { start: 0, end: 5 }),
-        frameRate: 8, repeat: -1
-      });
-    }
-    // Le shield_frames est un sprite 280x280 par frame ; on scale pour matcher BASE_PERIMETER (rayon)
-    const SHIELD_FRAME_SIZE = 280;
-    const targetDiameter = BASE_PERIMETER * 2;
-    const scale = targetDiameter / SHIELD_FRAME_SIZE;
-    this.shieldSprite = this.add.sprite(BASE_X, BASE_Y, 'shield', 0)
-      .setScale(scale)
-      .setDepth(-50)
-      .setAlpha(0.85);
-    this.shieldSprite.play('shield-pulse');
+    if (this.basePerimeterGfx) { this.basePerimeterGfx.destroy(); this.basePerimeterGfx = null; }
+    if (this.basePerimeterHalo) { this.basePerimeterHalo.destroy(); this.basePerimeterHalo = null; }
+    if (this.shieldSprite) { this.shieldSprite.destroy(); this.shieldSprite = null; }
   }
 
   setupElements(elements) {
