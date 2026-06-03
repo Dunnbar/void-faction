@@ -295,66 +295,100 @@
       border-radius: 4px; font-size: 12px; opacity: 0.7; pointer-events: none;
     }
 
-    /* Auth modal : asset cover background en backdrop + cover box pour le panneau */
+    /* Auth modal : panneau terminal sci-fi (coherent avec le HUD) */
     #authModal {
       position: fixed; inset: 0;
-      background: rgba(0, 0, 0, 0.55) url('/assets/PNG/User%20interfaces/landing%20Screen/cover%20background.png') no-repeat center;
-      background-size: cover; background-blend-mode: darken;
+      background:
+        radial-gradient(ellipse at center, rgba(8, 20, 38, 0.72) 0%, rgba(2, 5, 10, 0.92) 100%);
+      backdrop-filter: blur(3px);
       display: flex; align-items: center; justify-content: center; z-index: 200;
     }
     #authModal.hidden { display: none; }
     .modal-box {
       position: relative;
-      width: 480px; height: 460px;
-      background: url('/assets/PNG/User%20interfaces/landing%20Screen/cover%20box%20.png') no-repeat center;
-      background-size: 100% 100%;
-      padding: 70px 70px 80px 70px;
+      width: 380px; max-width: calc(100vw - 32px);
+      background:
+        linear-gradient(180deg, rgba(10, 26, 46, 0.98) 0%, rgba(6, 16, 30, 0.98) 100%);
+      border: 1px solid var(--c-frame);
+      border-radius: 10px;
+      box-shadow: 0 0 0 1px rgba(74,175,255,0.15), 0 0 40px rgba(74, 175, 255, 0.35), inset 0 0 60px rgba(74,175,255,0.04);
+      padding: 30px 32px 32px;
       box-sizing: border-box;
       display: flex; flex-direction: column;
     }
-    .modal-box h2 { margin: 0 0 4px 0; color: var(--c-frame); font-size: 16px; text-align: center; }
-    .modal-box .subtitle { margin: 0 0 12px 0; font-size: 11px; opacity: 0.75; text-align: center; }
-    .tabs { display: flex; gap: 2px; margin-bottom: 12px; border-bottom: 1px solid rgba(74, 175, 255, 0.3); }
-    .tab {
-      flex: 1; background: transparent; border: 0; color: #aaa;
-      font-family: inherit; font-size: 12px; padding: 6px; cursor: pointer;
-      border-bottom: 2px solid transparent;
+    /* Liseré d'accent en haut du panneau */
+    .modal-box::before {
+      content: ''; position: absolute; top: 0; left: 18px; right: 18px; height: 2px;
+      background: linear-gradient(90deg, transparent, var(--c-frame), transparent);
+      box-shadow: 0 0 8px rgba(74,175,255,0.8);
     }
-    .tab.active { color: var(--c-frame); border-bottom-color: var(--c-frame); }
-    .modal-box form { display: flex; flex-direction: column; gap: 8px; flex: 1; min-height: 0; }
+    .modal-box h2 {
+      margin: 4px 0 4px 0; color: var(--c-frame); font-size: 18px; text-align: center;
+      letter-spacing: 3px; text-transform: uppercase; text-shadow: 0 0 12px rgba(74,175,255,0.5);
+    }
+    .modal-box .subtitle { margin: 0 0 18px 0; font-size: 11px; color: #8fb4d8; opacity: 0.85; text-align: center; letter-spacing: 0.5px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+    .tab {
+      flex: 1; background: rgba(74,175,255,0.04); border: 1px solid rgba(74, 175, 255, 0.18);
+      color: #7e9bb8; border-radius: 5px;
+      font-family: inherit; font-size: 12px; font-weight: bold; letter-spacing: 1px;
+      text-transform: uppercase; padding: 9px 6px; cursor: pointer;
+      transition: color 0.15s, border-color 0.15s, background 0.15s;
+    }
+    .tab:hover { color: #bcd6f0; border-color: rgba(74,175,255,0.4); }
+    .tab.active {
+      color: #06121e; background: var(--c-frame); border-color: var(--c-frame);
+      box-shadow: 0 0 14px rgba(74,175,255,0.5);
+    }
+    .modal-box form { display: flex; flex-direction: column; gap: 11px; }
     .modal-box form.hidden { display: none; }
     .modal-box input,
     .modal-box select {
-      background: rgba(0, 0, 0, 0.65); color: #fff; border: 1px solid var(--c-frame); padding: 6px 9px;
-      font-family: monospace; font-size: 12px; border-radius: 3px;
+      width: 100%; box-sizing: border-box;
+      background: rgba(0, 0, 0, 0.45); color: #fff;
+      border: 1px solid rgba(74, 175, 255, 0.35); padding: 11px 13px;
+      font-family: 'Consolas', monospace; font-size: 13px; border-radius: 5px;
+      transition: border-color 0.15s, box-shadow 0.15s;
     }
+    .modal-box input::placeholder { color: #5e7891; }
+    .modal-box select option { background: #06121e; color: #fff; }
     .modal-box input:focus,
-    .modal-box select:focus { outline: none; border-color: #6cf; }
-    /* Bouton image start game btn pour les submit (Connexion / Inscription / Déconnexion) */
+    .modal-box select:focus {
+      outline: none; border-color: var(--c-frame);
+      box-shadow: 0 0 0 1px rgba(74,175,255,0.35), 0 0 14px rgba(74,175,255,0.25);
+    }
+    .modal-box .field-label {
+      font-size: 10px; color: #8fb4d8; letter-spacing: 1.5px; text-transform: uppercase;
+      margin: 4px 0 -4px 2px;
+    }
+    /* Bouton de validation sci-fi (remplace le PNG cartoon) */
     .modal-box button[type="submit"],
     .modal-box .img-btn {
-      align-self: center;
-      width: 220px; height: 110px;
-      background: url('/assets/PNG/User%20interfaces/landing%20Screen/start%20game%20btn.png') no-repeat center;
-      background-size: contain;
-      border: 0; padding: 0 0 28px 0;
-      color: #fff; font-family: 'Consolas', monospace; font-weight: bold;
-      font-size: 13px; letter-spacing: 1px; text-transform: uppercase;
-      text-shadow: 0 1px 2px rgba(0,0,0,0.85);
-      cursor: pointer; margin-top: 4px;
+      margin-top: 8px; width: 100%; padding: 13px;
+      background: linear-gradient(180deg, #5ab4ff 0%, #2f86e6 100%);
+      border: 1px solid #7cc6ff; border-radius: 6px;
+      color: #04101e; font-family: 'Consolas', monospace; font-weight: bold;
+      font-size: 13px; letter-spacing: 2px; text-transform: uppercase;
+      cursor: pointer; transition: filter 0.15s, transform 0.05s, box-shadow 0.15s;
+      box-shadow: 0 4px 0 rgba(20, 70, 130, 0.9), 0 0 18px rgba(74,175,255,0.4);
     }
+    .modal-box button[type="submit"]:hover,
+    .modal-box .img-btn:hover { filter: brightness(1.12); box-shadow: 0 4px 0 rgba(20,70,130,0.9), 0 0 26px rgba(74,175,255,0.65); }
     .modal-box button[type="submit"]:active,
     .modal-box .img-btn:active {
-      background-image: url('/assets/PNG/User%20interfaces/landing%20Screen/start%20game%20btn%20pressed.png');
-      transform: translateY(1px);
+      transform: translateY(3px); box-shadow: 0 1px 0 rgba(20,70,130,0.9), 0 0 18px rgba(74,175,255,0.4);
     }
-    #authError { color: #ff8a8a; font-size: 11px; min-height: 14px; margin: 4px 0 0 0; text-align: center; }
+    .modal-box button[type="submit"]:disabled {
+      background: #2a3a4d; border-color: #3a4d63; color: #6e8197;
+      box-shadow: none; cursor: not-allowed; filter: none; transform: none;
+    }
+    #authError { color: #ff8a8a; font-size: 11px; min-height: 14px; margin: 10px 0 0 0; text-align: center; letter-spacing: 0.5px; }
     #authClose {
-      position: absolute; top: 18px; right: 22px; background: transparent;
-      border: 0; color: #fff; font-size: 22px; cursor: pointer;
-      text-shadow: 0 1px 3px rgba(0,0,0,0.9); z-index: 1;
+      position: absolute; top: 12px; right: 14px; background: transparent;
+      border: 0; color: #6e8aa6; font-size: 22px; cursor: pointer; line-height: 1;
+      transition: color 0.15s;
     }
-    #authClose:hover { color: #6cf; }
+    #authClose:hover { color: var(--c-frame); }
 
     /* Menu d'action (popup contextuel sur clic d'un élément) */
     #actionMenu {
@@ -525,12 +559,11 @@
       <form id="signupForm" class="hidden" autocomplete="off">
         <input name="username" placeholder="Pseudo (3-20 caractères)" autocomplete="off" required />
         <input name="password" type="password" placeholder="Mot de passe (6 min)" autocomplete="new-password" required />
-        <label style="font-size:11px;color:#9bd0ff;letter-spacing:1px;text-transform:uppercase;">Amiral à rejoindre</label>
-        <select name="amiralName" id="signupAmiralSelect" required
-          style="background:#000;color:#fff;border:1px solid #4af;padding:8px 10px;font-family:monospace;font-size:13px;border-radius:3px;">
+        <label class="field-label">Amiral à rejoindre</label>
+        <select name="amiralName" id="signupAmiralSelect" required>
           <option value="">— Chargement —</option>
         </select>
-        <p id="signupNoAmiral" class="hidden" style="font-size:11px;color:#f88;margin:4px 0 0 0;">
+        <p id="signupNoAmiral" class="hidden" style="font-size:11px;color:#ff8a8a;margin:4px 0 0 0;">
           Aucun Amiral n'est en ligne. L'inscription est impossible tant qu'un Amiral n'a pas pris ses fonctions.
         </p>
         <button type="submit" id="signupSubmit">Créer un compte</button>
