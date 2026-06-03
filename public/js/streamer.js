@@ -660,16 +660,20 @@ class MainScene extends Phaser.Scene {
     this.applyFitZoom();
     this.scale.on('resize', () => this.onResize());
     this.input.on('wheel', (pointer, _g, _dx, deltaY) => {
-      // Coords monde du point sous le curseur AVANT le zoom
-      const worldX = pointer.worldX;
-      const worldY = pointer.worldY;
-      this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
-      this.applyFitZoom();
-      // Le follow doit etre detache pour qu'on puisse positionner la camera ailleurs que sur le vaisseau
       const cam = this.cameras.main;
-      cam.stopFollow();
-      cam.scrollX = worldX - pointer.x / cam.zoom;
-      cam.scrollY = worldY - pointer.y / cam.zoom;
+      this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
+      if (cam._follow) {
+        // Camera attachee au vaisseau : on zoome simplement, le centre reste sur le vaisseau.
+        // Sinon, sans bornes monde, dezoomer ferait deriver la vue loin de la base.
+        this.applyFitZoom();
+      } else {
+        // Camera detachee (apres un drag-pan) : on zoome autour du curseur (UX cartographique).
+        const worldX = pointer.worldX;
+        const worldY = pointer.worldY;
+        this.applyFitZoom();
+        cam.scrollX = worldX - pointer.x / cam.zoom;
+        cam.scrollY = worldY - pointer.y / cam.zoom;
+      }
     });
 
     this.thrust = this.add.particles(0, 0, 'thrust', {
