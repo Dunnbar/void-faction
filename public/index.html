@@ -295,100 +295,84 @@
       border-radius: 4px; font-size: 12px; opacity: 0.7; pointer-events: none;
     }
 
-    /* Auth modal : panneau terminal sci-fi (coherent avec le HUD) */
+    /* Auth modal : boite cartoon (assets landing Screen) sur fond sombre net */
     #authModal {
       position: fixed; inset: 0;
-      background:
-        radial-gradient(ellipse at center, rgba(8, 20, 38, 0.72) 0%, rgba(2, 5, 10, 0.92) 100%);
-      backdrop-filter: blur(3px);
+      background: rgba(3, 7, 14, 0.86);
+      backdrop-filter: blur(4px);
       display: flex; align-items: center; justify-content: center; z-index: 200;
     }
     #authModal.hidden { display: none; }
     .modal-box {
       position: relative;
-      width: 380px; max-width: calc(100vw - 32px);
-      background:
-        linear-gradient(180deg, rgba(10, 26, 46, 0.98) 0%, rgba(6, 16, 30, 0.98) 100%);
-      border: 1px solid var(--c-frame);
-      border-radius: 10px;
-      box-shadow: 0 0 0 1px rgba(74,175,255,0.15), 0 0 40px rgba(74, 175, 255, 0.35), inset 0 0 60px rgba(74,175,255,0.04);
-      padding: 30px 32px 32px;
+      width: 460px; min-height: 430px;
+      background: url('/assets/PNG/User%20interfaces/landing%20Screen/cover%20box%20.png') no-repeat center;
+      background-size: 100% 100%;
+      /* Le panneau turquoise occupe ~88% en haut ; la plaque d'ombre ~12% en bas.
+         Padding bas plus grand -> le contenu se centre dans la zone turquoise.
+         min-height (pas height fixe) : la boite grandit pour l'onglet Inscription. */
+      padding: 54px 70px 88px;
       box-sizing: border-box;
-      display: flex; flex-direction: column;
+      display: flex; flex-direction: column; justify-content: center;
     }
-    /* Liseré d'accent en haut du panneau */
-    .modal-box::before {
-      content: ''; position: absolute; top: 0; left: 18px; right: 18px; height: 2px;
-      background: linear-gradient(90deg, transparent, var(--c-frame), transparent);
-      box-shadow: 0 0 8px rgba(74,175,255,0.8);
-    }
-    .modal-box h2 {
-      margin: 4px 0 4px 0; color: var(--c-frame); font-size: 18px; text-align: center;
-      letter-spacing: 3px; text-transform: uppercase; text-shadow: 0 0 12px rgba(74,175,255,0.5);
-    }
-    .modal-box .subtitle { margin: 0 0 18px 0; font-size: 11px; color: #8fb4d8; opacity: 0.85; text-align: center; letter-spacing: 0.5px; }
-    .tabs { display: flex; gap: 6px; margin-bottom: 18px; }
+    .modal-box h2 { margin: 0 0 4px 0; color: #2b2150; font-size: 17px; text-align: center; letter-spacing: 1px; }
+    .modal-box .subtitle { margin: 0 0 14px 0; font-size: 11px; color: #3a4a63; text-align: center; }
+    .tabs { display: flex; gap: 4px; margin-bottom: 14px; }
     .tab {
-      flex: 1; background: rgba(74,175,255,0.04); border: 1px solid rgba(74, 175, 255, 0.18);
-      color: #7e9bb8; border-radius: 5px;
-      font-family: inherit; font-size: 12px; font-weight: bold; letter-spacing: 1px;
-      text-transform: uppercase; padding: 9px 6px; cursor: pointer;
-      transition: color 0.15s, border-color 0.15s, background 0.15s;
+      flex: 1; background: rgba(43, 33, 80, 0.08); border: 0; color: #6b6a8a;
+      font-family: inherit; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;
+      padding: 7px 6px; cursor: pointer; border-radius: 5px;
+      border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
     }
-    .tab:hover { color: #bcd6f0; border-color: rgba(74,175,255,0.4); }
-    .tab.active {
-      color: #06121e; background: var(--c-frame); border-color: var(--c-frame);
-      box-shadow: 0 0 14px rgba(74,175,255,0.5);
-    }
-    .modal-box form { display: flex; flex-direction: column; gap: 11px; }
+    .tab:hover { color: #2b2150; }
+    .tab.active { color: #2b2150; border-bottom-color: #ff9d4d; }
+    .modal-box form { display: flex; flex-direction: column; gap: 9px; }
     .modal-box form.hidden { display: none; }
     .modal-box input,
     .modal-box select {
       width: 100%; box-sizing: border-box;
-      background: rgba(0, 0, 0, 0.45); color: #fff;
-      border: 1px solid rgba(74, 175, 255, 0.35); padding: 11px 13px;
-      font-family: 'Consolas', monospace; font-size: 13px; border-radius: 5px;
+      background: rgba(255, 255, 255, 0.92); color: #1e2438;
+      border: 2px solid rgba(43, 33, 80, 0.25); padding: 9px 12px;
+      font-family: 'Consolas', monospace; font-size: 13px; border-radius: 6px;
       transition: border-color 0.15s, box-shadow 0.15s;
     }
-    .modal-box input::placeholder { color: #5e7891; }
-    .modal-box select option { background: #06121e; color: #fff; }
+    .modal-box input::placeholder { color: #8a90a6; }
+    .modal-box select option { background: #fff; color: #1e2438; }
     .modal-box input:focus,
     .modal-box select:focus {
-      outline: none; border-color: var(--c-frame);
-      box-shadow: 0 0 0 1px rgba(74,175,255,0.35), 0 0 14px rgba(74,175,255,0.25);
+      outline: none; border-color: #ff9d4d;
+      box-shadow: 0 0 0 3px rgba(255, 157, 77, 0.25);
     }
     .modal-box .field-label {
-      font-size: 10px; color: #8fb4d8; letter-spacing: 1.5px; text-transform: uppercase;
-      margin: 4px 0 -4px 2px;
+      font-size: 10px; color: #3a4a63; letter-spacing: 1px; text-transform: uppercase;
+      margin: 2px 0 -4px 2px;
     }
-    /* Bouton de validation sci-fi (remplace le PNG cartoon) */
+    /* Bouton image "start game btn" (cartoon) pour les submit */
     .modal-box button[type="submit"],
     .modal-box .img-btn {
-      margin-top: 8px; width: 100%; padding: 13px;
-      background: linear-gradient(180deg, #5ab4ff 0%, #2f86e6 100%);
-      border: 1px solid #7cc6ff; border-radius: 6px;
-      color: #04101e; font-family: 'Consolas', monospace; font-weight: bold;
-      font-size: 13px; letter-spacing: 2px; text-transform: uppercase;
-      cursor: pointer; transition: filter 0.15s, transform 0.05s, box-shadow 0.15s;
-      box-shadow: 0 4px 0 rgba(20, 70, 130, 0.9), 0 0 18px rgba(74,175,255,0.4);
+      align-self: center;
+      width: 200px; height: 100px; margin-top: 2px;
+      background: url('/assets/PNG/User%20interfaces/landing%20Screen/start%20game%20btn.png') no-repeat center;
+      background-size: contain;
+      border: 0; padding: 0 0 22px 0;
+      color: #5a3410; font-family: 'Consolas', monospace; font-weight: bold;
+      font-size: 13px; letter-spacing: 1px; text-transform: uppercase;
+      text-shadow: 0 1px 0 rgba(255, 220, 150, 0.6);
+      cursor: pointer; transition: transform 0.05s;
     }
-    .modal-box button[type="submit"]:hover,
-    .modal-box .img-btn:hover { filter: brightness(1.12); box-shadow: 0 4px 0 rgba(20,70,130,0.9), 0 0 26px rgba(74,175,255,0.65); }
     .modal-box button[type="submit"]:active,
     .modal-box .img-btn:active {
-      transform: translateY(3px); box-shadow: 0 1px 0 rgba(20,70,130,0.9), 0 0 18px rgba(74,175,255,0.4);
+      background-image: url('/assets/PNG/User%20interfaces/landing%20Screen/start%20game%20btn%20pressed.png');
+      transform: translateY(2px);
     }
-    .modal-box button[type="submit"]:disabled {
-      background: #2a3a4d; border-color: #3a4d63; color: #6e8197;
-      box-shadow: none; cursor: not-allowed; filter: none; transform: none;
-    }
-    #authError { color: #ff8a8a; font-size: 11px; min-height: 14px; margin: 10px 0 0 0; text-align: center; letter-spacing: 0.5px; }
+    .modal-box button[type="submit"]:disabled { filter: grayscale(0.7) opacity(0.6); cursor: not-allowed; }
+    #authError { color: #c0392b; font-size: 11px; min-height: 14px; margin: 6px 0 0 0; text-align: center; font-weight: bold; }
     #authClose {
-      position: absolute; top: 12px; right: 14px; background: transparent;
-      border: 0; color: #6e8aa6; font-size: 22px; cursor: pointer; line-height: 1;
-      transition: color 0.15s;
+      position: absolute; top: 22px; right: 30px; background: transparent;
+      border: 0; color: #2b2150; font-size: 20px; cursor: pointer; line-height: 1; opacity: 0.7;
+      transition: opacity 0.15s;
     }
-    #authClose:hover { color: var(--c-frame); }
+    #authClose:hover { opacity: 1; }
 
     /* Menu d'action (popup contextuel sur clic d'un élément) */
     #actionMenu {
