@@ -1456,6 +1456,17 @@ class MainScene extends Phaser.Scene {
       this.ship.rotation = Phaser.Math.Angle.RotateTo(this.ship.rotation, targetRot, maxStep);
     }
 
+    // Borne le vaisseau a la grille de cases (memes bornes que le serveur).
+    // Max exclusif (-1) pour que la case du bord droit/bas reste dans la grille.
+    {
+      const minX = MAP_BOUNDS.minI * WORLD_W, maxX = (MAP_BOUNDS.maxI + 1) * WORLD_W - 1;
+      const minY = MAP_BOUNDS.minJ * WORLD_H, maxY = (MAP_BOUNDS.maxJ + 1) * WORLD_H - 1;
+      if (this.ship.x < minX) { this.ship.x = minX; this.ship.body.velocity.x = 0; }
+      else if (this.ship.x > maxX) { this.ship.x = maxX; this.ship.body.velocity.x = 0; }
+      if (this.ship.y < minY) { this.ship.y = minY; this.ship.body.velocity.y = 0; }
+      else if (this.ship.y > maxY) { this.ship.y = maxY; this.ship.body.velocity.y = 0; }
+    }
+
     // Systeme de cases : si le vaisseau a franchi une frontiere, on bascule la camera
     // sur la case voisine (transition fluide, en gardant le vaisseau visible).
     SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
