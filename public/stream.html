@@ -46,6 +46,32 @@
     }
     .line strong { color: #f84; }
     .hidden { display: none !important; }
+    /* Bouton + menu profil (haut-droite) */
+    #profileBtn {
+      position: fixed; top: 12px; right: 12px; z-index: 31;
+      background: rgba(0, 20, 40, 0.92); border: 1px solid #f84; color: #ffb27a;
+      border-radius: 6px; padding: 8px 14px; font-family: 'Consolas', monospace;
+      font-weight: bold; letter-spacing: 1px; cursor: pointer;
+      box-shadow: 0 0 12px rgba(255, 136, 68, 0.3);
+    }
+    #profileBtn:hover { background: rgba(255, 136, 68, 0.18); }
+    #profileMenu {
+      position: fixed; top: 52px; right: 12px; z-index: 31; width: 270px;
+      background: rgba(0, 12, 24, 0.97); border: 1px solid #f84; border-radius: 8px;
+      padding: 14px 16px; font-family: 'Consolas', monospace;
+      box-shadow: 0 0 24px rgba(255, 136, 68, 0.35);
+      display: flex; flex-direction: column; gap: 9px;
+    }
+    #profileMenu .pm-name { color: #ffb27a; font-weight: bold; letter-spacing: 1px; font-size: 14px; }
+    #profileMenu .pm-title { font-size: 10px; letter-spacing: 1.5px; text-transform: uppercase; color: #7f97ad; margin-top: 4px; }
+    #profileMenu .pm-row { font-size: 13px; color: #cdd9e6; }
+    #profileMenu .pm-row strong { color: #f84; }
+    #profileMenu .pm-cmd { font-size: 12px; color: #9fb3c8; line-height: 1.55; }
+    #profileMenu .pm-logout {
+      margin-top: 6px; background: transparent; border: 1px solid #f55; color: #f88;
+      border-radius: 5px; padding: 7px; font-family: inherit; font-size: 12px; cursor: pointer; letter-spacing: 1px;
+    }
+    #profileMenu .pm-logout:hover { background: #f55; color: #000; }
     /* Commandant */
     #captainAlert {
       position: fixed; bottom: 14px; left: 14px; z-index: 28;
@@ -237,9 +263,14 @@
       <p id="loginError"></p>
     </div>
   </div>
-  <div id="hud" class="hidden">
-    <div class="line">Ressource de faction : <strong id="resource">0</strong></div>
-    <div class="line">Clic droit — déplacer le vaisseau &nbsp;|&nbsp; Molette — zoom</div>
+  <button id="profileBtn" class="hidden" type="button" title="Profil">⚙ <span id="profileBtnName">AMIRAL</span></button>
+  <div id="profileMenu" class="hidden">
+    <div class="pm-name" id="pmName">AMIRAL</div>
+    <div class="pm-title">Faction</div>
+    <div class="pm-row">Ressource de faction : <strong id="resource">0</strong></div>
+    <div class="pm-title">Commandes</div>
+    <div class="pm-cmd">Clic droit — déplacer le vaisseau<br>Molette — zoom (vers le curseur)<br>Glisser — déplacer la vue<br>Clic — agir sur un élément</div>
+    <button class="pm-logout" id="pmLogout" type="button">Déconnexion</button>
   </div>
   <div id="baseClock" class="hidden"></div>
   <div id="minimapLabel" class="hidden">CARTE — clic pour déplacer la vue</div>

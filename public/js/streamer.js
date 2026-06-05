@@ -37,7 +37,8 @@ const signupForm = document.getElementById('signupForm');
 const loginError = document.getElementById('loginError');
 const tabLogin = document.getElementById('tabLogin');
 const tabSignup = document.getElementById('tabSignup');
-const hudEl = document.getElementById('hud');
+const profileBtn = document.getElementById('profileBtn');
+const profileMenu = document.getElementById('profileMenu');
 const resourceEl = document.getElementById('resource');
 
 let authenticated = false;
@@ -73,12 +74,28 @@ tabSignup.addEventListener('click', () => setActiveTab('signup'));
 
 function showLoginUI() {
   loginEl.classList.remove('hidden');
-  hudEl.classList.add('hidden');
+  profileBtn.classList.add('hidden');
+  profileMenu.classList.add('hidden');
 }
 function hideLoginUI() {
   loginEl.classList.add('hidden');
-  hudEl.classList.remove('hidden');
+  profileBtn.classList.remove('hidden');
 }
+
+// Menu profil (haut-droite) : toggle + fermeture au clic exterieur + deconnexion.
+profileBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  profileMenu.classList.toggle('hidden');
+});
+document.addEventListener('click', (e) => {
+  if (profileMenu.classList.contains('hidden')) return;
+  if (!profileMenu.contains(e.target) && e.target !== profileBtn) profileMenu.classList.add('hidden');
+});
+document.getElementById('pmLogout').addEventListener('click', () => {
+  amiralToken = null;
+  localStorage.removeItem('voidfaction:amiralToken');
+  location.reload();
+});
 
 function connectAmiralSocket() {
   if (socket) try { socket.disconnect(); } catch {}
@@ -374,6 +391,8 @@ function wireSocketEvents() {
     amiralProgress = data.progress || amiralProgress;
     // Pseudo de l'Amiral sur le vaisseau (le sien). Stocke pour utilisation au demarrage de la scene
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
+    { const a = document.getElementById('profileBtnName'); if (a) a.textContent = amiralDisplayName; }
+    { const a = document.getElementById('pmName'); if (a) a.textContent = amiralDisplayName; }
     const sceneForLabel = game?.scene.getScene('main');
     if (sceneForLabel && sceneForLabel.shipLabel) sceneForLabel.shipLabel.setText(amiralDisplayName);
     if (data.world) {

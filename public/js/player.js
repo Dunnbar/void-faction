@@ -125,6 +125,7 @@ const resourceEl = document.getElementById('resource');
 const userLineEl = document.getElementById('userLine');
 const userLabelEl = document.getElementById('userLabel');
 const authBtn = document.getElementById('authBtn');
+const profileMenu = document.getElementById('profileMenu');
 const soundBtn = document.getElementById('soundBtn');
 const historyListEl = document.getElementById('historyList');
 
@@ -204,16 +205,19 @@ function getElement(id) {
 
 function updateUserLine() {
   const authBtnLabel = document.getElementById('authBtnLabel');
+  const pmAction = document.getElementById('pmAuthAction');
   if (authenticated && username) {
     userLabelEl.textContent = username;
     userLineEl.classList.remove('anon');
     if (authBtnLabel) authBtnLabel.textContent = username;
-    authBtn.title = `Connecté en ${username} — clic pour déconnexion`;
+    authBtn.title = 'Profil';
+    if (pmAction) { pmAction.textContent = 'Déconnexion'; pmAction.classList.add('logout'); }
   } else {
     userLabelEl.textContent = 'Visiteur';
     userLineEl.classList.add('anon');
     if (authBtnLabel) authBtnLabel.textContent = 'Connexion';
-    authBtn.title = 'Cliquer pour se connecter';
+    authBtn.title = 'Profil / Connexion';
+    if (pmAction) { pmAction.textContent = 'Connexion'; pmAction.classList.remove('logout'); }
   }
 }
 
@@ -525,7 +529,8 @@ function closeAuthModal() {
   pendingElementId = null;
 }
 
-authBtn.addEventListener('click', async () => {
+// Action d'authentification (depuis le bouton du menu profil) : connexion ou deconnexion.
+async function doAuthAction() {
   if (authenticated) {
     try {
       await fetch('/api/logout', {
@@ -545,6 +550,20 @@ authBtn.addEventListener('click', async () => {
   } else {
     openAuthModal();
   }
+}
+
+// Le bouton profil ouvre/ferme le menu (identite + ressources + commandes + connexion).
+authBtn.addEventListener('click', (e) => {
+  e.stopPropagation();
+  profileMenu.classList.toggle('hidden');
+});
+document.getElementById('pmAuthAction').addEventListener('click', () => {
+  profileMenu.classList.add('hidden');
+  doAuthAction();
+});
+document.addEventListener('click', (e) => {
+  if (profileMenu.classList.contains('hidden')) return;
+  if (!profileMenu.contains(e.target) && !authBtn.contains(e.target)) profileMenu.classList.add('hidden');
 });
 
 authClose.addEventListener('click', closeAuthModal);
