@@ -167,6 +167,95 @@
     }
   }
 
+  // ===================== Overlay actions (compteurs + halo "mon action") =====================
+  const ACTION_LABELS = { tir: 'Tir', visee: 'Portée', reparation: 'Répar', remplir: 'Énergie', minage: 'Minage' };
+
+  function actionCountsByElement(activeList) {
+    const m = new Map();
+    for (const a of (activeList || [])) {
+      if (!a || !a.element_id) continue;
+      if (!m.has(a.element_id)) m.set(a.element_id, new Map());
+      const am = m.get(a.element_id);
+      am.set(a.action_id, (am.get(a.action_id) || 0) + 1);
+    }
+    return m;
+  }
+  function formatActionCounts(am) {
+    if (!am || am.size === 0) return '';
+    const parts = [];
+    for (const [act, n] of am) parts.push(`${ACTION_LABELS[act] || act} ×${n}`);
+    return parts.join('   ');
+  }
+  function overlayElementPos(scene, id) {
+    if (id === 'ship-1') return scene.ship ? { x: scene.ship.x, y: scene.ship.y } : null;
+    const sp = scene.elementSprites && scene.elementSprites.get(id);
+    if (sp) return { x: sp.x, y: sp.y };
+    const el = getElements().find(e => e.id === id);
+    return el ? { x: el.x, y: el.y } : null;
+  }
+  function overlayLabelOffset(scene, id) {
+    if (id === 'ship-1') return 30;
+    const sp = scene.elementSprites && scene.elementSprites.get(id);
+    if (sp && sp.displayHeight) return sp.displayHeight * 0.5 + 12;
+    return 40;
+  }
+  // Cree/maj les labels de compteurs d'actions et le halo de l'element actif de l'utilisateur.
+  function refreshActionOverlay(scene, activeList, myActiveElementId) {
+    if (!scene._actionLabels) scene._actionLabels = new Map();
+    const counts = actionCountsByElement(activeList);
+    const ids = new Set([...counts.keys(), ...scene._actionLabels.keys()]);
+    for (const id of ids) {
+      const txt = formatActionCounts(counts.get(id));
+      let lbl = scene._actionLabels.get(id);
+      if (!txt) { if (lbl) { lbl.destroy(); scene._actionLabels.delete(id); } continue; }
+      if (!lbl) {
+        lbl = scene.add.text(0, 0, '', {
+          fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#cfe6ff',
+          stroke: '#000', strokeThickness: 3, align: 'center'
+        }).setOrigin(0.5, 0).setDepth(13);
+        scene._actionLabels.set(id, lbl);
+      }
+      lbl.setText(txt);
+    }
+    updateMyActiveHalo(scene, myActiveElementId);
+    positionActionOverlay(scene);
+  }
+  function updateMyActiveHalo(scene, myId) {
+    if (!scene._myHalo) {
+      scene._myHalo = scene.add.circle(0, 0, 70, 0x4afff8, 0)
+        .setStrokeStyle(3, 0x4afff8, 0.95).setDepth(6);
+      scene.tweens.add({
+        targets: scene._myHalo, alpha: { from: 0.95, to: 0.35 }, scaleX: { from: 1, to: 1.12 }, scaleY: { from: 1, to: 1.12 },
+        yoyo: true, repeat: -1, duration: 800, ease: 'Sine.easeInOut'
+      });
+    }
+    scene._myHaloId = myId || null;
+    if (!myId) { scene._myHalo.visible = false; return; }
+    let r = 70;
+    if (myId === 'ship-1') r = 42;
+    else {
+      const sp = scene.elementSprites && scene.elementSprites.get(myId);
+      if (sp && sp.displayWidth) r = Math.max(sp.displayWidth, sp.displayHeight) * 0.6;
+    }
+    scene._myHalo.setRadius(r);
+    scene._myHalo.visible = true;
+  }
+  // A appeler chaque frame : suit la position des elements mobiles (vaisseau).
+  function positionActionOverlay(scene) {
+    if (scene._actionLabels) {
+      for (const [id, lbl] of scene._actionLabels) {
+        const p = overlayElementPos(scene, id);
+        if (!p) { lbl.visible = false; continue; }
+        lbl.visible = true;
+        lbl.x = p.x; lbl.y = p.y + overlayLabelOffset(scene, id);
+      }
+    }
+    if (scene._myHalo && scene._myHaloId) {
+      const p = overlayElementPos(scene, scene._myHaloId);
+      if (p) { scene._myHalo.x = p.x; scene._myHalo.y = p.y; }
+    }
+  }
+
   function getStates() {
     return (typeof elementStates !== 'undefined') ? elementStates : null;
   }
@@ -319,6 +408,8 @@
     zoomToPointer,
     tpCameraTo,
     setupMinimap,
-    drawMinimap
+    drawMinimap,
+    refreshActionOverlay,
+    positionActionOverlay
   };
 })();

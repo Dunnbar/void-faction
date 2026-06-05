@@ -417,7 +417,8 @@ function wireSocketEvents() {
     resourceEl.textContent = data.resource;
   });
   socket.on('elements:update', (data) => {
-    lastActiveElements = data.activeElements || [];
+    // Ne pas ecraser la liste active sur les broadcasts partiels (qui n'envoient que des states).
+    if (Array.isArray(data.activeElements)) lastActiveElements = data.activeElements;
     if (Array.isArray(data.states)) {
       // Fusion (pas de remplacement) : les broadcasts partiels (base, asteroides) ne doivent pas s'ecraser
       for (const s of data.states) elementStates.set(s.id, s);
@@ -427,6 +428,7 @@ function wireSocketEvents() {
     if (scene && scene.scene.isActive()) {
       scene.refreshElementHighlights(lastActiveElements);
       scene.applyAllElementStates();
+      SharedScene.refreshActionOverlay(scene, lastActiveElements, activeAction?.element_id);
     }
   });
   socket.on('asteroid:destroyed', (data) => {
@@ -489,6 +491,11 @@ function wireSocketEvents() {
     // Mise a jour du menu si ouvert sur l'element concerne
     if (actionMenuElementId && !actionMenu.classList.contains('hidden')) {
       openActionMenu(actionMenuElementId, null);
+    }
+    // Halo "mon action en cours" sur l'element concerne.
+    const scene = game?.scene.getScene('main');
+    if (scene && scene.scene.isActive()) {
+      SharedScene.refreshActionOverlay(scene, lastActiveElements, activeAction?.element_id);
     }
   });
 }
@@ -624,7 +631,7 @@ class MainScene extends Phaser.Scene {
 
     const _shipStart = pendingShipPos || { x: WORLD_W / 2, y: WORLD_H / 2 + 230, rotation: 0 };
     this.ship = this.physics.add.sprite(_shipStart.x, _shipStart.y, 'ship-fr-000');
-    this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.36);
+    this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.36).setDepth(7); // au-dessus des assets (base/tourelles/asteroides en depth 0)
     if (typeof _shipStart.rotation === 'number') this.ship.rotation = _shipStart.rotation;
     pendingShipPos = null;
     this.ship.play('ship-thrust');
@@ -964,6 +971,7 @@ class MainScene extends Phaser.Scene {
     });
     this.refreshElementHighlights(lastActiveElements);
     this.applyAllElementStates();
+    SharedScene.refreshActionOverlay(this, lastActiveElements, activeAction?.element_id);
   }
 
   makeHpBar(x, y, width, strokeColor) {
@@ -1413,10 +1421,12 @@ class MainScene extends Phaser.Scene {
     const STOP_SPEED = 20;           // px/s
 
     let moving = false;
+    let distToDest = Infinity;
     if (this.destination) {
       const dx = this.destination.x - this.ship.x;
       const dy = this.destination.y - this.ship.y;
       const dist = Math.hypot(dx, dy);
+      distToDest = dist;
       const v = this.ship.body.velocity;
       const speed = Math.hypot(v.x, v.y);
 
@@ -1437,16 +1447,20 @@ class MainScene extends Phaser.Scene {
     }
     this.thrust.emitting = moving;
 
-    // Orientation : on s'oriente vers la destination quand on se déplace,
-    // sinon on garde la rotation actuelle
-    if (this.destination) {
-      this.ship.rotation = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.destination.x, this.destination.y) + SHIP_SPRITE_OFFSET;
+    // Orientation : rotation PROGRESSIVE vers le cap (pas de retournement brusque au clic).
+    // On fige l'orientation a l'approche (< 45px) pour eviter le demi-tour parasite a l'arrivee.
+    if (this.destination && distToDest > 45) {
+      const targetRot = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.destination.x, this.destination.y) + SHIP_SPRITE_OFFSET;
+      const TURN_SPEED = 5.5; // rad/s
+      const maxStep = TURN_SPEED * ((delta || 16) / 1000);
+      this.ship.rotation = Phaser.Math.Angle.RotateTo(this.ship.rotation, targetRot, maxStep);
     }
 
     // Systeme de cases : si le vaisseau a franchi une frontiere, on bascule la camera
     // sur la case voisine (transition fluide, en gardant le vaisseau visible).
     SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
     if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship.x, this.ship.y);
+    SharedScene.positionActionOverlay(this); // suit le vaisseau (labels + halo)
 
     if (time - this.lastSend > 50) {
       this.lastSend = time;

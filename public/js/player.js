@@ -98,6 +98,7 @@ let serverElements = [];
 let elementStates = new Map();   // id -> { hp, hpMax, puissance, range, essence, essenceMax, subtype, destroyedAt, respawnsAt }
 let factionResources = { materiaux: 0, radius: 0 };
 let activeElementsByElement = new Map(); // element_id -> { action_id, category, username }
+let lastActiveList = []; // liste brute des actions actives (1 entree par acteur) pour les compteurs
 let activeAction = null; // { element_id, action_id, category, started_at, last_settled_at }
 let progress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
 let previousProgress = null;
@@ -712,10 +713,19 @@ function connectSocket() {
     previousProgress = { ...progress };
     renderActiveAction();
     renderBars();
+    // Halo "mon action en cours" sur l'element concerne.
+    const scene2 = game.scene.getScene('main');
+    if (scene2 && scene2.scene.isActive()) {
+      SharedScene.refreshActionOverlay(scene2, lastActiveList, activeAction?.element_id);
+    }
   });
 
   socket.on('elements:update', (data) => {
-    rebuildActiveElementsMap(data.activeElements);
+    // Ne pas ecraser la liste active sur les broadcasts partiels (states seuls).
+    if (Array.isArray(data.activeElements)) {
+      lastActiveList = data.activeElements;
+      rebuildActiveElementsMap(data.activeElements);
+    }
     if (Array.isArray(data.states)) {
       // Fusion (pas de remplacement) : les broadcasts partiels (base, asteroides) ne doivent pas s'ecraser
       for (const s of data.states) elementStates.set(s.id, s);
@@ -728,6 +738,7 @@ function connectSocket() {
     if (scene && scene.scene.isActive()) {
       scene.refreshElementHighlights();
       scene.applyAllElementStates();
+      SharedScene.refreshActionOverlay(scene, lastActiveList, activeAction?.element_id);
     }
   });
 
@@ -909,7 +920,8 @@ class MainScene extends Phaser.Scene {
     // Vaisseau Amiral (positionné via socket)
     this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship-fr-000')
       .setScale(SHIP_SCALE)
-      .setOrigin(0.5, 0.36);
+      .setOrigin(0.5, 0.36)
+      .setDepth(7); // au-dessus des assets (base/tourelles/asteroides en depth 0)
     this.ship.play('ship-thrust');
     this.ship._hp = 100;
     this.ship._hpMax = 100;
@@ -1029,6 +1041,7 @@ class MainScene extends Phaser.Scene {
       SharedScene.tpCameraTo(this, this.ship.x, this.ship.y, false);
     }
     if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship ? this.ship.x : null, this.ship ? this.ship.y : null);
+    SharedScene.positionActionOverlay(this); // suit le vaisseau (labels + halo)
   }
 
   // Cibles hostiles qu'un ennemi peut engager : asteroides vivants, tourelles, vaisseau du joueur.
@@ -1411,6 +1424,7 @@ class MainScene extends Phaser.Scene {
       }
     });
     this.refreshElementHighlights();
+    SharedScene.refreshActionOverlay(this, lastActiveList, activeAction?.element_id);
   }
 
   makeHpBar(x, y, width, strokeColor) {
