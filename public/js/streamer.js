@@ -39,7 +39,6 @@ const tabLogin = document.getElementById('tabLogin');
 const tabSignup = document.getElementById('tabSignup');
 const profileBtn = document.getElementById('profileBtn');
 const profileMenu = document.getElementById('profileMenu');
-const resourceEl = document.getElementById('resource');
 
 let authenticated = false;
 let gameStarted = false;
@@ -382,7 +381,6 @@ function wireSocketEvents() {
     }
     authenticated = true;
     hideLoginUI();
-    resourceEl.textContent = data.resource;
     lastActiveElements = data.activeElements || [];
     serverElements = data.elements || [];
     elementStates = new Map((data.elementStates || []).map(s => [s.id, s]));
@@ -431,9 +429,7 @@ function wireSocketEvents() {
       }
     }
   });
-  socket.on('resource', (data) => {
-    resourceEl.textContent = data.resource;
-  });
+  socket.on('resource', () => { /* ressource de faction globale non affichee */ });
   socket.on('elements:update', (data) => {
     // Ne pas ecraser la liste active sur les broadcasts partiels (qui n'envoient que des states).
     if (Array.isArray(data.activeElements)) lastActiveElements = data.activeElements;
