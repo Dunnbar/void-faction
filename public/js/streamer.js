@@ -7,6 +7,8 @@ let TURRET_X = BASE_X;
 let TURRET_Y = BASE_Y;
 let GAME_TZ_CLIENT = 'Europe/Paris';
 let baseClockInterval = null;
+let MAP_BOUNDS = { minI: -1, maxI: 1, minJ: -1, maxJ: 1 };
+let pendingShipPos = null; // position vaisseau recue a l'init, appliquee au demarrage de la scene
 
 // Met a jour le bandeau #baseClock (jour de la base + heure jeu coloree jour/nuit).
 // Demarre l'intervalle une seule fois ; safe a rappeler a chaque reconnexion.
@@ -384,7 +386,13 @@ function wireSocketEvents() {
       TURRET_X = data.world.turretX;
       TURRET_Y = data.world.turretY;
       GAME_TZ_CLIENT = data.world.gameTz || 'Europe/Paris';
+      MAP_BOUNDS = {
+        minI: data.world.mapMinI ?? -1, maxI: data.world.mapMaxI ?? 1,
+        minJ: data.world.mapMinJ ?? -1, maxJ: data.world.mapMaxJ ?? 1
+      };
     }
+    // Position du vaisseau restauree (la sienne) : appliquee au demarrage de la scene.
+    if (data.ship) pendingShipPos = data.ship;
     startBaseClock();
     pendingWave = data.currentWave && data.currentWave.endsAt > Date.now() ? data.currentWave : null;
     if (pendingWave) triggerCaptainForWave(pendingWave);
@@ -614,8 +622,11 @@ class MainScene extends Phaser.Scene {
     tg.generateTexture('thrust', 8, 8);
     tg.destroy();
 
-    this.ship = this.physics.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship-fr-000');
+    const _shipStart = pendingShipPos || { x: WORLD_W / 2, y: WORLD_H / 2 + 230, rotation: 0 };
+    this.ship = this.physics.add.sprite(_shipStart.x, _shipStart.y, 'ship-fr-000');
     this.ship.setScale(SHIP_SCALE).setOrigin(0.5, 0.36);
+    if (typeof _shipStart.rotation === 'number') this.ship.rotation = _shipStart.rotation;
+    pendingShipPos = null;
     this.ship.play('ship-thrust');
     this.ship._hp = 100;
     this.ship._hpMax = 100;
@@ -657,7 +668,11 @@ class MainScene extends Phaser.Scene {
     // frontiere (= sort de l'ecran). Pas de follow continu, pas de derive au zoom.
     this._userZoomFactor = 1.0; // une case entiere tient a l'ecran
     this.applyFitZoom();
-    SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y); // centrage initial (case 0,0)
+    SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y); // centrage initial sur la case du vaisseau
+    // Minimap : clic = recadrer la vue sur l'endroit clique.
+    this._minimap = SharedScene.setupMinimap({ bounds: MAP_BOUNDS, onTp: (wx, wy) => SharedScene.tpCameraTo(this, wx, wy, true) });
+    document.getElementById('minimap')?.classList.remove('hidden');
+    document.getElementById('minimapLabel')?.classList.remove('hidden');
     this.scale.on('resize', () => this.onResize());
     this.input.on('wheel', (pointer, _g, _dx, deltaY) => {
       this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
@@ -1429,8 +1444,9 @@ class MainScene extends Phaser.Scene {
     }
 
     // Systeme de cases : si le vaisseau a franchi une frontiere, on bascule la camera
-    // sur la case voisine (transition fluide). Sinon la vue reste fixe sur la case.
+    // sur la case voisine (transition fluide, en gardant le vaisseau visible).
     SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
+    if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship.x, this.ship.y);
 
     if (time - this.lastSend > 50) {
       this.lastSend = time;

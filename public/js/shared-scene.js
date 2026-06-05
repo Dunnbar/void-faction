@@ -28,23 +28,36 @@
     const { w, h } = caseDims();
     return { x: (i + 0.5) * w, y: (j + 0.5) * h };
   }
-  // Centre la camera sur une case. animate=true : petit pan fluide (transition de case).
-  function centerCameraOnCase(scene, i, j, animate) {
-    const c = caseCenterCoords(i, j);
+  // Scroll cible pour centrer la camera sur (fx,fy), borne a la case c.
+  function scrollForFocus(cam, c, fx, fy) {
+    const { w, h } = caseDims();
+    const x0 = c.i * w, y0 = c.j * h;
+    const vw = cam.width / cam.zoom, vh = cam.height / cam.zoom;
+    let sx = fx - 0.5 * vw, sy = fy - 0.5 * vh;
+    sx = vw >= w ? x0 + (w - vw) / 2 : Math.min(Math.max(sx, x0), x0 + w - vw);
+    sy = vh >= h ? y0 + (h - vh) / 2 : Math.min(Math.max(sy, y0), y0 + h - vh);
+    return { sx, sy };
+  }
+  // Cadre la camera sur la case c en gardant le point focal (fx,fy) visible (clamp).
+  // animate=true : pan fluide (transition de case). Si fx/fy omis -> centre de la case.
+  function focusCameraOnCase(scene, c, fx, fy, animate) {
     const cam = scene.cameras.main;
+    if (fx == null) { const cc = caseCenterCoords(c.i, c.j); fx = cc.x; fy = cc.y; }
+    const { sx, sy } = scrollForFocus(cam, c, fx, fy);
     scene.tweens.killTweensOf(cam);
     if (animate) {
-      scene.tweens.add({
-        targets: cam,
-        scrollX: c.x - 0.5 * cam.width / cam.zoom,
-        scrollY: c.y - 0.5 * cam.height / cam.zoom,
-        duration: 320, ease: 'Cubic.easeInOut'
-      });
+      scene.tweens.add({ targets: cam, scrollX: sx, scrollY: sy, duration: 320, ease: 'Cubic.easeInOut' });
     } else {
-      cam.centerOn(c.x, c.y);
+      cam.scrollX = sx; cam.scrollY = sy;
     }
   }
+  // Compat : centre sur une case (point central), sans focal specifique.
+  function centerCameraOnCase(scene, i, j, animate) {
+    focusCameraOnCase(scene, { i, j }, null, null, animate);
+  }
   // Detecte un changement de case d'apres (x,y) du vaisseau et recadre si besoin.
+  // La camera se recadre sur la nouvelle case en gardant le VAISSEAU visible (clamp),
+  // pour qu'on ne perde jamais le vaisseau apres une transition.
   // Premier appel (pas de case memorisee) : centrage instantane, sans animation.
   // Retourne true si une transition a eu lieu.
   function updateCaseCamera(scene, x, y) {
@@ -53,15 +66,22 @@
     if (!prev || prev.i !== cur.i || prev.j !== cur.j) {
       const hadPrev = !!prev;
       scene._currentCase = cur;
-      centerCameraOnCase(scene, cur.i, cur.j, hadPrev);
+      focusCameraOnCase(scene, cur, x, y, hadPrev);
       return true;
     }
     return false;
   }
-  // Recadre sur la case courante (sans animation).
+  // Recadre sur la case courante (sans animation), centre de case.
   function recenterCurrentCase(scene) {
     const c = scene._currentCase;
     if (c) centerCameraOnCase(scene, c.i, c.j, false);
+  }
+  // "Teleporte" la camera sur la case contenant (x,y) en centrant sur ce point (clamp).
+  // Utilise par la minimap (viewer : rejoindre le streameur).
+  function tpCameraTo(scene, x, y, animate) {
+    const c = caseOf(x, y);
+    scene._currentCase = c;
+    focusCameraOnCase(scene, c, x, y, animate);
   }
   // Borne le scroll de la camera a l'interieur de la case courante.
   // Si le viewport depasse la case sur un axe (vue d'ensemble), on centre sur cet axe.
@@ -84,6 +104,67 @@
     cam.scrollX = worldX - pointer.x / cam.zoom;
     cam.scrollY = worldY - pointer.y / cam.zoom;
     clampScrollToCase(scene);
+  }
+
+  // ===================== Minimap =====================
+  // Dessine une carte des cases dans un <canvas id="minimap"> : grille, case visible,
+  // base (case 0,0) et vaisseau. Clic -> onTp(worldX, worldY) pour deplacer la camera.
+  function setupMinimap(opts) {
+    const canvas = document.getElementById('minimap');
+    if (!canvas) return null;
+    const { w, h } = caseDims();
+    const b = opts.bounds;
+    const mm = {
+      canvas, ctx: canvas.getContext('2d'), bounds: b,
+      mapX0: b.minI * w, mapY0: b.minJ * h,
+      mapW: (b.maxI - b.minI + 1) * w, mapH: (b.maxJ - b.minJ + 1) * h,
+      shipX: null, shipY: null
+    };
+    canvas.style.cursor = 'pointer';
+    canvas.onclick = (e) => {
+      const r = canvas.getBoundingClientRect();
+      const wx = mm.mapX0 + ((e.clientX - r.left) / r.width) * mm.mapW;
+      const wy = mm.mapY0 + ((e.clientY - r.top) / r.height) * mm.mapH;
+      if (typeof opts.onTp === 'function') opts.onTp(wx, wy);
+    };
+    return mm;
+  }
+  function drawMinimap(mm, scene, shipX, shipY) {
+    if (!mm) return;
+    const { ctx, canvas } = mm;
+    const W = canvas.width, H = canvas.height;
+    const { w, h } = caseDims();
+    const tx = (wx) => (wx - mm.mapX0) / mm.mapW * W;
+    const ty = (wy) => (wy - mm.mapY0) / mm.mapH * H;
+    ctx.clearRect(0, 0, W, H);
+    ctx.fillStyle = 'rgba(2,8,18,0.65)';
+    ctx.fillRect(0, 0, W, H);
+    // Case visible (surbrillance)
+    const c = scene._currentCase;
+    if (c) {
+      ctx.fillStyle = 'rgba(74,175,255,0.22)';
+      ctx.fillRect(tx(c.i * w), ty(c.j * h), (w / mm.mapW) * W, (h / mm.mapH) * H);
+    }
+    // Grille
+    ctx.strokeStyle = 'rgba(74,175,255,0.30)';
+    ctx.lineWidth = 1;
+    for (let i = mm.bounds.minI; i <= mm.bounds.maxI + 1; i++) {
+      const x = tx(i * w); ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, H); ctx.stroke();
+    }
+    for (let j = mm.bounds.minJ; j <= mm.bounds.maxJ + 1; j++) {
+      const y = ty(j * h); ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(W, y); ctx.stroke();
+    }
+    // Base (case 0,0)
+    const bx = (typeof BASE_X !== 'undefined') ? BASE_X : w / 2;
+    const by = (typeof BASE_Y !== 'undefined') ? BASE_Y : h / 2;
+    ctx.fillStyle = '#ffd24f';
+    ctx.fillRect(tx(bx) - 2.5, ty(by) - 2.5, 5, 5);
+    // Vaisseau
+    if (shipX != null && shipY != null) {
+      ctx.fillStyle = '#ff8044';
+      ctx.beginPath(); ctx.arc(tx(shipX), ty(shipY), 3.5, 0, Math.PI * 2); ctx.fill();
+      ctx.strokeStyle = '#fff'; ctx.lineWidth = 1; ctx.stroke();
+    }
   }
 
   function getStates() {
@@ -231,9 +312,13 @@
     caseOf,
     caseCenterCoords,
     centerCameraOnCase,
+    focusCameraOnCase,
     updateCaseCamera,
     recenterCurrentCase,
     clampScrollToCase,
-    zoomToPointer
+    zoomToPointer,
+    tpCameraTo,
+    setupMinimap,
+    drawMinimap
   };
 })();

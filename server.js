@@ -11,6 +11,11 @@ const PORT = Number(process.env.PORT) || 3000;
 const BUILD_TIME = new Date().toISOString();
 const WORLD_W = 2400;
 const WORLD_H = 1350;
+// Grille de "cases" explorables (chaque case = WORLD_W x WORLD_H). La base est dans la case (0,0).
+// Le vaisseau peut explorer cette grille ; au-dela c'est borne.
+const MAP_MIN_I = -1, MAP_MAX_I = 1, MAP_MIN_J = -1, MAP_MAX_J = 1; // 3x3, base au centre
+const SHIP_MIN_X = MAP_MIN_I * WORLD_W, SHIP_MAX_X = (MAP_MAX_I + 1) * WORLD_W;
+const SHIP_MIN_Y = MAP_MIN_J * WORLD_H, SHIP_MAX_Y = (MAP_MAX_J + 1) * WORLD_H;
 const BASE_X = WORLD_W / 2;
 const BASE_Y = WORLD_H / 2;
 const BASE_PERIMETER = 560;
@@ -262,6 +267,12 @@ db.exec(`
     db.exec("ALTER TABLE amirals ADD COLUMN utilitaire INTEGER NOT NULL DEFAULT 0");
     db.exec("ALTER TABLE amirals ADD COLUMN total INTEGER NOT NULL DEFAULT 0");
   }
+  // Position du vaisseau (persistance entre sessions). NULL -> position par defaut au 1er chargement.
+  if (!cols.find(c => c.name === 'ship_x')) {
+    db.exec("ALTER TABLE amirals ADD COLUMN ship_x REAL");
+    db.exec("ALTER TABLE amirals ADD COLUMN ship_y REAL");
+    db.exec("ALTER TABLE amirals ADD COLUMN ship_rot REAL");
+  }
 }
 db.prepare("INSERT OR IGNORE INTO state (key, value) VALUES ('resource', '0')").run();
 
@@ -270,9 +281,10 @@ const stmtGetState           = db.prepare('SELECT value FROM state WHERE key = ?
 const stmtSetState           = db.prepare('UPDATE state SET value = ? WHERE key = ?');
 
 const stmtInsertAmiral       = db.prepare('INSERT INTO amirals (username, password_hash, created_at, grid_x, grid_y) VALUES (?, ?, ?, ?, ?)');
-const stmtGetAmiralByName    = db.prepare('SELECT id, username, password_hash, grid_x, grid_y FROM amirals WHERE username = ?');
-const stmtGetAmiralById      = db.prepare('SELECT id, username, grid_x, grid_y FROM amirals WHERE id = ?');
-const stmtAllAmirals         = db.prepare('SELECT id, username, grid_x, grid_y FROM amirals');
+const stmtGetAmiralByName    = db.prepare('SELECT id, username, password_hash, grid_x, grid_y, ship_x, ship_y, ship_rot FROM amirals WHERE username = ?');
+const stmtGetAmiralById      = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot FROM amirals WHERE id = ?');
+const stmtAllAmirals         = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot FROM amirals');
+const stmtSetAmiralShip      = db.prepare('UPDATE amirals SET ship_x = ?, ship_y = ?, ship_rot = ? WHERE id = ?');
 const stmtAmiralGridUsed     = db.prepare('SELECT 1 AS x FROM amirals WHERE grid_x = ? AND grid_y = ?');
 const stmtInsertAmiralSess   = db.prepare('INSERT INTO amiral_sessions (token, amiral_id, created_at) VALUES (?, ?, ?)');
 const stmtGetAmiralSess      = db.prepare('SELECT amiral_id FROM amiral_sessions WHERE token = ?');
@@ -394,7 +406,13 @@ function getOrCreateAmiralRuntime(amiral) {
     gridY: amiral.grid_y,
     socketId: null,
     online: false,
-    ship: { x: WORLD_W / 2, y: WORLD_H / 2 + 230, rotation: 0 },
+    // Position du vaisseau : restauree depuis la DB si presente, sinon defaut (pres de la base).
+    ship: {
+      x: (amiral.ship_x ?? (WORLD_W / 2)),
+      y: (amiral.ship_y ?? (WORLD_H / 2 + 230)),
+      rotation: (amiral.ship_rot ?? 0)
+    },
+    _lastShipSave: 0,
     elements,
     elementById: Object.fromEntries(elements.map(e => [e.id, e])),
     elementStates,
@@ -826,7 +844,8 @@ io.on('connection', (socket) => {
     actionTickMs: ACTION_TICK_MS,
     progress: userProgress,
     activeElements: rtForInit ? activeElementStatesForAmiral(rtForInit.id) : [],
-    world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y, gameTz: GAME_TZ },
+    world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y, gameTz: GAME_TZ,
+             mapMinI: MAP_MIN_I, mapMaxI: MAP_MAX_I, mapMinJ: MAP_MIN_J, mapMaxJ: MAP_MAX_J },
     currentWave: rtForInit && rtForInit.currentWave && rtForInit.currentWave.endsAt > Date.now() ? rtForInit.currentWave : null,
     buildTime: BUILD_TIME
   });
@@ -905,10 +924,17 @@ io.on('connection', (socket) => {
     if (!rt) return;
     if (typeof data?.x !== 'number' || typeof data?.y !== 'number' || typeof data?.rotation !== 'number') return;
     if (!Number.isFinite(data.x) || !Number.isFinite(data.y) || !Number.isFinite(data.rotation)) return;
-    rt.ship.x = Math.max(0, Math.min(WORLD_W, data.x));
-    rt.ship.y = Math.max(0, Math.min(WORLD_H, data.y));
+    // Borne a la grille de cases (le vaisseau peut explorer au-dela de la case d'origine).
+    rt.ship.x = Math.max(SHIP_MIN_X, Math.min(SHIP_MAX_X, data.x));
+    rt.ship.y = Math.max(SHIP_MIN_Y, Math.min(SHIP_MAX_Y, data.y));
     rt.ship.rotation = data.rotation;
     socket.broadcast.to(amiralRoom(rt.id)).emit('ship', rt.ship);
+    // Persistance DB throttlee (la position reste apres un refresh / redemarrage).
+    const now = Date.now();
+    if (now - (rt._lastShipSave || 0) > 3000) {
+      rt._lastShipSave = now;
+      try { stmtSetAmiralShip.run(rt.ship.x, rt.ship.y, rt.ship.rotation, rt.id); } catch (e) {}
+    }
   });
 
   // Tir ennemi atteignant la base : seul le client Amiral (streameur) fait autorite.
@@ -926,6 +952,8 @@ io.on('connection', (socket) => {
       if (rt && rt.socketId === socket.id) {
         rt.socketId = null;
         rt.online = false;
+        // Sauvegarde finale de la position du vaisseau.
+        try { stmtSetAmiralShip.run(rt.ship.x, rt.ship.y, rt.ship.rotation, rt.id); } catch (e) {}
         broadcastAmiraux();
       }
       const set = amiralSocketsById.get(socket.data.amiralId);

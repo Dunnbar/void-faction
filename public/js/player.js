@@ -7,6 +7,7 @@ let TURRET_X = BASE_X;
 let TURRET_Y = BASE_Y;
 let GAME_TZ_CLIENT = 'Europe/Paris';
 let baseClockInterval = null;
+let MAP_BOUNDS = { minI: -1, maxI: 1, minJ: -1, maxJ: 1 };
 
 // Met a jour le bandeau #baseClock (jour de la base + heure jeu coloree jour/nuit).
 // Demarre l'intervalle une seule fois ; safe a rappeler a chaque reconnexion.
@@ -651,6 +652,10 @@ function connectSocket() {
       TURRET_X = data.world.turretX;
       TURRET_Y = data.world.turretY;
       GAME_TZ_CLIENT = data.world.gameTz || 'Europe/Paris';
+      MAP_BOUNDS = {
+        minI: data.world.mapMinI ?? -1, maxI: data.world.mapMaxI ?? 1,
+        minJ: data.world.mapMinJ ?? -1, maxJ: data.world.mapMaxJ ?? 1
+      };
     }
     startBaseClock();
     updateUserLine();
@@ -876,12 +881,17 @@ class MainScene extends Phaser.Scene {
 
   create() {
     this.cameras.main.setBackgroundColor('#04060a');
-    // Systeme de "cases" : la camera reste centree sur la case du vaisseau observe
-    // et bascule sur la voisine quand il franchit une frontiere. Une case entiere
-    // tient a l'ecran (userZoomFactor = 1) pour qu'on ne perde jamais la base de vue.
+    // Systeme de "cases" : le viewer voit une case a la fois (une case entiere tient a
+    // l'ecran a userZoomFactor=1). La camera ne suit PAS automatiquement le vaisseau ;
+    // le viewer se deplace librement et utilise la minimap pour rejoindre le streameur.
     this._userZoomFactor = 1.0;
     this.applyFitZoom();
     SharedScene.updateCaseCamera(this, this.ship ? this.ship.x : BASE_X, this.ship ? this.ship.y : BASE_Y);
+    this._cameraInitFromShip = false; // recadre une 1re fois sur le vaisseau des reception de sa position
+    // Minimap : clic = teleporter la vue (rejoindre le streameur / explorer).
+    this._minimap = SharedScene.setupMinimap({ bounds: MAP_BOUNDS, onTp: (wx, wy) => SharedScene.tpCameraTo(this, wx, wy, true) });
+    document.getElementById('minimap')?.classList.remove('hidden');
+    document.getElementById('minimapLabel')?.classList.remove('hidden');
     this.scale.on('resize', () => this.onResize());
 
     // Background parallax (background_04 : fond fixe + planètes parallax)
@@ -1013,8 +1023,12 @@ class MainScene extends Phaser.Scene {
     this.updateTurretTargeting();
     this.updateShipTargeting();
     this.updateEnemies(delta);
-    // Systeme de cases : suit le vaisseau observe case par case (bascule a la frontiere).
-    if (this.ship) SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
+    // Au tout premier positionnement connu du vaisseau, on recadre dessus (sinon vue libre).
+    if (this.ship && !this._cameraInitFromShip && (this.ship.x !== WORLD_W / 2 || this.ship.y !== WORLD_H / 2 + 230)) {
+      this._cameraInitFromShip = true;
+      SharedScene.tpCameraTo(this, this.ship.x, this.ship.y, false);
+    }
+    if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship ? this.ship.x : null, this.ship ? this.ship.y : null);
   }
 
   // Cibles hostiles qu'un ennemi peut engager : asteroides vivants, tourelles, vaisseau du joueur.

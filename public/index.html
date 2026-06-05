@@ -241,6 +241,21 @@
     #captainAlert .bubble .msg .danger { color: #ff7a7a; }
 
     /* Horloge / Jour de la base */
+    #minimap {
+      position: fixed; bottom: 14px; right: 14px; z-index: 30;
+      width: 192px; height: 108px;
+      border: 1px solid #2a4060; border-radius: 4px;
+      background: rgba(0, 8, 20, 0.6);
+      box-shadow: 0 0 12px rgba(0,0,0,0.5);
+      cursor: pointer;
+    }
+    #minimap.hidden { display: none; }
+    #minimapLabel {
+      position: fixed; bottom: 124px; right: 14px; z-index: 30;
+      font-family: 'Consolas', monospace; font-size: 10px; letter-spacing: 1px;
+      color: #88aacc; pointer-events: none; text-shadow: 0 1px 2px #000;
+    }
+    #minimapLabel.hidden { display: none; }
     #baseClock {
       position: fixed; top: 14px; left: 14px; z-index: 30;
       padding: 8px 14px; border-radius: 4px;
@@ -497,6 +512,8 @@
   </button>
 
   <div id="baseClock" class="hidden"></div>
+  <div id="minimapLabel" class="hidden">CARTE — clic pour rejoindre le streameur</div>
+  <canvas id="minimap" class="hidden" width="192" height="108"></canvas>
   <div id="waveBanner" class="hidden">
     <svg class="icon"><use href="#ic-pulse"/></svg>
     <span>VAGUE EN APPROCHE — CIBLE</span>
