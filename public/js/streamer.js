@@ -280,13 +280,12 @@ function escapeHtml(s) {
 function triggerCaptainForWave(wave) {
   if (!wave) return;
   const now = Date.now();
-  const target = escapeHtml(wave.targetLabel || 'la base');
   const warnMs = Math.max(0, wave.warningEndsAt - now);
   const totalRemaining = Math.max(0, wave.endsAt - now);
   if (warnMs > 0) {
     // Captain affiche brievement (15s max), la banniere de wave reste pour le countdown long
     const captainDurationMs = Math.min(15000, warnMs + 800);
-    showCaptain(`<span class="danger">⚠ ENNEMIS DÉTECTÉS</span><br>Cible : ${target}<br>Tenez vos positions !`, captainDurationMs);
+    showCaptain(`<span class="danger">⚠ ENNEMIS DÉTECTÉS</span><br>Tenez vos positions !`, captainDurationMs);
     setTimeout(() => {
       if (Date.now() < wave.endsAt - 1500) {
         showCaptain(`<span class="danger">L'ENNEMI EST LÀ !</span><br>Tirez sur les hostiles !`, Math.max(1500, wave.endsAt - Date.now() - 600));
@@ -1261,15 +1260,29 @@ class MainScene extends Phaser.Scene {
     this.hideWaveWarnIcon();
     const avgX = wave.enemies.reduce((s, e) => s + e.spawnX, 0) / wave.enemies.length;
     const avgY = wave.enemies.reduce((s, e) => s + e.spawnY, 0) / wave.enemies.length;
-    const x = Math.max(40, Math.min(WORLD_W - 40, avgX));
-    const y = Math.max(40, Math.min(WORLD_H - 40, avgY));
-    const icon = this.add.text(x, y, '⚠', {
-      fontFamily: 'Consolas, monospace', fontSize: '64px', color: '#ff4444',
-      stroke: '#000000', strokeThickness: 4
-    }).setOrigin(0.5).setAlpha(0);
-    this.tweens.add({ targets: icon, alpha: { from: 0, to: 1 }, scale: { from: 0.5, to: 1.2 }, duration: 400, ease: 'Back.easeOut' });
-    this.tweens.add({ targets: icon, scale: { from: 1.0, to: 1.3 }, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
-    this.waveWarnIcon = icon;
+    const x = Math.max(60, Math.min(WORLD_W - 60, avgX));
+    const y = Math.max(60, Math.min(WORLD_H - 60, avgY));
+    // Viseur leger marquant la zone d'arrivee des ennemis (pas de cible nommee).
+    this.waveWarnIcon = this.makeReticle(x, y);
+  }
+
+  // Petit viseur (anneau + croix), discret et pulsant. Renvoie un container a detruire.
+  makeReticle(x, y) {
+    const g = this.add.graphics().setDepth(9);
+    const R = 22, tick = 8, col = 0xff6655;
+    g.lineStyle(2, col, 0.85);
+    g.strokeCircle(0, 0, R);
+    g.beginPath();
+    g.moveTo(-R - 7, 0); g.lineTo(-R + tick, 0);
+    g.moveTo(R + 7, 0);  g.lineTo(R - tick, 0);
+    g.moveTo(0, -R - 7); g.lineTo(0, -R + tick);
+    g.moveTo(0, R + 7);  g.lineTo(0, R - tick);
+    g.strokePath();
+    g.fillStyle(col, 0.9); g.fillCircle(0, 0, 2);
+    g.setPosition(x, y).setAlpha(0);
+    this.tweens.add({ targets: g, alpha: { from: 0, to: 0.9 }, duration: 350, ease: 'Sine.easeOut' });
+    this.tweens.add({ targets: g, scaleX: { from: 1, to: 1.18 }, scaleY: { from: 1, to: 1.18 }, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
+    return g;
   }
 
   hideWaveWarnIcon() {
