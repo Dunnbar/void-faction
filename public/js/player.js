@@ -940,9 +940,8 @@ class MainScene extends Phaser.Scene {
     // Zoom à la molette (zoomFactor relatif au "fit" qui s'adapte aux resize)
     this.input.on('wheel', (pointer, _gos, _dx, deltaY) => {
       this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
-      this.applyFitZoom();
-      // On reste centre sur la case courante (le zoom ne fait pas deriver la vue).
-      SharedScene.recenterCurrentCase(this);
+      // Zoom vers le curseur (pas de recentrage), borne a la case.
+      SharedScene.zoomToPointer(this, pointer, () => this.applyFitZoom());
     });
 
     // Drag-to-pan (style MOBA) : clic gauche maintenu + deplacement = panoramique de la carte
@@ -969,6 +968,8 @@ class MainScene extends Phaser.Scene {
         const cam = this.cameras.main;
         cam.scrollX -= dx / cam.zoom;
         cam.scrollY -= dy / cam.zoom;
+        // La camera ne peut pas sortir de la case courante.
+        SharedScene.clampScrollToCase(this);
       }
     });
     this.input.on('pointerup', (pointer) => {
@@ -1225,7 +1226,7 @@ class MainScene extends Phaser.Scene {
     const h = this.scale.gameSize.height;
     this.cameras.main.setSize(w, h);
     this.applyFitZoom();
-    SharedScene.recenterCurrentCase(this);
+    SharedScene.clampScrollToCase(this);
     if (this.bgLayer01) this.bgLayer01.setPosition(w / 2, h / 2);
     this.updateParallaxBackground();
   }

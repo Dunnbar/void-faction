@@ -58,10 +58,32 @@
     }
     return false;
   }
-  // Recadre sur la case courante (apres un zoom / resize) sans animation.
+  // Recadre sur la case courante (sans animation).
   function recenterCurrentCase(scene) {
     const c = scene._currentCase;
     if (c) centerCameraOnCase(scene, c.i, c.j, false);
+  }
+  // Borne le scroll de la camera a l'interieur de la case courante.
+  // Si le viewport depasse la case sur un axe (vue d'ensemble), on centre sur cet axe.
+  function clampScrollToCase(scene) {
+    const c = scene._currentCase;
+    if (!c) return;
+    const { w, h } = caseDims();
+    const cam = scene.cameras.main;
+    const x0 = c.i * w, y0 = c.j * h;
+    const vw = cam.width / cam.zoom, vh = cam.height / cam.zoom;
+    cam.scrollX = vw >= w ? x0 + (w - vw) / 2 : Math.min(Math.max(cam.scrollX, x0), x0 + w - vw);
+    cam.scrollY = vh >= h ? y0 + (h - vh) / 2 : Math.min(Math.max(cam.scrollY, y0), y0 + h - vh);
+  }
+  // Zoom centre sur le curseur : le point monde sous la souris reste fixe, puis clamp a la case.
+  // applyZoom() : callback qui met a jour cam.zoom (typiquement scene.applyFitZoom()).
+  function zoomToPointer(scene, pointer, applyZoom) {
+    const cam = scene.cameras.main;
+    const worldX = pointer.worldX, worldY = pointer.worldY;
+    applyZoom();
+    cam.scrollX = worldX - pointer.x / cam.zoom;
+    cam.scrollY = worldY - pointer.y / cam.zoom;
+    clampScrollToCase(scene);
   }
 
   function getStates() {
@@ -210,6 +232,8 @@
     caseCenterCoords,
     centerCameraOnCase,
     updateCaseCamera,
-    recenterCurrentCase
+    recenterCurrentCase,
+    clampScrollToCase,
+    zoomToPointer
   };
 })();
