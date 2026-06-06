@@ -879,8 +879,8 @@ io.on('connection', (socket) => {
     if (!actor) return respond({ ok: false, error: 'auth' });
     const rt = amiralsRuntime.get(actor.amiralId);
     if (!rt) return respond({ ok: false, error: 'amiral inconnu' });
-    // Les joueurs ne peuvent pas agir si l'Amiral est hors-ligne. L'Amiral lui-meme oui.
-    if (actor.type === 'user' && !rt.online) return respond({ ok: false, error: 'amiral hors-ligne' });
+    // Les joueurs peuvent agir a tout moment, meme si l'Amiral est hors-ligne
+    // (le runtime de l'amiral est toujours en memoire et les actions se reglent au tick).
     const elementId = String(data?.elementId || '');
     const actionId = String(data?.actionId || '');
     const el = rt.elementById[elementId];
