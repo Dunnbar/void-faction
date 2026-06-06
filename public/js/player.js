@@ -8,6 +8,7 @@ let TURRET_Y = BASE_Y;
 let GAME_TZ_CLIENT = 'Europe/Paris';
 let baseClockInterval = null;
 let MAP_BOUNDS = { minI: -1, maxI: 1, minJ: -1, maxJ: 1 };
+let latestShipState = null; // derniere position connue du vaisseau amiral (appliquee au demarrage de la scene)
 
 // Met a jour le bandeau #baseClock (jour de la base + heure jeu coloree jour/nuit).
 // Demarre l'intervalle une seule fois ; safe a rappeler a chaque reconnexion.
@@ -424,6 +425,7 @@ function openActionMenu(elementId, anchor) {
   }
   const activeHere = activeAction && activeAction.element_id === elementId;
   actionMenuDeact.classList.toggle('hidden', !activeHere);
+  actionMenuNote.style.color = ''; // reset (peut avoir ete passe en rouge par un echec)
   if (activeAction && activeAction.element_id !== elementId) {
     actionMenuNote.textContent = `Tu vas désactiver ton action en cours.`;
     actionMenuNote.classList.remove('hidden');
@@ -467,6 +469,15 @@ function activateAction(elementId, actionId) {
     if (resp?.ok) {
       closeActionMenu();
     } else {
+      // Feedback visible (ex. "amiral hors-ligne") au lieu d'un echec silencieux.
+      const msg = resp?.error === 'amiral hors-ligne'
+        ? "L'Amiral est hors-ligne — impossible d'agir pour le moment."
+        : (resp?.error || "Action impossible.");
+      if (actionMenuNote) {
+        actionMenuNote.textContent = msg;
+        actionMenuNote.style.color = '#ff8a8a';
+        actionMenuNote.classList.remove('hidden');
+      }
       console.warn('[action] échec activation:', resp?.error);
     }
   });
@@ -685,6 +696,7 @@ function connectSocket() {
     renderHistory();
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
     amiralIsOnline = data.watchedAmiral?.online !== false;
+    if (data.ship) latestShipState = data.ship; // memorise pour l'appliquer au (re)demarrage de la scene
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) {
       if (scene.shipLabel) scene.shipLabel.setText(amiralDisplayName);
@@ -702,6 +714,7 @@ function connectSocket() {
   socket.on('resource', (data) => { if (resourceEl) resourceEl.textContent = data.resource; });
 
   socket.on('ship', (data) => {
+    latestShipState = data;
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) scene.setShipState(data);
   });
@@ -935,11 +948,13 @@ class MainScene extends Phaser.Scene {
     this.createTurretTexture();
     this.createExplosionTexture();
 
-    // Vaisseau Amiral (positionné via socket)
-    this.ship = this.add.sprite(WORLD_W / 2, WORLD_H / 2 + 230, 'ship-fr-000')
+    // Vaisseau Amiral (position connue restauree des l'init, sinon defaut pres de la base)
+    const _shipStart = latestShipState || { x: WORLD_W / 2, y: WORLD_H / 2 + 230, rotation: 0 };
+    this.ship = this.add.sprite(_shipStart.x, _shipStart.y, 'ship-fr-000')
       .setScale(SHIP_SCALE)
       .setOrigin(0.5, 0.36)
       .setDepth(7); // au-dessus des assets (base/tourelles/asteroides en depth 0)
+    if (typeof _shipStart.rotation === 'number') this.ship.rotation = _shipStart.rotation;
     this.ship.play('ship-thrust');
     this.ship._hp = 100;
     this.ship._hpMax = 100;
@@ -969,6 +984,11 @@ class MainScene extends Phaser.Scene {
     // Si l'Amiral observé est offline, on grise le vaisseau pour le signaler
     this.ship.setAlpha(amiralIsOnline ? 1 : 0.45);
     this.shipLabel.setAlpha(amiralIsOnline ? 1 : 0.45);
+    // Si on connait deja la position du vaisseau, on cadre la vue dessus au demarrage.
+    if (latestShipState) {
+      SharedScene.tpCameraTo(this, this.ship.x, this.ship.y, false);
+      this._cameraInitFromShip = true;
+    }
 
     // Cercle de "grande base" (rayon visuel autour du centre)
     this.drawBasePerimeter();
@@ -1589,26 +1609,7 @@ class MainScene extends Phaser.Scene {
     const x = Math.max(60, Math.min(WORLD_W - 60, avgX));
     const y = Math.max(60, Math.min(WORLD_H - 60, avgY));
     // Viseur leger marquant la zone d'arrivee des ennemis (pas de cible nommee).
-    this.waveWarnIcon = this.makeReticle(x, y);
-  }
-
-  // Petit viseur (anneau + croix), discret et pulsant. Renvoie un objet a detruire.
-  makeReticle(x, y) {
-    const g = this.add.graphics().setDepth(9);
-    const R = 22, tick = 8, col = 0xff6655;
-    g.lineStyle(2, col, 0.85);
-    g.strokeCircle(0, 0, R);
-    g.beginPath();
-    g.moveTo(-R - 7, 0); g.lineTo(-R + tick, 0);
-    g.moveTo(R + 7, 0);  g.lineTo(R - tick, 0);
-    g.moveTo(0, -R - 7); g.lineTo(0, -R + tick);
-    g.moveTo(0, R + 7);  g.lineTo(0, R - tick);
-    g.strokePath();
-    g.fillStyle(col, 0.9); g.fillCircle(0, 0, 2);
-    g.setPosition(x, y).setAlpha(0);
-    this.tweens.add({ targets: g, alpha: { from: 0, to: 0.9 }, duration: 350, ease: 'Sine.easeOut' });
-    this.tweens.add({ targets: g, scaleX: { from: 1, to: 1.18 }, scaleY: { from: 1, to: 1.18 }, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
-    return g;
+    this.waveWarnIcon = SharedScene.makeReticle(this, x, y);
   }
 
   hideWaveWarnIcon() {

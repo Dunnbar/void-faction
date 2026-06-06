@@ -275,6 +275,10 @@ db.exec(`
     db.exec("ALTER TABLE amirals ADD COLUMN ship_y REAL");
     db.exec("ALTER TABLE amirals ADD COLUMN ship_rot REAL");
   }
+  // Naissance de la base (compteur de jours) : persiste pour survivre aux redemarrages.
+  if (!cols.find(c => c.name === 'base_born_at')) {
+    db.exec("ALTER TABLE amirals ADD COLUMN base_born_at INTEGER");
+  }
 }
 db.prepare("INSERT OR IGNORE INTO state (key, value) VALUES ('resource', '0')").run();
 
@@ -283,10 +287,11 @@ const stmtGetState           = db.prepare('SELECT value FROM state WHERE key = ?
 const stmtSetState           = db.prepare('UPDATE state SET value = ? WHERE key = ?');
 
 const stmtInsertAmiral       = db.prepare('INSERT INTO amirals (username, password_hash, created_at, grid_x, grid_y) VALUES (?, ?, ?, ?, ?)');
-const stmtGetAmiralByName    = db.prepare('SELECT id, username, password_hash, grid_x, grid_y, ship_x, ship_y, ship_rot FROM amirals WHERE username = ?');
-const stmtGetAmiralById      = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot FROM amirals WHERE id = ?');
-const stmtAllAmirals         = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot FROM amirals');
+const stmtGetAmiralByName    = db.prepare('SELECT id, username, password_hash, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at FROM amirals WHERE username = ?');
+const stmtGetAmiralById      = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at FROM amirals WHERE id = ?');
+const stmtAllAmirals         = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at FROM amirals');
 const stmtSetAmiralShip      = db.prepare('UPDATE amirals SET ship_x = ?, ship_y = ?, ship_rot = ? WHERE id = ?');
+const stmtSetAmiralBornAt    = db.prepare('UPDATE amirals SET base_born_at = ? WHERE id = ?');
 const stmtAmiralGridUsed     = db.prepare('SELECT 1 AS x FROM amirals WHERE grid_x = ? AND grid_y = ?');
 const stmtInsertAmiralSess   = db.prepare('INSERT INTO amiral_sessions (token, amiral_id, created_at) VALUES (?, ?, ?)');
 const stmtGetAmiralSess      = db.prepare('SELECT amiral_id FROM amiral_sessions WHERE token = ?');
@@ -422,6 +427,17 @@ function getOrCreateAmiralRuntime(amiral) {
     currentWave: null,
     asteroidGroups: makeFreshAsteroidGroups()
   };
+  // Naissance de la base : restauree depuis la DB (compteur de jours persistant).
+  // Si absente (premiere fois), on persiste la valeur initiale.
+  const baseEl = elements.find(e => e.type === 'base');
+  if (baseEl) {
+    const bs = rt.elementStates.get(baseEl.id);
+    if (amiral.base_born_at != null) {
+      bs.bornAt = amiral.base_born_at;
+    } else if (amiral.id !== 0) { // pas pour le runtime demo
+      try { stmtSetAmiralBornAt.run(bs.bornAt, amiral.id); } catch (e) {}
+    }
+  }
   amiralsRuntime.set(amiral.id, rt);
   return rt;
 }
@@ -529,6 +545,7 @@ function rebirthBase(rt) {
   state.hp = state.hpMax;
   state.essence = state.essenceMax;
   state.bornAt = Date.now();
+  if (rt.id !== 0) { try { stmtSetAmiralBornAt.run(state.bornAt, rt.id); } catch (e) {} }
   io.to(amiralRoom(rt.id)).emit('base:reborn', { id: baseEl.id, state: publicElementState(rt, baseEl.id) });
   console.log(`[amiral ${rt.username}] base ${baseEl.id} renaissance (jour 0)`);
 }
@@ -625,8 +642,12 @@ app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
   lastModified: true,
   setHeaders: (res, filePath) => {
+    // HTML/JS/CSS : jamais mis en cache (le code evolue souvent ; evite de servir une
+    // ancienne version en ligne, ex. shared-scene.js manquant -> halo/minimap absents).
     if (filePath.endsWith('.html') || filePath.endsWith('.js') || filePath.endsWith('.css')) {
-      res.setHeader('Cache-Control', 'no-cache');
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+      res.setHeader('Pragma', 'no-cache');
+      res.setHeader('Expires', '0');
     }
   }
 }));

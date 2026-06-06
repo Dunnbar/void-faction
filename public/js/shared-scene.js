@@ -256,6 +256,25 @@
     }
   }
 
+  // Petit viseur (anneau + croix + point), discret et pulsant. Renvoie un Graphics a detruire.
+  function makeReticle(scene, x, y) {
+    const g = scene.add.graphics().setDepth(9);
+    const R = 22, tick = 8, col = 0xff6655;
+    g.lineStyle(2, col, 0.85);
+    g.strokeCircle(0, 0, R);
+    g.beginPath();
+    g.moveTo(-R - 7, 0); g.lineTo(-R + tick, 0);
+    g.moveTo(R + 7, 0);  g.lineTo(R - tick, 0);
+    g.moveTo(0, -R - 7); g.lineTo(0, -R + tick);
+    g.moveTo(0, R + 7);  g.lineTo(0, R - tick);
+    g.strokePath();
+    g.fillStyle(col, 0.9); g.fillCircle(0, 0, 2);
+    g.setPosition(x, y).setAlpha(0);
+    scene.tweens.add({ targets: g, alpha: { from: 0, to: 0.9 }, duration: 350, ease: 'Sine.easeOut' });
+    scene.tweens.add({ targets: g, scaleX: { from: 1, to: 1.18 }, scaleY: { from: 1, to: 1.18 }, yoyo: true, repeat: -1, duration: 700, ease: 'Sine.easeInOut' });
+    return g;
+  }
+
   function getStates() {
     return (typeof elementStates !== 'undefined') ? elementStates : null;
   }
@@ -410,6 +429,7 @@
     setupMinimap,
     drawMinimap,
     refreshActionOverlay,
-    positionActionOverlay
+    positionActionOverlay,
+    makeReticle
   };
 })();
