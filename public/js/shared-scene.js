@@ -56,8 +56,9 @@
     focusCameraOnCase(scene, { i, j }, null, null, animate);
   }
   // Detecte un changement de case d'apres (x,y) du vaisseau et recadre si besoin.
-  // La camera se recadre sur la nouvelle case en gardant le VAISSEAU visible (clamp),
-  // pour qu'on ne perde jamais le vaisseau apres une transition.
+  // La camera se centre TOUJOURS sur le CENTRE de la case (taille fixe), pas sur le
+  // vaisseau : la base reste donc centree dans sa case. A la taille d'ecran par defaut
+  // (une case entiere visible) le vaisseau reste visible de toute facon.
   // Premier appel (pas de case memorisee) : centrage instantane, sans animation.
   // Retourne true si une transition a eu lieu.
   function updateCaseCamera(scene, x, y) {
@@ -66,7 +67,7 @@
     if (!prev || prev.i !== cur.i || prev.j !== cur.j) {
       const hadPrev = !!prev;
       scene._currentCase = cur;
-      focusCameraOnCase(scene, cur, x, y, hadPrev);
+      focusCameraOnCase(scene, cur, null, null, hadPrev); // centre de la case
       return true;
     }
     return false;
@@ -76,12 +77,12 @@
     const c = scene._currentCase;
     if (c) centerCameraOnCase(scene, c.i, c.j, false);
   }
-  // "Teleporte" la camera sur la case contenant (x,y) en centrant sur ce point (clamp).
-  // Utilise par la minimap (viewer : rejoindre le streameur).
+  // "Teleporte" la camera sur la case contenant (x,y), centree sur le MILIEU de la case
+  // (clic minimap -> on recentre au centre de la case, pas sur le point clique exact).
   function tpCameraTo(scene, x, y, animate) {
     const c = caseOf(x, y);
     scene._currentCase = c;
-    focusCameraOnCase(scene, c, x, y, animate);
+    focusCameraOnCase(scene, c, null, null, animate); // centre de la case
   }
   // Borne le scroll de la camera a l'interieur de la case courante.
   // Si le viewport depasse la case sur un axe (vue d'ensemble), on centre sur cet axe.
