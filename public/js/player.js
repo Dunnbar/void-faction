@@ -1277,8 +1277,10 @@ class MainScene extends Phaser.Scene {
 
   applyFitZoom() {
     const cam = this.cameras.main;
-    const fit = Math.min(cam.width / WORLD_W, cam.height / WORLD_H);
-    cam.setZoom(fit * (this._userZoomFactor || 1));
+    // "Cover" : la case remplit tout l'ecran quelle que soit la taille/ratio (zoom auto).
+    // Le grand cote est rogne plutot que de laisser deborder les cases voisines.
+    const cover = Math.max(cam.width / WORLD_W, cam.height / WORLD_H);
+    cam.setZoom(cover * (this._userZoomFactor || 1));
   }
 
   onResize() {
@@ -1286,7 +1288,7 @@ class MainScene extends Phaser.Scene {
     const h = this.scale.gameSize.height;
     this.cameras.main.setSize(w, h);
     this.applyFitZoom();
-    SharedScene.clampScrollToCase(this);
+    SharedScene.recenterCurrentCase(this);
     if (this.bgLayer01) this.bgLayer01.setPosition(w / 2, h / 2);
     this.updateParallaxBackground();
   }
