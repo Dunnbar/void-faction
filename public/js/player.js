@@ -997,12 +997,7 @@ class MainScene extends Phaser.Scene {
     this.enemies = new Set();
     this.waveWarnIcon = null;
 
-    // Zoom à la molette (zoomFactor relatif au "fit" qui s'adapte aux resize)
-    this.input.on('wheel', (pointer, _gos, _dx, deltaY) => {
-      this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
-      // Zoom vers le curseur (pas de recentrage), borne a la case.
-      SharedScene.zoomToPointer(this, pointer, () => this.applyFitZoom());
-    });
+    // Pas de zoom : la vue affiche toujours une case entiere (zoom fixe = fit).
 
     // Drag-to-pan (style MOBA) : clic gauche maintenu + deplacement = panoramique de la carte
     // Si le mouvement est inferieur a un seuil, on traite comme un clic et on ouvre le menu d'action de l'element vise.

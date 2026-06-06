@@ -695,11 +695,7 @@ class MainScene extends Phaser.Scene {
     document.getElementById('minimap')?.classList.remove('hidden');
     document.getElementById('minimapLabel')?.classList.remove('hidden');
     this.scale.on('resize', () => this.onResize());
-    this.input.on('wheel', (pointer, _g, _dx, deltaY) => {
-      this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
-      // Zoom vers le curseur (pas de recentrage), borne a la case.
-      SharedScene.zoomToPointer(this, pointer, () => this.applyFitZoom());
-    });
+    // Pas de zoom : la vue affiche toujours une case entiere (zoom fixe = fit).
 
     this.thrust = this.add.particles(0, 0, 'thrust', {
       speed: { min: 30, max: 70 },
