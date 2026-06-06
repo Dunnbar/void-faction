@@ -638,6 +638,32 @@ function nextFreeGridCell() {
 
 const app = express();
 app.use(express.json());
+
+// Cache-busting : on sert index.html / stream.html avec ?v=<version> ajoute aux
+// scripts/css locaux. La version change a chaque deploiement (BUILD_TIME), donc le
+// navigateur recharge TOUJOURS le JS a jour, sans hard-refresh manuel.
+const ASSET_VERSION = BUILD_TIME.replace(/[^0-9]/g, '');
+const _htmlCache = new Map();
+function serveVersionedHtml(fileName) {
+  return (req, res, next) => {
+    try {
+      let html = _htmlCache.get(fileName);
+      if (html === undefined) {
+        const raw = fs.readFileSync(path.join(__dirname, 'public', fileName), 'utf8');
+        // Ajoute ?v=VERSION sur les src/href locaux en .js / .css
+        html = raw.replace(/(src|href)="((?:js\/|css\/|\.\/)?[^"]+\.(?:js|css))"/g,
+          (m, attr, url) => url.startsWith('http') ? m : `${attr}="${url}?v=${ASSET_VERSION}"`);
+        _htmlCache.set(fileName, html);
+      }
+      res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+      res.setHeader('Content-Type', 'text/html; charset=utf-8');
+      res.send(html);
+    } catch (e) { next(); }
+  };
+}
+app.get(['/', '/index.html'], serveVersionedHtml('index.html'));
+app.get('/stream.html', serveVersionedHtml('stream.html'));
+
 app.use(express.static(path.join(__dirname, 'public'), {
   etag: true,
   lastModified: true,
