@@ -562,7 +562,7 @@ const ASTEROID_VARIANTS = {
   '14': { cols: 2, rows: 1, count: 2, w: 110, h: 110 },
   '15': { cols: 2, rows: 1, count: 2, w: 70,  h: 100 }
 };
-const ASTEROID_TARGET_SIZE = 130;
+const ASTEROID_TARGET_SIZE = 85;
 function asteroidScaleFor(variantKey, sizeMultiplier) {
   const meta = ASTEROID_VARIANTS[variantKey] || ASTEROID_VARIANTS['01'];
   return (ASTEROID_TARGET_SIZE * (sizeMultiplier || 1)) / Math.max(meta.w, meta.h);

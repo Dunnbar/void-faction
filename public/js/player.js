@@ -79,7 +79,7 @@ const ASTEROID_VARIANTS = {
   '14': { cols: 2, rows: 1, count: 2, w: 110, h: 110 },
   '15': { cols: 2, rows: 1, count: 2, w: 70,  h: 100 }
 };
-const ASTEROID_TARGET_SIZE = 130; // taille visuelle de référence (px monde) à scale=1
+const ASTEROID_TARGET_SIZE = 85; // taille visuelle de référence (px monde) à scale=1
 function asteroidScaleFor(variantKey, sizeMultiplier) {
   const meta = ASTEROID_VARIANTS[variantKey] || ASTEROID_VARIANTS['01'];
   return (ASTEROID_TARGET_SIZE * (sizeMultiplier || 1)) / Math.max(meta.w, meta.h);
@@ -1070,11 +1070,8 @@ class MainScene extends Phaser.Scene {
     this.updateTurretTargeting();
     this.updateShipTargeting();
     this.updateEnemies(delta);
-    // Au tout premier positionnement connu du vaisseau, on recadre dessus (sinon vue libre).
-    if (this.ship && !this._cameraInitFromShip && (this.ship.x !== WORLD_W / 2 || this.ship.y !== WORLD_H / 2 + 230)) {
-      this._cameraInitFromShip = true;
-      SharedScene.tpCameraTo(this, this.ship.x, this.ship.y, false);
-    }
+    // Le viewer suit la case du streameur, toujours centree (comme le streameur sur la sienne).
+    if (this.ship) SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
     if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship ? this.ship.x : null, this.ship ? this.ship.y : null);
     SharedScene.positionActionOverlay(this); // suit le vaisseau (labels + halo)
   }

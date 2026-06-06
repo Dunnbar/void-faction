@@ -64,13 +64,12 @@
   function updateCaseCamera(scene, x, y) {
     const cur = caseOf(x, y);
     const prev = scene._currentCase;
-    if (!prev || prev.i !== cur.i || prev.j !== cur.j) {
-      const hadPrev = !!prev;
-      scene._currentCase = cur;
-      focusCameraOnCase(scene, cur, null, null, hadPrev); // centre de la case
-      return true;
-    }
-    return false;
+    const changed = !prev || prev.i !== cur.i || prev.j !== cur.j;
+    scene._currentCase = cur;
+    // Recentrage SYSTEMATIQUE sur le centre de la case (sans animation) : la vue est
+    // toujours exactement centree sur la case courante, impossible de deriver/decentrer.
+    focusCameraOnCase(scene, cur, null, null, false);
+    return changed;
   }
   // Recadre sur la case courante (sans animation), centre de case.
   function recenterCurrentCase(scene) {
