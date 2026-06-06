@@ -703,6 +703,8 @@ function connectSocket() {
       scene.setShipState(data.ship);
       if (scene.ship) scene.ship.setAlpha(amiralIsOnline ? 1 : 0.45);
       if (scene.shipLabel) scene.shipLabel.setAlpha(amiralIsOnline ? 1 : 0.45);
+      // Par defaut, le viewer se cale sur la DERNIERE case du streameur (sa position courante).
+      if (data.ship) { SharedScene.tpCameraTo(scene, data.ship.x, data.ship.y, false); scene._cameraInitFromShip = true; }
       scene.setupElements(serverElements);
       scene.applyAllElementStates();
       scene.drawBasePerimeter();
@@ -1277,10 +1279,10 @@ class MainScene extends Phaser.Scene {
 
   applyFitZoom() {
     const cam = this.cameras.main;
-    // "Cover" : la case remplit tout l'ecran quelle que soit la taille/ratio (zoom auto).
-    // Le grand cote est rogne plutot que de laisser deborder les cases voisines.
-    const cover = Math.max(cam.width / WORLD_W, cam.height / WORLD_H);
-    cam.setZoom(cover * (this._userZoomFactor || 1));
+    // "Fit" : la case entiere est TOUJOURS visible (rien n'est rogne, asteroides compris).
+    // Le zoom s'ajuste a l'ecran ; l'espace en plus (ecran non 16:9) montre la nebuleuse.
+    const fit = Math.min(cam.width / WORLD_W, cam.height / WORLD_H);
+    cam.setZoom(fit * (this._userZoomFactor || 1));
   }
 
   onResize() {

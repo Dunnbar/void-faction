@@ -861,10 +861,10 @@ class MainScene extends Phaser.Scene {
 
   applyFitZoom() {
     const cam = this.cameras.main;
-    // "Cover" : la case remplit tout l'ecran quelle que soit la taille/ratio (zoom auto).
-    // Le grand cote est rogne plutot que de laisser deborder les cases voisines.
-    const cover = Math.max(cam.width / WORLD_W, cam.height / WORLD_H);
-    cam.setZoom(cover * (this._userZoomFactor || 1));
+    // "Fit" : la case entiere est TOUJOURS visible (rien n'est rogne, asteroides compris).
+    // Le zoom s'ajuste a l'ecran ; l'espace en plus (ecran non 16:9) montre la nebuleuse.
+    const fit = Math.min(cam.width / WORLD_W, cam.height / WORLD_H);
+    cam.setZoom(fit * (this._userZoomFactor || 1));
   }
 
   onResize() {
