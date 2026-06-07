@@ -29,6 +29,12 @@ const ACTION_TICK_MS = 10 * 1000;
 const ACTION_MAX_DURATION_MS = 60 * 60 * 1000;
 const HISTORY_LIMIT = 10;
 
+// Niveaux viewer (par categorie). Max niveau 3. L'XP = nombre de vagues ou le joueur
+// etait present + actif dans cette categorie. Seuils : niv2 a 5 vagues, niv3 a 15.
+const LEVEL_XP = [5, 15];
+const LEVEL_XP_MAX = LEVEL_XP[1];
+function levelFromXp(xp) { return (xp >= LEVEL_XP[1]) ? 3 : (xp >= LEVEL_XP[0]) ? 2 : 1; }
+
 const WAVE_CHECK_INTERVAL_MS = 60 * 1000;
 const WAVE_PROBABILITY = 0.35;
 const WAVE_WARNING_MS = 40 * 60 * 1000;  // 40 min de preavis avant l'arrivee des ennemis
@@ -223,6 +229,9 @@ db.exec(`
     defensif INTEGER NOT NULL DEFAULT 0,
     utilitaire INTEGER NOT NULL DEFAULT 0,
     total INTEGER NOT NULL DEFAULT 0,
+    xp_puissance INTEGER NOT NULL DEFAULT 0,
+    xp_defensif INTEGER NOT NULL DEFAULT 0,
+    xp_utilitaire INTEGER NOT NULL DEFAULT 0,
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
   );
   CREATE TABLE IF NOT EXISTS active_actions (
@@ -280,6 +289,15 @@ db.exec(`
     db.exec("ALTER TABLE amirals ADD COLUMN base_born_at INTEGER");
   }
 }
+// XP par categorie (niveaux viewer) sur user_progress
+{
+  const cols = db.prepare("PRAGMA table_info(user_progress)").all();
+  if (cols.length && !cols.find(c => c.name === 'xp_puissance')) {
+    db.exec("ALTER TABLE user_progress ADD COLUMN xp_puissance INTEGER NOT NULL DEFAULT 0");
+    db.exec("ALTER TABLE user_progress ADD COLUMN xp_defensif INTEGER NOT NULL DEFAULT 0");
+    db.exec("ALTER TABLE user_progress ADD COLUMN xp_utilitaire INTEGER NOT NULL DEFAULT 0");
+  }
+}
 db.prepare("INSERT OR IGNORE INTO state (key, value) VALUES ('resource', '0')").run();
 
 // Prepared statements
@@ -309,6 +327,13 @@ const stmtGetProgress    = db.prepare('SELECT puissance, defensif, utilitaire, t
 const stmtIncPuissance   = db.prepare('UPDATE user_progress SET puissance = puissance + ?, total = total + ? WHERE user_id = ?');
 const stmtIncDefensif    = db.prepare('UPDATE user_progress SET defensif  = defensif  + ?, total = total + ? WHERE user_id = ?');
 const stmtIncUtilitaire  = db.prepare('UPDATE user_progress SET utilitaire = utilitaire + ?, total = total + ? WHERE user_id = ?');
+// XP par categorie (niveaux). Capee a LEVEL_XP_MAX (le niveau plafonne a 3 de toute facon).
+const stmtGetXp          = db.prepare('SELECT xp_puissance, xp_defensif, xp_utilitaire FROM user_progress WHERE user_id = ?');
+const stmtIncXpPuissance = db.prepare('UPDATE user_progress SET xp_puissance = MIN(xp_puissance + ?, ?) WHERE user_id = ?');
+const stmtIncXpDefensif  = db.prepare('UPDATE user_progress SET xp_defensif  = MIN(xp_defensif  + ?, ?) WHERE user_id = ?');
+const stmtIncXpUtil      = db.prepare('UPDATE user_progress SET xp_utilitaire = MIN(xp_utilitaire + ?, ?) WHERE user_id = ?');
+// Joueurs ayant une action active, par amiral (pour l'attribution d'XP a chaque vague)
+const stmtActiveUsersByAmiral = db.prepare('SELECT a.user_id, a.category FROM active_actions a JOIN users u ON u.id = a.user_id WHERE u.amiral_id = ?');
 
 const stmtGetActiveAction  = db.prepare('SELECT user_id, element_id, action_id, category, started_at, last_settled_at FROM active_actions WHERE user_id = ?');
 const stmtAllActiveActions = db.prepare(`
@@ -482,12 +507,14 @@ const DAY_MS = 24 * 60 * 60 * 1000;
 
 // Compte les acteurs (joueurs + amiral) actuellement actifs sur (elementId, actionId)
 // pour la runtime donnee. Utilise pour deriver puissance/range de tourelle a la volee.
-function countActorsOnAction(rt, elementId, actionId) {
+// Somme des contributions des acteurs actifs sur (elementId, actionId) : niveau du joueur
+// dans la categorie (1-3), +1 fixe par Amiral. Utilise pour puissance/portee des tourelles/vaisseau.
+function sumContributionsOnAction(rt, elementId, actionId, category) {
   const users = stmtActiveOnElement.all(elementId, rt.id);
   const amir  = stmtAmiralActiveOnElement.all(elementId, rt.id);
   let n = 0;
-  for (const a of users) if (a.action_id === actionId) n++;
-  for (const a of amir)  if (a.action_id === actionId) n++;
+  for (const a of users) if (a.action_id === actionId) n += userLevelForCategory(a.user_id, category);
+  for (const a of amir)  if (a.action_id === actionId) n += 1;
   return n;
 }
 
@@ -510,12 +537,12 @@ function publicElementState(rt, id) {
       };
     }
   }
-  // Tourelle / Vaisseau : puissance et range derivees du nombre d'acteurs actifs.
+  // Tourelle / Vaisseau : puissance et portee = somme des niveaux PUISSANCE des acteurs actifs.
   if (el && (el.type === 'turret' || el.type === 'ship')) {
     return {
       id, ...s,
-      puissance: countActorsOnAction(rt, id, 'tir'),
-      range:     countActorsOnAction(rt, id, 'visee')
+      puissance: sumContributionsOnAction(rt, id, 'tir', 'PUISSANCE'),
+      range:     sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE')
     };
   }
   // Base : on calcule le nombre de jours depuis sa naissance
@@ -847,12 +874,14 @@ io.on('connection', (socket) => {
   // Acteur = joueur OU Amiral (les deux peuvent avoir une action active)
   let userActiveAction = null;
   let userProgress = null;
+  let userLevelsObj = { PUISSANCE: 1, DEFENSIF: 1, UTILITAIRE: 1 }; // Amiral = niveau 1 fixe
   if (socket.data.amiralId) {
     userActiveAction = stmtGetAmiralActive.get(socket.data.amiralId) || null;
     userProgress = stmtGetAmiralProgress.get(socket.data.amiralId) || { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
   } else if (socket.data.userId) {
     userActiveAction = stmtGetActiveAction.get(socket.data.userId) || null;
     userProgress = getProgressFor(socket.data.userId);
+    userLevelsObj = userLevels(socket.data.userId);
   }
 
   // 1) Amiral connecté -> son propre monde
@@ -892,6 +921,8 @@ io.on('connection', (socket) => {
     actionDurationMs: ACTION_MAX_DURATION_MS,
     actionTickMs: ACTION_TICK_MS,
     progress: userProgress,
+    levels: userLevelsObj,
+    levelXp: LEVEL_XP,
     activeElements: rtForInit ? activeElementStatesForAmiral(rtForInit.id) : [],
     world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y, gameTz: GAME_TZ,
              mapMinI: MAP_MIN_I, mapMaxI: MAP_MAX_I, mapMinJ: MAP_MIN_J, mapMaxJ: MAP_MAX_J },
@@ -1023,7 +1054,8 @@ io.on('connection', (socket) => {
 
 // ============ Logique d'effet ============
 
-function applyActionEffect(rt, actionId, element) {
+// amount = contribution de l'acteur (= son niveau dans la categorie, 1-3 ; 1 pour l'Amiral).
+function applyActionEffect(rt, actionId, element, amount = 1) {
   const state = rt.elementStates.get(element.id);
   if (!state) return false;
   // Astéroïde : verifier que le groupe n'est pas detruit
@@ -1035,23 +1067,21 @@ function applyActionEffect(rt, actionId, element) {
   switch (actionId) {
     case 'tir':
     case 'visee':
-      // Plus d'accumulation : le bonus de la tourelle est calcule dynamiquement
-      // a partir du nombre d'acteurs actifs (cf. publicElementState pour turret).
-      // On renvoie true pour que le tick continue de crediter la progression du joueur.
+      // Pas d'accumulation : la puissance/portee de la tourelle est calculee dynamiquement
+      // a partir de la somme des niveaux des acteurs actifs (cf. publicElementState).
       return true;
     case 'reparation':
       if (state.hp >= state.hpMax) return false;
-      state.hp = Math.min(state.hp + 1, state.hpMax);
+      state.hp = Math.min(state.hp + amount, state.hpMax);
       return true;
     case 'remplir':
       if (state.essence >= state.essenceMax) return false;
-      state.essence = Math.min(state.essence + 1, state.essenceMax);
+      state.essence = Math.min(state.essence + amount, state.essenceMax);
       return true;
     case 'minage':
-      // Le minage ne diminue PAS la duree (countdown naturel + tirs ennemis).
-      // Il ne produit que des ressources.
-      if (state.subtype === 'materiaux') rt.factionResources.materiaux += 1;
-      else if (state.subtype === 'radius') rt.factionResources.radius += 1;
+      // Produit des ressources proportionnellement au niveau UTILITAIRE du joueur.
+      if (state.subtype === 'materiaux') rt.factionResources.materiaux += amount;
+      else if (state.subtype === 'radius') rt.factionResources.radius += amount;
       return true;
     default:
       return false;
@@ -1127,6 +1157,46 @@ function incrementCategory(uid, category, n) {
 function getProgressFor(uid) {
   stmtEnsureProgress.run(uid);
   return stmtGetProgress.get(uid);
+}
+
+// Niveaux (1-3) d'un joueur par categorie, derives de son XP.
+function userLevels(uid) {
+  stmtEnsureProgress.run(uid);
+  const r = stmtGetXp.get(uid) || {};
+  return {
+    PUISSANCE:  levelFromXp(r.xp_puissance  || 0),
+    DEFENSIF:   levelFromXp(r.xp_defensif   || 0),
+    UTILITAIRE: levelFromXp(r.xp_utilitaire || 0)
+  };
+}
+function userLevelForCategory(uid, category) {
+  return userLevels(uid)[category] || 1;
+}
+// Contribution (multiplicateur) d'un acteur pour une action : niveau du joueur, ou +1 fixe pour l'Amiral.
+function actorContribution(actor, category) {
+  if (!actor || actor.type === 'amiral') return 1;
+  return userLevelForCategory(actor.id, category);
+}
+function incrementXp(uid, category, n) {
+  if (n <= 0) return;
+  if (category === 'PUISSANCE')       stmtIncXpPuissance.run(n, LEVEL_XP_MAX, uid);
+  else if (category === 'DEFENSIF')   stmtIncXpDefensif.run(n, LEVEL_XP_MAX, uid);
+  else if (category === 'UTILITAIRE') stmtIncXpUtil.run(n, LEVEL_XP_MAX, uid);
+}
+// Attribution d'XP a chaque vague : +1 dans la categorie de l'action en cours,
+// pour les joueurs CONNECTES (presents) ET ayant une action active (participent).
+function awardWaveXp(rt) {
+  if (!rt) return;
+  const rows = stmtActiveUsersByAmiral.all(rt.id);
+  for (const r of rows) {
+    const sockets = socketsByUser.get(r.user_id);
+    if (!sockets || sockets.size === 0) continue; // doit etre present (connecte)
+    stmtEnsureProgress.run(r.user_id);
+    incrementXp(r.user_id, r.category, 1);
+    const levels = userLevels(r.user_id);
+    for (const s of sockets) s.emit('levels', { levels });
+  }
+  console.log(`[amiral ${rt.username}] XP de vague attribuee (${rows.length} action(s) active(s))`);
 }
 
 // ============ Acteurs (user OU amiral) ============
@@ -1215,8 +1285,9 @@ function settleActionGeneric(actor, action, now, rt) {
   setResource(newRes);
   const element = rt.elementById[action.element_id];
   if (element) {
+    const amount = actorContribution(actor, action.category); // niveau du joueur (1-3), 1 pour l'Amiral
     for (let i = 0; i < delta; i++) {
-      const applied = applyActionEffect(rt, action.action_id, element);
+      const applied = applyActionEffect(rt, action.action_id, element, amount);
       if (!applied) break;
     }
   }
@@ -1342,6 +1413,10 @@ function rollWaveFor(rt, force = false) {
   };
   io.to(amiralRoom(rt.id)).emit('wave:incoming', rt.currentWave);
   console.log(`[amiral ${rt.username}] wave ${rt.currentWave.id} — ${count} ennemis vers ${target.id}`);
+
+  // XP de vague : a l'arrivee des ennemis, +1 XP aux joueurs presents+actifs (cf. awardWaveXp).
+  const xpDelay = Math.max(0, spawnAt - Date.now());
+  setTimeout(() => { if (amiralsRuntime.get(rt.id) === rt) awardWaveXp(rt); }, xpDelay);
 
   // Si la cible est un astéroïde, on planifie les tirs ennemis qui vont rogner
   // la durée du groupe (simulation server-side, indépendamment du combat client).

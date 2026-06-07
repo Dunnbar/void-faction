@@ -182,6 +182,19 @@
     #profileMenu .pm-row .res-cell:nth-child(2) { color: #66e1c5; }
     #profileMenu .pm-row strong { color: #fff; }
     #profileMenu .pm-cmd { font-size: 12px; color: #9fb3c8; line-height: 1.55; }
+    #profileMenu .pm-levels { display: flex; gap: 6px; flex-wrap: wrap; }
+    #profileMenu .lvl-cell {
+      flex: 1; min-width: 64px; text-align: center; font-size: 11px; padding: 5px 4px;
+      border-radius: 5px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.03); color: #cdd9e6;
+    }
+    #profileMenu .lvl-cell strong { display: block; font-size: 16px; margin-top: 2px; }
+    #profileMenu .lvl-cell.PUISSANCE  { border-color: rgba(255,79,109,0.5); }
+    #profileMenu .lvl-cell.PUISSANCE strong  { color: #ff8a9c; }
+    #profileMenu .lvl-cell.DEFENSIF   { border-color: rgba(79,163,255,0.5); }
+    #profileMenu .lvl-cell.DEFENSIF strong   { color: #8ac0ff; }
+    #profileMenu .lvl-cell.UTILITAIRE { border-color: rgba(255,210,79,0.5); }
+    #profileMenu .lvl-cell.UTILITAIRE strong { color: #ffe08a; }
+    #profileMenu .pm-levels-hint { font-size: 10px; color: #6e8197; font-style: italic; margin-top: -2px; }
     #profileMenu .pm-action {
       margin-top: 6px; background: transparent; border: 1px solid var(--c-frame); color: var(--c-frame);
       border-radius: 5px; padding: 8px; font-family: inherit; font-size: 12px; cursor: pointer; letter-spacing: 1px;
@@ -530,6 +543,13 @@
   </button>
   <div id="profileMenu" class="hidden">
     <div class="pm-name" id="userLine"><span id="userLabel">Visiteur</span></div>
+    <div class="pm-title">Mes niveaux</div>
+    <div class="pm-levels" id="pmLevels">
+      <span class="lvl-cell PUISSANCE">Tir <strong id="lvlPuissance">1</strong></span>
+      <span class="lvl-cell DEFENSIF">Défense <strong id="lvlDefensif">1</strong></span>
+      <span class="lvl-cell UTILITAIRE">Utilitaire <strong id="lvlUtilitaire">1</strong></span>
+    </div>
+    <div class="pm-levels-hint" id="pmLevelsHint">Gagne de l'XP en participant aux vagues (max niv. 3).</div>
     <div class="pm-title">Ressources de faction</div>
     <div class="pm-row">
       <span class="res-cell"><svg class="icon"><use href="#ic-materiaux"/></svg> Matériaux : <strong id="factionMateriaux">0</strong></span>

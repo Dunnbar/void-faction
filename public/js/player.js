@@ -103,6 +103,7 @@ let lastActiveList = []; // liste brute des actions actives (1 entree par acteur
 let activeAction = null; // { element_id, action_id, category, started_at, last_settled_at }
 let progress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
 let previousProgress = null;
+let levels = { PUISSANCE: 1, DEFENSIF: 1, UTILITAIRE: 1 }; // niveaux viewer par categorie (1-3)
 let actionDurationMs = ACTION_MAX_DURATION_MS_DEFAULT;
 let history = [];
 let socket = null;
@@ -333,6 +334,18 @@ function renderBars() {
     const pct = Math.min(100, (v / max) * 100);
     slot.fill.style.width = pct + '%';
   }
+}
+
+function renderLevels() {
+  const map = { PUISSANCE: 'lvlPuissance', DEFENSIF: 'lvlDefensif', UTILITAIRE: 'lvlUtilitaire' };
+  for (const cat in map) {
+    const el = document.getElementById(map[cat]);
+    if (el) el.textContent = levels[cat] || 1;
+  }
+}
+function showLevelUpToast(category, lvl) {
+  const label = category === 'PUISSANCE' ? 'TIR' : category === 'DEFENSIF' ? 'DÉFENSE' : 'UTILITAIRE';
+  try { showCaptain(`<span class="danger">NIVEAU ${lvl} !</span><br>${label} amélioré.`, 6000); } catch (e) {}
 }
 
 function renderActiveAction() {
@@ -671,6 +684,8 @@ function connectSocket() {
     activeAction = data.activeAction || null;
     progress = data.progress || { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
     previousProgress = { ...progress };
+    if (data.levels) levels = data.levels;
+    renderLevels();
     actionDurationMs = data.actionDurationMs || ACTION_MAX_DURATION_MS_DEFAULT;
     history = Array.isArray(data.history) ? data.history : [];
     rebuildActiveElementsMap(data.activeElements);
@@ -719,6 +734,19 @@ function connectSocket() {
     latestShipState = data;
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) scene.setShipState(data);
+  });
+
+  // Mise a jour des niveaux (gain d'XP a une vague)
+  socket.on('levels', (data) => {
+    if (data && data.levels) {
+      const before = { ...levels };
+      levels = data.levels;
+      renderLevels();
+      // Petit feedback : montre quel niveau a augmente.
+      for (const cat of ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE']) {
+        if ((levels[cat] || 1) > (before[cat] || 1)) showLevelUpToast(cat, levels[cat]);
+      }
+    }
   });
 
   socket.on('action:state', (data) => {
