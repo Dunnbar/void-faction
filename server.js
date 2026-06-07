@@ -59,8 +59,10 @@ const BASE_ACTIONS = [
 ];
 const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }];
 const SHIP_ACTIONS = [
-  { id: 'tir',   label: 'Améliorer Tir',    category: 'PUISSANCE' },
-  { id: 'visee', label: 'Améliorer Portée', category: 'PUISSANCE' }
+  { id: 'tir',      label: 'Améliorer Tir',    category: 'PUISSANCE'  },
+  { id: 'visee',    label: 'Améliorer Portée', category: 'PUISSANCE'  },
+  // Capacite du vaisseau : sur le vaisseau de depart, c'est la VITESSE (booste par les viewers).
+  { id: 'capacite', label: 'Améliorer Vitesse', category: 'UTILITAIRE' }
 ];
 const SHIP_HP_MAX = 100;
 
@@ -318,6 +320,7 @@ const stmtDeleteAmiralSess   = db.prepare('DELETE FROM amiral_sessions WHERE tok
 const stmtInsertUser         = db.prepare('INSERT INTO users (username, password_hash, created_at, amiral_id) VALUES (?, ?, ?, ?)');
 const stmtGetUserByName      = db.prepare('SELECT id, username, password_hash, amiral_id FROM users WHERE username = ?');
 const stmtGetUserById        = db.prepare('SELECT id, username, amiral_id FROM users WHERE id = ?');
+const stmtUsersByAmiral      = db.prepare('SELECT id, username FROM users WHERE amiral_id = ?');
 const stmtInsertSession      = db.prepare('INSERT INTO sessions (token, user_id, created_at) VALUES (?, ?, ?)');
 const stmtGetSession         = db.prepare('SELECT user_id FROM sessions WHERE token = ?');
 const stmtDeleteSession      = db.prepare('DELETE FROM sessions WHERE token = ?');
@@ -539,11 +542,14 @@ function publicElementState(rt, id) {
   }
   // Tourelle / Vaisseau : puissance et portee = somme des niveaux PUISSANCE des acteurs actifs.
   if (el && (el.type === 'turret' || el.type === 'ship')) {
-    return {
+    const out = {
       id, ...s,
       puissance: sumContributionsOnAction(rt, id, 'tir', 'PUISSANCE'),
       range:     sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE')
     };
+    // Le vaisseau a en plus une "capacite" (vitesse) boostee par les viewers (niveaux UTILITAIRE).
+    if (el.type === 'ship') out.capacite = sumContributionsOnAction(rt, id, 'capacite', 'UTILITAIRE');
+    return out;
   }
   // Base : on calcule le nombre de jours depuis sa naissance
   if (el && el.type === 'base') {
@@ -930,6 +936,10 @@ io.on('connection', (socket) => {
     buildTime: BUILD_TIME
   });
 
+  // Amiral : tableau de bord (viewers connectes/inscrits + niveaux). Joueur : maj du dashboard de son amiral.
+  if (socket.data.amiralId) pushAmiralDashboard(socket.data.amiralId);
+  if (socket.data.userId && socket.data.userAmiralId) pushAmiralDashboard(socket.data.userAmiralId);
+
   socket.on('action:activate', (data, cb) => {
     const respond = (payload) => { if (typeof cb === 'function') cb(payload); };
     const actor = getSocketActor(socket);
@@ -1048,6 +1058,8 @@ io.on('connection', (socket) => {
         set.delete(socket);
         if (set.size === 0) socketsByUser.delete(socket.data.userId);
       }
+      // Maj du tableau de bord de l'amiral (un viewer s'est deconnecte).
+      if (socket.data.userAmiralId) pushAmiralDashboard(socket.data.userAmiralId);
     }
   });
 });
@@ -1067,7 +1079,8 @@ function applyActionEffect(rt, actionId, element, amount = 1) {
   switch (actionId) {
     case 'tir':
     case 'visee':
-      // Pas d'accumulation : la puissance/portee de la tourelle est calculee dynamiquement
+    case 'capacite':
+      // Pas d'accumulation : puissance/portee/capacite sont calculees dynamiquement
       // a partir de la somme des niveaux des acteurs actifs (cf. publicElementState).
       return true;
     case 'reparation':
@@ -1183,6 +1196,30 @@ function incrementXp(uid, category, n) {
   else if (category === 'DEFENSIF')   stmtIncXpDefensif.run(n, LEVEL_XP_MAX, uid);
   else if (category === 'UTILITAIRE') stmtIncXpUtil.run(n, LEVEL_XP_MAX, uid);
 }
+// Tableau de bord Amiral : viewers inscrits sur sa base, combien connectes, et leurs niveaux.
+function amiralDashboard(amiralId) {
+  const rows = stmtUsersByAmiral.all(amiralId);
+  let connected = 0;
+  const users = rows.map(u => {
+    const set = socketsByUser.get(u.id);
+    const online = !!(set && set.size > 0);
+    if (online) connected++;
+    const lv = userLevels(u.id);
+    return { username: u.username, online, levels: { puissance: lv.PUISSANCE, defensif: lv.DEFENSIF, utilitaire: lv.UTILITAIRE } };
+  });
+  // Connectes d'abord, puis par niveau total decroissant
+  users.sort((a, b) => (b.online - a.online) ||
+    ((b.levels.puissance + b.levels.defensif + b.levels.utilitaire) - (a.levels.puissance + a.levels.defensif + a.levels.utilitaire)));
+  return { connected, total: rows.length, users };
+}
+function pushAmiralDashboard(amiralId) {
+  if (!amiralId) return;
+  const set = amiralSocketsById.get(amiralId);
+  if (!set || set.size === 0) return;
+  const dash = amiralDashboard(amiralId);
+  for (const s of set) s.emit('dashboard', dash);
+}
+
 // Attribution d'XP a chaque vague : +1 dans la categorie de l'action en cours,
 // pour les joueurs CONNECTES (presents) ET ayant une action active (participent).
 function awardWaveXp(rt) {
@@ -1196,6 +1233,7 @@ function awardWaveXp(rt) {
     const levels = userLevels(r.user_id);
     for (const s of sockets) s.emit('levels', { levels });
   }
+  pushAmiralDashboard(rt.id); // niveaux mis a jour -> rafraichit le tableau de bord
   console.log(`[amiral ${rt.username}] XP de vague attribuee (${rows.length} action(s) active(s))`);
 }
 

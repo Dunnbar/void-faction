@@ -358,6 +358,26 @@ function formatWaveCountdown(ms) {
   return `${s}s`;
 }
 
+// Tableau de bord Amiral : viewers connectes/inscrits + leurs niveaux.
+function renderDashboard(data) {
+  if (!data) return;
+  const cEl = document.getElementById('dashConnected');
+  const tEl = document.getElementById('dashTotal');
+  const list = document.getElementById('dashList');
+  if (cEl) cEl.textContent = data.connected || 0;
+  if (tEl) tEl.textContent = data.total || 0;
+  if (!list) return;
+  const users = data.users || [];
+  if (users.length === 0) { list.innerHTML = '<span class="dash-empty">Aucun viewer inscrit.</span>'; return; }
+  const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
+  list.innerHTML = users.map(u => {
+    const lv = u.levels || { puissance:1, defensif:1, utilitaire:1 };
+    return `<div class="dash-row ${u.online ? 'online' : 'offline'}"><span class="dot"></span>`
+      + `<span class="name">${esc(u.username)}</span>`
+      + `<span class="lv"><span class="p">P${lv.puissance}</span> <span class="d">D${lv.defensif}</span> <span class="u">U${lv.utilitaire}</span></span></div>`;
+  }).join('');
+}
+
 function wireSocketEvents() {
   socket.on('init', (data) => {
     if (data.buildTime) {
@@ -499,6 +519,7 @@ function wireSocketEvents() {
     localStorage.removeItem('voidfaction:amiralToken');
     location.reload();
   });
+  socket.on('dashboard', (data) => renderDashboard(data));
   socket.on('action:state', (data) => {
     activeAction = data?.activeAction || null;
     if (data?.progress) amiralProgress = data.progress;
@@ -1421,7 +1442,9 @@ class MainScene extends Phaser.Scene {
     // Déplacement vers la destination : contrôleur proportionnel.
     // Le vaisseau accélère pour rejoindre une "vitesse cible" qui décroît
     // en sqrt(2·a·d) à l'approche, ce qui le fait freiner avant d'arriver.
-    const MAX_SPEED = 120;           // px/s
+    // La "capacite" du vaisseau (boostee par les viewers) augmente la vitesse max.
+    const shipCapacite = (elementStates.get('ship-1')?.capacite) || 0;
+    const MAX_SPEED = 120 + shipCapacite * 20;  // px/s (120 de base, +20 par niveau cumule)
     const APPROACH_DECEL = 150;      // px/s² (force de freinage théorique)
     const STIFFNESS = 6;             // raideur du correcteur vitesse
     const STOP_DIST = 4;             // px : on s'arrête net si proche ET lent
