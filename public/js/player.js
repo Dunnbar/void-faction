@@ -1464,7 +1464,10 @@ class MainScene extends Phaser.Scene {
         const PATROL_AMP = Math.PI / 4;
         const pickNewPatrolTarget = () => {
           if (!sprite.active || sprite._targetingEnemy) return;
-          const target = baseRot + Math.random() * PATROL_AMP;
+          // Cible ramenee au PLUS COURT chemin depuis la rotation courante (sinon tour complet
+          // quand baseRot depasse ±π — bug tourelle SO).
+          const wanted = Phaser.Math.Angle.Wrap(baseRot + Math.random() * PATROL_AMP);
+          const target = sprite.rotation + Phaser.Math.Angle.Wrap(wanted - sprite.rotation);
           if (sprite._patrolTween) sprite._patrolTween.stop();
           sprite._patrolTween = this.tweens.add({
             targets: sprite,
