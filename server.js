@@ -442,6 +442,7 @@ function getOrCreateAmiralRuntime(amiral) {
     gridY: amiral.grid_y,
     socketId: null,
     online: false,
+    baseDead: false,
     // Position du vaisseau : restauree depuis la DB si presente, sinon defaut (pres de la base).
     ship: {
       x: (amiral.ship_x ?? (WORLD_W / 2)),
@@ -496,6 +497,7 @@ function getDemoRuntime() {
     gridX: 0, gridY: 0,
     socketId: null,
     online: false,
+    baseDead: false,
     ship: { x: WORLD_W / 2, y: WORLD_H / 2 + 230, rotation: 0 },
     elements,
     elementById: Object.fromEntries(elements.map(e => [e.id, e])),
@@ -584,16 +586,46 @@ function rebirthBase(rt) {
   console.log(`[amiral ${rt.username}] base ${baseEl.id} renaissance (jour 0)`);
 }
 
-// Hook pour appliquer des degats a la base (futur : tirs ennemis sur la base).
-// Si HP tombe a 0 -> renaissance avec compteur de jours reset.
+// Coupe TOUTES les actions en cours d'un Amiral (ses joueurs + lui-meme) et notifie chacun.
+function clearAllActionsForAmiral(rt) {
+  const now = Date.now();
+  for (const r of stmtActiveUsersByAmiral.all(rt.id)) {
+    stmtDeleteActiveAction.run(r.user_id);
+    stmtInsertActionLog.run(r.user_id, '', rt.id, '', '', r.category, 'expire', now);
+    const sockets = socketsByUser.get(r.user_id);
+    if (sockets) {
+      const progress = getProgressFor(r.user_id);
+      for (const s of sockets) s.emit('action:state', { activeAction: null, progress, expired: true });
+    }
+  }
+  const am = stmtGetAmiralActive.get(rt.id);
+  if (am) {
+    stmtDeleteAmiralActive.run(rt.id);
+    const sockets = amiralSocketsById.get(rt.id);
+    if (sockets) {
+      const progress = stmtGetAmiralProgress.get(rt.id) || { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
+      for (const s of sockets) s.emit('action:state', { activeAction: null, progress, expired: true });
+    }
+  }
+}
+
+// Degats a la base. A 0 HP : la base est DETRUITE (pas de renaissance auto).
+// Le streameur doit cliquer "Recommencer" (streamer:rebirth) ; en attendant, plus personne n'agit.
 function applyBaseDamage(rt, dmg) {
   const baseEl = rt.elements.find(e => e.type === 'base');
   if (!baseEl) return;
   const state = rt.elementStates.get(baseEl.id);
-  if (!state || dmg <= 0) return;
+  if (!state || dmg <= 0 || rt.baseDead) return;
   state.hp = Math.max(0, state.hp - dmg);
   if (state.hp <= 0) {
-    rebirthBase(rt);
+    rt.baseDead = true;
+    clearAllActionsForAmiral(rt);
+    io.to(amiralRoom(rt.id)).emit('base:destroyed', { id: baseEl.id });
+    io.to(amiralRoom(rt.id)).emit('elements:update', {
+      states: [publicElementState(rt, baseEl.id)],
+      activeElements: activeElementStatesForAmiral(rt.id)
+    });
+    console.log(`[amiral ${rt.username}] BASE DETRUITE — en attente de relance`);
   } else {
     io.to(amiralRoom(rt.id)).emit('elements:update', { states: [publicElementState(rt, baseEl.id)] });
   }
@@ -934,6 +966,7 @@ io.on('connection', (socket) => {
     world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y, gameTz: GAME_TZ,
              mapMinI: MAP_MIN_I, mapMaxI: MAP_MAX_I, mapMinJ: MAP_MIN_J, mapMaxJ: MAP_MAX_J },
     currentWave: rtForInit && rtForInit.currentWave && rtForInit.currentWave.endsAt > Date.now() ? rtForInit.currentWave : null,
+    baseDead: rtForInit ? !!rtForInit.baseDead : false,
     buildTime: BUILD_TIME
   });
 
@@ -947,6 +980,7 @@ io.on('connection', (socket) => {
     if (!actor) return respond({ ok: false, error: 'auth' });
     const rt = amiralsRuntime.get(actor.amiralId);
     if (!rt) return respond({ ok: false, error: 'amiral inconnu' });
+    if (rt.baseDead) return respond({ ok: false, error: 'base détruite' });
     // Les joueurs peuvent agir a tout moment, meme si l'Amiral est hors-ligne
     // (le runtime de l'amiral est toujours en memoire et les actions se reglent au tick).
     const elementId = String(data?.elementId || '');
@@ -1035,6 +1069,16 @@ io.on('connection', (socket) => {
     const rt = amiralsRuntime.get(socket.data.amiralId);
     if (!rt) return;
     applyBaseDamage(rt, BASE_HIT_DMG);
+  });
+
+  // "Recommencer" : seul l'Amiral relance sa base apres destruction (HP/essence/jour reinitialises).
+  socket.on('streamer:rebirth', () => {
+    if (!socket.data.amiralId) return;
+    const rt = amiralsRuntime.get(socket.data.amiralId);
+    if (!rt || !rt.baseDead) return;
+    rt.baseDead = false;
+    rebirthBase(rt);
+    console.log(`[amiral ${rt.username}] base relancee (Recommencer)`);
   });
 
   socket.on('disconnect', () => {
@@ -1364,6 +1408,7 @@ function tickActions() {
   // Drain d'essence : 1 par tick (toutes les 10s) sur la base de chaque amiral.
   // L'essence alimente la base ; si elle tombe a 0, les tourelles sont desactivees (cote client).
   for (const rt of amiralsRuntime.values()) {
+    if (rt.baseDead) continue; // base detruite -> tout est en pause
     const baseEl = rt.elements.find(e => e.type === 'base');
     if (!baseEl) continue;
     const state = rt.elementStates.get(baseEl.id);

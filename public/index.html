@@ -203,6 +203,23 @@
     #profileMenu .pm-action.logout { border-color: #f55; color: #f88; }
     #profileMenu .pm-action.logout:hover { background: #f55; color: #000; }
 
+    /* Ecran "base detruite" (viewer : info + attente, pas d'action possible) */
+    #baseDeadOverlay {
+      position: fixed; inset: 0; z-index: 150;
+      background: radial-gradient(ellipse at center, rgba(120,0,0,0.45) 0%, rgba(40,0,0,0.82) 100%);
+      display: flex; align-items: center; justify-content: center;
+      animation: bdPulse 2s ease-in-out infinite;
+    }
+    #baseDeadOverlay.hidden { display: none; }
+    @keyframes bdPulse { 0%,100% { background-color: rgba(40,0,0,0.0); } 50% { background-color: rgba(120,0,0,0.16); } }
+    #baseDeadOverlay .bd-box {
+      text-align: center; font-family: 'Consolas', monospace; color: #fff;
+      padding: 36px 50px; border: 2px solid #ff3b3b; border-radius: 10px;
+      background: rgba(20,0,0,0.85); box-shadow: 0 0 50px rgba(255,40,40,0.55);
+    }
+    #baseDeadOverlay h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: 4px; color: #ff5a5a; text-shadow: 0 0 16px rgba(255,40,40,0.8); }
+    #baseDeadOverlay p { margin: 0; color: #ffb3b3; font-size: 14px; }
+
     /* Bouton son (image asset, a gauche du bouton profil) */
     .sound-btn {
       position: fixed; top: 22px; right: 158px; z-index: 20;
@@ -577,6 +594,12 @@
     </div>
   </div>
 
+  <div id="baseDeadOverlay" class="hidden">
+    <div class="bd-box">
+      <h1>BASE DÉTRUITE</h1>
+      <p>En attente de l'Amiral pour relancer la base…</p>
+    </div>
+  </div>
   <div id="game"></div>
 
   <div id="actionMenu" class="hidden">

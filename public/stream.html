@@ -46,6 +46,29 @@
     }
     .line strong { color: #f84; }
     .hidden { display: none !important; }
+    /* Ecran "base detruite" (streameur) */
+    #baseDeadOverlay {
+      position: fixed; inset: 0; z-index: 200;
+      background: radial-gradient(ellipse at center, rgba(120,0,0,0.55) 0%, rgba(40,0,0,0.88) 100%);
+      display: flex; align-items: center; justify-content: center;
+      animation: bdPulse 2s ease-in-out infinite;
+    }
+    @keyframes bdPulse { 0%,100% { background-color: rgba(40,0,0,0.0); } 50% { background-color: rgba(120,0,0,0.18); } }
+    #baseDeadOverlay .bd-box {
+      text-align: center; font-family: 'Consolas', monospace; color: #fff;
+      padding: 40px 60px; border: 2px solid #ff3b3b; border-radius: 10px;
+      background: rgba(20,0,0,0.85); box-shadow: 0 0 60px rgba(255,40,40,0.6);
+    }
+    #baseDeadOverlay h1 { margin: 0 0 8px; font-size: 34px; letter-spacing: 4px; color: #ff5a5a; text-shadow: 0 0 18px rgba(255,40,40,0.8); }
+    #baseDeadOverlay p { margin: 0 0 22px; color: #ffb3b3; font-size: 14px; }
+    #baseDeadOverlay button {
+      background: #ff3b3b; color: #fff; border: 0; border-radius: 6px;
+      font-family: inherit; font-weight: bold; font-size: 16px; letter-spacing: 2px;
+      padding: 14px 30px; cursor: pointer; box-shadow: 0 4px 0 #a01010;
+      transition: filter 0.15s, transform 0.05s;
+    }
+    #baseDeadOverlay button:hover { filter: brightness(1.12); }
+    #baseDeadOverlay button:active { transform: translateY(3px); box-shadow: 0 1px 0 #a01010; }
     /* Bouton + menu profil (haut-droite) */
     #profileBtn {
       position: fixed; top: 12px; right: 12px; z-index: 31;
@@ -280,6 +303,13 @@
     <div class="pm-title">Commandes</div>
     <div class="pm-cmd">Clic droit — déplacer le vaisseau<br>Clic — agir sur un élément<br>Carte — changer de case</div>
     <button class="pm-logout" id="pmLogout" type="button">Déconnexion</button>
+  </div>
+  <div id="baseDeadOverlay" class="hidden">
+    <div class="bd-box">
+      <h1>BASE DÉTRUITE</h1>
+      <p>Ta base a été anéantie. Les viewers sont en attente.</p>
+      <button id="bdRestart" type="button">↻ Recommencer</button>
+    </div>
   </div>
   <div id="baseClock" class="hidden"></div>
   <div id="minimapLabel" class="hidden">CARTE — clic pour déplacer la vue</div>

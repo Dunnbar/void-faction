@@ -104,6 +104,7 @@ let activeAction = null; // { element_id, action_id, category, started_at, last_
 let progress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
 let previousProgress = null;
 let levels = { PUISSANCE: 1, DEFENSIF: 1, UTILITAIRE: 1 }; // niveaux viewer par categorie (1-3)
+let baseDead = false; // base detruite : aucune action possible en attendant la relance de l'Amiral
 let actionDurationMs = ACTION_MAX_DURATION_MS_DEFAULT;
 let history = [];
 let socket = null;
@@ -392,6 +393,7 @@ setInterval(() => {
 let actionMenuElementId = null;
 
 function openActionMenu(elementId, anchor) {
+  if (baseDead) return; // base detruite : aucune action possible
   if (!authenticated) {
     pendingElementId = elementId;
     openAuthModal();
@@ -686,6 +688,8 @@ function connectSocket() {
     previousProgress = { ...progress };
     if (data.levels) levels = data.levels;
     renderLevels();
+    baseDead = !!data.baseDead;
+    document.getElementById('baseDeadOverlay')?.classList.toggle('hidden', !baseDead);
     actionDurationMs = data.actionDurationMs || ACTION_MAX_DURATION_MS_DEFAULT;
     history = Array.isArray(data.history) ? data.history : [];
     rebuildActiveElementsMap(data.activeElements);
@@ -846,6 +850,13 @@ function connectSocket() {
     if (data?.state) elementStates.set(data.id, data.state);
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) scene.applyAllElementStates();
+    baseDead = false;
+    document.getElementById('baseDeadOverlay')?.classList.add('hidden');
+  });
+  socket.on('base:destroyed', () => {
+    baseDead = true;
+    closeActionMenu();
+    document.getElementById('baseDeadOverlay')?.classList.remove('hidden');
   });
 
   socket.on('history:new', (entry) => {

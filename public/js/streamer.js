@@ -95,6 +95,10 @@ document.getElementById('pmLogout').addEventListener('click', () => {
   localStorage.removeItem('voidfaction:amiralToken');
   location.reload();
 });
+// "Recommencer" apres destruction de la base.
+document.getElementById('bdRestart')?.addEventListener('click', () => {
+  if (socket) socket.emit('streamer:rebirth');
+});
 
 function connectAmiralSocket() {
   if (socket) try { socket.disconnect(); } catch {}
@@ -401,6 +405,7 @@ function wireSocketEvents() {
     }
     authenticated = true;
     hideLoginUI();
+    document.getElementById('baseDeadOverlay')?.classList.toggle('hidden', !data.baseDead);
     lastActiveElements = data.activeElements || [];
     serverElements = data.elements || [];
     elementStates = new Map((data.elementStates || []).map(s => [s.id, s]));
@@ -506,6 +511,10 @@ function wireSocketEvents() {
     if (data?.state) elementStates.set(data.id, data.state);
     const scene = game?.scene.getScene('main');
     if (scene && scene.scene.isActive()) scene.applyAllElementStates();
+    document.getElementById('baseDeadOverlay')?.classList.add('hidden'); // base relancee
+  });
+  socket.on('base:destroyed', () => {
+    document.getElementById('baseDeadOverlay')?.classList.remove('hidden');
   });
   socket.on('wave:incoming', (wave) => {
     const scene = game?.scene.getScene('main');
