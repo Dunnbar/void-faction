@@ -26,7 +26,7 @@ function startBaseClock() {
   if (baseClockInterval) return;
   baseClockInterval = setInterval(tick, 1000);
 }
-const ZOOM_FACTOR_MIN = 0.85;
+const ZOOM_FACTOR_MIN = 1.0;  // zoom mini = case entiere visible (on ne dezoome pas au-dela)
 const ZOOM_FACTOR_MAX = 2.5;
 
 let amiralToken = localStorage.getItem('voidfaction:amiralToken') || null;
@@ -728,7 +728,11 @@ class MainScene extends Phaser.Scene {
       document.getElementById('minimapLabel')?.classList.remove('hidden');
     }
     this.scale.on('resize', () => this.onResize());
-    // Pas de zoom : la vue affiche toujours une case entiere (zoom fixe = fit).
+    // Zoom molette (vers le curseur) + deplacement (drag), bornes a la case courante.
+    this.input.on('wheel', (pointer, _g, _dx, deltaY) => {
+      this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
+      SharedScene.zoomToPointer(this, pointer, () => this.applyFitZoom());
+    });
 
     this.thrust = this.add.particles(0, 0, 'thrust', {
       speed: { min: 30, max: 70 },

@@ -26,7 +26,7 @@ function startBaseClock() {
   if (baseClockInterval) return;
   baseClockInterval = setInterval(tick, 1000);
 }
-const ZOOM_FACTOR_MIN = 0.85;
+const ZOOM_FACTOR_MIN = 1.0;  // zoom mini = case entiere visible (on ne dezoome pas au-dela)
 const ZOOM_FACTOR_MAX = 2.5;
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
@@ -1042,7 +1042,11 @@ class MainScene extends Phaser.Scene {
     this.enemies = new Set();
     this.waveWarnIcon = null;
 
-    // Pas de zoom : la vue affiche toujours une case entiere (zoom fixe = fit).
+    // Zoom molette (vers le curseur), borne a la case courante.
+    this.input.on('wheel', (pointer, _gos, _dx, deltaY) => {
+      this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
+      SharedScene.zoomToPointer(this, pointer, () => this.applyFitZoom());
+    });
 
     // Drag-to-pan (style MOBA) : clic gauche maintenu + deplacement = panoramique de la carte
     // Si le mouvement est inferieur a un seuil, on traite comme un clic et on ouvre le menu d'action de l'element vise.

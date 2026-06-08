@@ -56,20 +56,19 @@
     focusCameraOnCase(scene, { i, j }, null, null, animate);
   }
   // Detecte un changement de case d'apres (x,y) du vaisseau et recadre si besoin.
-  // La camera se centre TOUJOURS sur le CENTRE de la case (taille fixe), pas sur le
-  // vaisseau : la base reste donc centree dans sa case. A la taille d'ecran par defaut
-  // (une case entiere visible) le vaisseau reste visible de toute facon.
-  // Premier appel (pas de case memorisee) : centrage instantane, sans animation.
+  // On ne recentre QU'au changement de case (sinon on ecraserait le zoom/pan manuel).
+  // Au premier appel, la vue est centree sur la case (= la base). Ensuite l'utilisateur
+  // zoome/deplace librement, borne a la case courante (cf. zoomToPointer / clampScrollToCase).
   // Retourne true si une transition a eu lieu.
   function updateCaseCamera(scene, x, y) {
     const cur = caseOf(x, y);
     const prev = scene._currentCase;
-    const changed = !prev || prev.i !== cur.i || prev.j !== cur.j;
-    scene._currentCase = cur;
-    // Recentrage SYSTEMATIQUE sur le centre de la case (sans animation) : la vue est
-    // toujours exactement centree sur la case courante, impossible de deriver/decentrer.
-    focusCameraOnCase(scene, cur, null, null, false);
-    return changed;
+    if (!prev || prev.i !== cur.i || prev.j !== cur.j) {
+      scene._currentCase = cur;
+      focusCameraOnCase(scene, cur, null, null, false); // centre sur la case (base)
+      return true;
+    }
+    return false;
   }
   // Recadre sur la case courante (sans animation), centre de case.
   function recenterCurrentCase(scene) {
