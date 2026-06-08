@@ -1518,6 +1518,7 @@ class MainScene extends Phaser.Scene {
     SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
     if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship.x, this.ship.y);
     SharedScene.positionActionOverlay(this); // suit le vaisseau (labels + halo)
+    SharedScene.updateStatsPanel(); // barre d'essence + materiaux/radius
 
     if (time - this.lastSend > 50) {
       this.lastSend = time;

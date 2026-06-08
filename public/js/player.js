@@ -1121,6 +1121,7 @@ class MainScene extends Phaser.Scene {
     if (this.ship) SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
     if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship ? this.ship.x : null, this.ship ? this.ship.y : null);
     SharedScene.positionActionOverlay(this); // suit le vaisseau (labels + halo)
+    SharedScene.updateStatsPanel(); // barre d'essence + materiaux/radius
   }
 
   // Cibles hostiles qu'un ennemi peut engager : asteroides vivants, tourelles, vaisseau du joueur.

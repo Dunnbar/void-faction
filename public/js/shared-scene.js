@@ -274,6 +274,35 @@
     return g;
   }
 
+  // ===================== HUD stats (barre d'essence + materiaux/radius) =====================
+  let _statsEls = null;
+  function updateStatsPanel() {
+    if (!_statsEls) {
+      _statsEls = {
+        fill: document.getElementById('statEssenceFill'),
+        val:  document.getElementById('statEssenceVal'),
+        mat:  document.getElementById('statMateriaux'),
+        rad:  document.getElementById('statRadius')
+      };
+    }
+    const states = getStates();
+    const baseEl = getElements().find(e => e.type === 'base');
+    const st = (baseEl && states) ? states.get(baseEl.id) : null;
+    if (st && _statsEls.fill) {
+      const max = st.essenceMax || 1;
+      const ratio = Math.max(0, Math.min(1, (st.essence || 0) / max));
+      _statsEls.fill.style.width = (ratio * 100) + '%';
+      // Rouge si tres bas (tourelles bientot HS), sinon bleu.
+      _statsEls.fill.style.background = ratio < 0.12 ? '#ff5a5a' : '#3da5ff';
+      if (_statsEls.val) _statsEls.val.textContent = Math.round(st.essence || 0) + ' / ' + (st.essenceMax || 0);
+    }
+    const fr = (typeof factionResources !== 'undefined') ? factionResources : null;
+    if (fr) {
+      if (_statsEls.mat) _statsEls.mat.textContent = fr.materiaux || 0;
+      if (_statsEls.rad) _statsEls.rad.textContent = fr.radius || 0;
+    }
+  }
+
   function getStates() {
     return (typeof elementStates !== 'undefined') ? elementStates : null;
   }
@@ -429,6 +458,7 @@
     drawMinimap,
     refreshActionOverlay,
     positionActionOverlay,
-    makeReticle
+    makeReticle,
+    updateStatsPanel
   };
 })();
