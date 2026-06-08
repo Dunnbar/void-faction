@@ -26,7 +26,7 @@ function startBaseClock() {
   if (baseClockInterval) return;
   baseClockInterval = setInterval(tick, 1000);
 }
-const ZOOM_FACTOR_MIN = 1.0;  // zoom mini = case entiere visible (on ne dezoome pas au-dela)
+const ZOOM_FACTOR_MIN = 0.5;  // dezoom : jusqu'a ~2x plus large que la case (nebuleuse autour)
 const ZOOM_FACTOR_MAX = 2.5;
 
 let amiralToken = localStorage.getItem('voidfaction:amiralToken') || null;
