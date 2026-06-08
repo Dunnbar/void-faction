@@ -1231,7 +1231,13 @@ class MainScene extends Phaser.Scene {
         if (sprite._patrolTween) sprite._patrolTween.stop();
         sprite._targetingEnemy = true;
         const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, target.x, target.y);
-        sprite.rotation = a + Math.PI / 2;
+        // Vise l'ennemi mais reste dans l'arc exterieur de la tourelle (±90° autour de
+        // _baseRotation) : sans ce clamp, un ennemi qui orbite la base fait pivoter la
+        // tourelle sur un tour complet (bug "tours complets" tourelle SO).
+        const off = Phaser.Math.Angle.Wrap((a + Math.PI / 2) - sprite._baseRotation);
+        const aimed = sprite._baseRotation + Phaser.Math.Clamp(off, -Math.PI / 2, Math.PI / 2);
+        // Application par plus court chemin (evite tout tour complet residuel).
+        sprite.rotation += Phaser.Math.Angle.Wrap(aimed - sprite.rotation);
         if (!sprite._lastShotAt) sprite._lastShotAt = 0;
         const fireDelay = Math.max(1000, 2000 - (state.puissance || 0) * 30);
         if (now - sprite._lastShotAt >= fireDelay) {
