@@ -12,8 +12,9 @@ const BUILD_TIME = new Date().toISOString();
 const WORLD_W = 2400;
 const WORLD_H = 1350;
 // Grille de "cases" explorables (chaque case = WORLD_W x WORLD_H). La base est dans la case (0,0).
-// Le vaisseau peut explorer cette grille ; au-dela c'est borne.
-const MAP_MIN_I = -1, MAP_MAX_I = 1, MAP_MIN_J = -1, MAP_MAX_J = 1; // 3x3, base au centre
+// Pour l'instant on se restreint a la SEULE case de depart (grille 1x1). Repasser a -1..1
+// (ou plus) pour reactiver l'exploration multi-cases + la minimap.
+const MAP_MIN_I = 0, MAP_MAX_I = 0, MAP_MIN_J = 0, MAP_MAX_J = 0; // 1x1 : case de depart uniquement
 // Max exclusif : -1 pour que floor(x/W) reste dans la derniere case (sinon le bord droit/bas
 // retombe dans la case suivante, hors de la grille).
 const SHIP_MIN_X = MAP_MIN_I * WORLD_W, SHIP_MAX_X = (MAP_MAX_I + 1) * WORLD_W - 1;

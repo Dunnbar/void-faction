@@ -711,10 +711,13 @@ class MainScene extends Phaser.Scene {
     this._userZoomFactor = 1.0; // une case entiere tient a l'ecran
     this.applyFitZoom();
     SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y); // centrage initial sur la case du vaisseau
-    // Minimap : clic = recadrer la vue sur l'endroit clique.
-    this._minimap = SharedScene.setupMinimap({ bounds: MAP_BOUNDS, onTp: (wx, wy) => SharedScene.tpCameraTo(this, wx, wy, true) });
-    document.getElementById('minimap')?.classList.remove('hidden');
-    document.getElementById('minimapLabel')?.classList.remove('hidden');
+    // Minimap : uniquement si la carte a plusieurs cases (sinon inutile -> on la laisse cachee).
+    const multiCase = (MAP_BOUNDS.maxI > MAP_BOUNDS.minI) || (MAP_BOUNDS.maxJ > MAP_BOUNDS.minJ);
+    if (multiCase) {
+      this._minimap = SharedScene.setupMinimap({ bounds: MAP_BOUNDS, onTp: (wx, wy) => SharedScene.tpCameraTo(this, wx, wy, true) });
+      document.getElementById('minimap')?.classList.remove('hidden');
+      document.getElementById('minimapLabel')?.classList.remove('hidden');
+    }
     this.scale.on('resize', () => this.onResize());
     // Pas de zoom : la vue affiche toujours une case entiere (zoom fixe = fit).
 

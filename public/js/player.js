@@ -961,9 +961,13 @@ class MainScene extends Phaser.Scene {
     SharedScene.updateCaseCamera(this, this.ship ? this.ship.x : BASE_X, this.ship ? this.ship.y : BASE_Y);
     this._cameraInitFromShip = false; // recadre une 1re fois sur le vaisseau des reception de sa position
     // Minimap : clic = teleporter la vue (rejoindre le streameur / explorer).
-    this._minimap = SharedScene.setupMinimap({ bounds: MAP_BOUNDS, onTp: (wx, wy) => SharedScene.tpCameraTo(this, wx, wy, true) });
-    document.getElementById('minimap')?.classList.remove('hidden');
-    document.getElementById('minimapLabel')?.classList.remove('hidden');
+    // Minimap : uniquement si la carte a plusieurs cases (sinon inutile -> cachee).
+    const multiCase = (MAP_BOUNDS.maxI > MAP_BOUNDS.minI) || (MAP_BOUNDS.maxJ > MAP_BOUNDS.minJ);
+    if (multiCase) {
+      this._minimap = SharedScene.setupMinimap({ bounds: MAP_BOUNDS, onTp: (wx, wy) => SharedScene.tpCameraTo(this, wx, wy, true) });
+      document.getElementById('minimap')?.classList.remove('hidden');
+      document.getElementById('minimapLabel')?.classList.remove('hidden');
+    }
     this.scale.on('resize', () => this.onResize());
 
     // Background parallax (background_04 : fond fixe + planètes parallax)
