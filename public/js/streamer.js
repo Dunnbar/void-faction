@@ -731,7 +731,7 @@ class MainScene extends Phaser.Scene {
     // Zoom molette (vers le curseur) + deplacement (drag), bornes a la case courante.
     this.input.on('wheel', (pointer, _g, _dx, deltaY) => {
       this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
-      SharedScene.zoomToPointer(this, pointer, () => this.applyFitZoom());
+      SharedScene.zoomView(this, pointer, () => this.applyFitZoom());
     });
 
     this.thrust = this.add.particles(0, 0, 'thrust', {
@@ -763,8 +763,6 @@ class MainScene extends Phaser.Scene {
           duration: 240,
           ease: 'Back.easeOut'
         });
-        // Si la vue avait ete liberee par un drag, on recadre sur la case courante
-        SharedScene.recenterCurrentCase(this);
       }
     });
 
@@ -786,11 +784,8 @@ class MainScene extends Phaser.Scene {
       this._panState.lastY = pointer.y;
       this._panState.moved += Math.hypot(dx, dy);
       if (this._panState.moved > DRAG_THRESHOLD_PX) {
-        const cam = this.cameras.main;
-        cam.scrollX -= dx / cam.zoom;
-        cam.scrollY -= dy / cam.zoom;
-        // La camera ne peut pas sortir de la case courante.
-        SharedScene.clampScrollToCase(this);
+        // Deplacement borne a la case (centre suivi, pas de manip directe du scroll).
+        SharedScene.panView(this, dx, dy);
       }
     });
     this.input.on('pointerup', (pointer) => {

@@ -28,81 +28,75 @@
     const { w, h } = caseDims();
     return { x: (i + 0.5) * w, y: (j + 0.5) * h };
   }
-  // Scroll cible pour centrer la camera sur (fx,fy), borne a la case c.
-  function scrollForFocus(cam, c, fx, fy) {
+  // ----- Camera centree sur un point suivi (scene._viewCenter), borne a la case courante -----
+  // On NE lit JAMAIS l'etat de la camera (scrollX/getWorldPoint peuvent etre perimes hors-frame) :
+  // on suit nous-memes le point central monde et on applique via cam.centerOn (centrage natif correct).
+  // Convention (rotation 0) : worldX(screenX) = viewCenter.x + (screenX - camWidth/2) / zoom.
+  function clampCenterToCase(scene, cx, cy) {
     const { w, h } = caseDims();
+    const c = scene._currentCase || { i: 0, j: 0 };
+    const cam = scene.cameras.main;
     const x0 = c.i * w, y0 = c.j * h;
     const vw = cam.width / cam.zoom, vh = cam.height / cam.zoom;
-    let sx = fx - 0.5 * vw, sy = fy - 0.5 * vh;
-    sx = vw >= w ? x0 + (w - vw) / 2 : Math.min(Math.max(sx, x0), x0 + w - vw);
-    sy = vh >= h ? y0 + (h - vh) / 2 : Math.min(Math.max(sy, y0), y0 + h - vh);
-    return { sx, sy };
+    return {
+      x: vw >= w ? x0 + w / 2 : Math.min(Math.max(cx, x0 + vw / 2), x0 + w - vw / 2),
+      y: vh >= h ? y0 + h / 2 : Math.min(Math.max(cy, y0 + vh / 2), y0 + h - vh / 2)
+    };
   }
-  // Cadre la camera sur la case c en gardant le point focal (fx,fy) visible (clamp).
-  // animate=true : pan fluide (transition de case). Si fx/fy omis -> centre de la case.
-  function focusCameraOnCase(scene, c, fx, fy, animate) {
+  function applyViewCenter(scene) {
     const cam = scene.cameras.main;
+    const vc = scene._viewCenter || caseCenterCoords((scene._currentCase || {}).i || 0, (scene._currentCase || {}).j || 0);
+    const cl = clampCenterToCase(scene, vc.x, vc.y);
+    scene._viewCenter = cl;
+    cam.centerOn(cl.x, cl.y);
+  }
+  function focusCameraOnCase(scene, c, fx, fy) {
     if (fx == null) { const cc = caseCenterCoords(c.i, c.j); fx = cc.x; fy = cc.y; }
-    const { sx, sy } = scrollForFocus(cam, c, fx, fy);
-    scene.tweens.killTweensOf(cam);
-    if (animate) {
-      scene.tweens.add({ targets: cam, scrollX: sx, scrollY: sy, duration: 320, ease: 'Cubic.easeInOut' });
-    } else {
-      cam.scrollX = sx; cam.scrollY = sy;
-    }
+    scene._currentCase = c;
+    scene._viewCenter = { x: fx, y: fy };
+    applyViewCenter(scene);
   }
-  // Compat : centre sur une case (point central), sans focal specifique.
-  function centerCameraOnCase(scene, i, j, animate) {
-    focusCameraOnCase(scene, { i, j }, null, null, animate);
-  }
-  // Detecte un changement de case d'apres (x,y) du vaisseau et recadre si besoin.
-  // On ne recentre QU'au changement de case (sinon on ecraserait le zoom/pan manuel).
-  // Au premier appel, la vue est centree sur la case (= la base). Ensuite l'utilisateur
-  // zoome/deplace librement, borne a la case courante (cf. zoomToPointer / clampScrollToCase).
-  // Retourne true si une transition a eu lieu.
+  function centerCameraOnCase(scene, i, j) { focusCameraOnCase(scene, { i, j }, null, null); }
+  // Recentre sur la case du vaisseau, UNIQUEMENT au changement de case (sinon on ecraserait
+  // le zoom/pan manuel). Premier appel -> centre sur la case (= la base).
   function updateCaseCamera(scene, x, y) {
     const cur = caseOf(x, y);
     const prev = scene._currentCase;
     if (!prev || prev.i !== cur.i || prev.j !== cur.j) {
-      scene._currentCase = cur;
-      focusCameraOnCase(scene, cur, null, null, false); // centre sur la case (base)
+      focusCameraOnCase(scene, cur, null, null);
       return true;
     }
     return false;
   }
-  // Recadre sur la case courante (sans animation), centre de case.
   function recenterCurrentCase(scene) {
-    const c = scene._currentCase;
-    if (c) centerCameraOnCase(scene, c.i, c.j, false);
+    if (scene._currentCase) focusCameraOnCase(scene, scene._currentCase, null, null);
   }
-  // "Teleporte" la camera sur la case contenant (x,y), centree sur le MILIEU de la case
-  // (clic minimap -> on recentre au centre de la case, pas sur le point clique exact).
-  function tpCameraTo(scene, x, y, animate) {
-    const c = caseOf(x, y);
-    scene._currentCase = c;
-    focusCameraOnCase(scene, c, null, null, animate); // centre de la case
+  // "Teleporte" la camera sur la case contenant (x,y), centree sur le milieu de la case.
+  function tpCameraTo(scene, x, y) {
+    focusCameraOnCase(scene, caseOf(x, y), null, null);
   }
-  // Borne le scroll de la camera a l'interieur de la case courante.
-  // Si le viewport depasse la case sur un axe (vue d'ensemble), on centre sur cet axe.
-  function clampScrollToCase(scene) {
-    const c = scene._currentCase;
-    if (!c) return;
-    const { w, h } = caseDims();
+  // Re-borne la vue courante a la case (apres un resize p.ex.).
+  function clampScrollToCase(scene) { if (scene._currentCase) applyViewCenter(scene); }
+  // Deplacement (drag) : on bouge le centre suivi de (dxScreen,dyScreen) px ecran, borne a la case.
+  function panView(scene, dxScreen, dyScreen) {
+    if (!scene._viewCenter) return;
     const cam = scene.cameras.main;
-    const x0 = c.i * w, y0 = c.j * h;
-    const vw = cam.width / cam.zoom, vh = cam.height / cam.zoom;
-    cam.scrollX = vw >= w ? x0 + (w - vw) / 2 : Math.min(Math.max(cam.scrollX, x0), x0 + w - vw);
-    cam.scrollY = vh >= h ? y0 + (h - vh) / 2 : Math.min(Math.max(cam.scrollY, y0), y0 + h - vh);
+    scene._viewCenter.x -= dxScreen / cam.zoom;
+    scene._viewCenter.y -= dyScreen / cam.zoom;
+    applyViewCenter(scene);
   }
-  // Zoom centre sur le curseur : le point monde sous la souris reste fixe, puis clamp a la case.
-  // applyZoom() : callback qui met a jour cam.zoom (typiquement scene.applyFitZoom()).
-  function zoomToPointer(scene, pointer, applyZoom) {
+  // Zoom centre sur le curseur : le point monde sous la souris reste fixe. applyZoom() change cam.zoom.
+  function zoomView(scene, pointer, applyZoom) {
     const cam = scene.cameras.main;
-    const worldX = pointer.worldX, worldY = pointer.worldY;
+    const zoomOld = cam.zoom;
     applyZoom();
-    cam.scrollX = worldX - pointer.x / cam.zoom;
-    cam.scrollY = worldY - pointer.y / cam.zoom;
-    clampScrollToCase(scene);
+    const zoomNew = cam.zoom;
+    if (pointer && scene._viewCenter && zoomOld && zoomNew) {
+      const dx = pointer.x - cam.width / 2, dy = pointer.y - cam.height / 2;
+      scene._viewCenter.x += dx * (1 / zoomOld - 1 / zoomNew);
+      scene._viewCenter.y += dy * (1 / zoomOld - 1 / zoomNew);
+    }
+    applyViewCenter(scene);
   }
 
   // ===================== Minimap =====================
@@ -452,7 +446,8 @@
     updateCaseCamera,
     recenterCurrentCase,
     clampScrollToCase,
-    zoomToPointer,
+    panView,
+    zoomView,
     tpCameraTo,
     setupMinimap,
     drawMinimap,
