@@ -101,7 +101,7 @@ const ELEMENT_TEMPLATES = (() => {
   });
   // 4 materiaux serres a droite, 4 radius serres a gauche (chaque groupe centre sur son axe)
   const scales = [1.0, 1.1, 1.2, 0.9, 1.0, 0.95, 1.0, 1.05];
-  const ASTEROID_GROUP_STEP = Math.PI / 12;  // 15 deg entre asteroides du meme groupe
+  const ASTEROID_GROUP_STEP = Math.PI / 18;  // 10 deg entre asteroides du meme groupe (groupes plus serres)
   // Centrage : startAngle = centre - 1.5 * step (pour 4 asteroides)
   const halfSpan = 1.5 * ASTEROID_GROUP_STEP;
   const groupConfigs = [
