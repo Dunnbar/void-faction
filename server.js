@@ -270,6 +270,17 @@ db.exec(`
     last_settled_at INTEGER NOT NULL,
     FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
   );
+
+  -- Etat persistant des elements (base + tourelles) : HP, et essence pour la base.
+  -- Ecrit periodiquement + sur degats/renaissance ; relu au demarrage pour survivre aux maj.
+  CREATE TABLE IF NOT EXISTS element_state (
+    amiral_id INTEGER NOT NULL,
+    element_id TEXT NOT NULL,
+    hp REAL,
+    essence REAL,
+    PRIMARY KEY (amiral_id, element_id),
+    FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
+  );
 `);
 
 // Ajoute colonnes de progression a la table amirals si pas encore presentes
@@ -386,6 +397,26 @@ const stmtDeleteAmiralActive = db.prepare('DELETE FROM amiral_active_actions WHE
 const stmtUpdateAmiralLastSettled = db.prepare('UPDATE amiral_active_actions SET last_settled_at = ? WHERE amiral_id = ?');
 const stmtAmiralActiveOnElement   = db.prepare('SELECT amiral_id, action_id, category FROM amiral_active_actions WHERE element_id = ? AND amiral_id = ?');
 
+// Persistance de l'etat des elements (HP base/tourelles, essence base)
+const stmtUpsertElementState = db.prepare(`
+  INSERT INTO element_state (amiral_id, element_id, hp, essence)
+  VALUES (?, ?, ?, ?)
+  ON CONFLICT(amiral_id, element_id) DO UPDATE SET hp = excluded.hp, essence = excluded.essence
+`);
+const stmtGetElementStates = db.prepare('SELECT element_id, hp, essence FROM element_state WHERE amiral_id = ?');
+
+// Ecrit en DB l'etat (HP + essence pour la base) des elements base/tourelle d'un Amiral.
+// Pas de persistance pour le runtime de demo (id 0).
+function persistElementStates(rt) {
+  if (!rt || rt.id === 0) return;
+  for (const el of rt.elements) {
+    if (el.type !== 'base' && el.type !== 'turret') continue;
+    const s = rt.elementStates.get(el.id);
+    if (!s) continue;
+    try { stmtUpsertElementState.run(rt.id, el.id, s.hp, el.type === 'base' ? s.essence : null); } catch (e) {}
+  }
+}
+
 // Amiral progression
 const stmtGetAmiralProgress  = db.prepare('SELECT puissance, defensif, utilitaire, total FROM amirals WHERE id = ?');
 const stmtIncAmiralPuissance = db.prepare('UPDATE amirals SET puissance = puissance + ?, total = total + ? WHERE id = ?');
@@ -466,6 +497,20 @@ function getOrCreateAmiralRuntime(amiral) {
       bs.bornAt = amiral.base_born_at;
     } else if (amiral.id !== 0) { // pas pour le runtime demo
       try { stmtSetAmiralBornAt.run(bs.bornAt, amiral.id); } catch (e) {}
+    }
+  }
+  // Restaure HP/essence persistes (base + tourelles) pour survivre aux redemarrages.
+  if (amiral.id !== 0) {
+    for (const row of stmtGetElementStates.all(amiral.id)) {
+      const s = rt.elementStates.get(row.element_id);
+      if (!s) continue;
+      if (row.hp != null && s.hpMax != null) s.hp = Math.max(0, Math.min(row.hp, s.hpMax));
+      if (row.essence != null && s.essenceMax != null) s.essence = Math.max(0, Math.min(row.essence, s.essenceMax));
+    }
+    // Base rechargee a 0 HP -> elle etait detruite : on conserve cet etat.
+    if (baseEl) {
+      const bsHp = rt.elementStates.get(baseEl.id);
+      if (bsHp && bsHp.hp <= 0) rt.baseDead = true;
     }
   }
   amiralsRuntime.set(amiral.id, rt);
@@ -582,6 +627,7 @@ function rebirthBase(rt) {
   state.essence = state.essenceMax;
   state.bornAt = Date.now();
   if (rt.id !== 0) { try { stmtSetAmiralBornAt.run(state.bornAt, rt.id); } catch (e) {} }
+  persistElementStates(rt);
   io.to(amiralRoom(rt.id)).emit('base:reborn', { id: baseEl.id, state: publicElementState(rt, baseEl.id) });
   console.log(`[amiral ${rt.username}] base ${baseEl.id} renaissance (jour 0)`);
 }
@@ -617,6 +663,7 @@ function applyBaseDamage(rt, dmg) {
   const state = rt.elementStates.get(baseEl.id);
   if (!state || dmg <= 0 || rt.baseDead) return;
   state.hp = Math.max(0, state.hp - dmg);
+  persistElementStates(rt);
   if (state.hp <= 0) {
     rt.baseDead = true;
     clearAllActionsForAmiral(rt);
@@ -1425,6 +1472,7 @@ function tickActions() {
     for (const amiralId of dirtyAmiraux) {
       const rt = amiralsRuntime.get(amiralId);
       if (!rt) continue;
+      persistElementStates(rt); // ecriture periodique HP/essence (toutes les 10s tant que la base vit)
       io.to(amiralRoom(amiralId)).emit('elements:update', {
         activeElements: activeElementStatesForAmiral(amiralId),
         states: allElementStates(rt),
