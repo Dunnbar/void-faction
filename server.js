@@ -1264,7 +1264,7 @@ function destroyAsteroidGroup(rt, subtype) {
   group.respawnsAt = group.destroyedAt + ASTEROID_RESPAWN_MS;
   const affectedIds = rt.elements.filter(e => e.type === 'asteroid' && e.subtype === subtype).map(e => e.id);
   io.to(amiralRoom(rt.id)).emit('asteroid:group_destroyed', { subtype, ids: affectedIds, respawnsAt: group.respawnsAt });
-  logJournal(rt, 'asteroid', `Gisement ${subtype} épuisé/détruit`);
+  // (pas de journal pour les gisements detruits : trop frequent, ca noierait le journal)
   console.log(`[amiral ${rt.username}] groupe ${subtype} detruit, respawn a ${new Date(group.respawnsAt).toISOString()}`);
   // Couper les actions en cours sur n'importe quel astéroïde de ce subtype
   for (const id of affectedIds) {
