@@ -967,7 +967,7 @@ class MainScene extends Phaser.Scene {
     // Systeme de "cases" : le viewer voit une case a la fois (une case entiere tient a
     // l'ecran a userZoomFactor=1). La camera ne suit PAS automatiquement le vaisseau ;
     // le viewer se deplace librement et utilise la minimap pour rejoindre le streameur.
-    this._userZoomFactor = 1.0;
+    this._userZoomFactor = 0.5; // demarre dezoome (vue ~2x plus large que la case)
     this.applyFitZoom();
     SharedScene.updateCaseCamera(this, this.ship ? this.ship.x : BASE_X, this.ship ? this.ship.y : BASE_Y);
     this._cameraInitFromShip = false; // recadre une 1re fois sur le vaisseau des reception de sa position

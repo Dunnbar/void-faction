@@ -717,7 +717,7 @@ class MainScene extends Phaser.Scene {
     // Caméra : systeme de "cases". La camera reste centree sur la case courante
     // (WORLD_W x WORLD_H) et bascule sur la voisine quand le vaisseau franchit une
     // frontiere (= sort de l'ecran). Pas de follow continu, pas de derive au zoom.
-    this._userZoomFactor = 1.0; // une case entiere tient a l'ecran
+    this._userZoomFactor = 0.5; // demarre dezoome (vue ~2x plus large que la case)
     this.applyFitZoom();
     SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y); // centrage initial sur la case du vaisseau
     // Minimap : uniquement si la carte a plusieurs cases (sinon inutile -> on la laisse cachee).
