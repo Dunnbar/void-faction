@@ -269,14 +269,13 @@
     /* Ecran "base detruite" (viewer : info + attente, pas d'action possible) */
     #baseDeadOverlay {
       position: fixed; inset: 0; z-index: 150;
-      background: radial-gradient(ellipse at center, rgba(120,0,0,0.45) 0%, rgba(40,0,0,0.82) 100%);
+      background: rgba(0, 0, 0, 0.62); cursor: pointer;
       display: flex; align-items: center; justify-content: center;
-      animation: bdPulse 2s ease-in-out infinite;
+      animation: ovBgIn 0.35s ease;
     }
     #baseDeadOverlay.hidden { display: none; }
-    @keyframes bdPulse { 0%,100% { background-color: rgba(40,0,0,0.0); } 50% { background-color: rgba(120,0,0,0.16); } }
     #baseDeadOverlay .bd-box { text-align: center; font-family: 'Consolas', monospace; }
-    #baseDeadOverlay .badge-wrap { position: relative; display: inline-block; }
+    #baseDeadOverlay .badge-wrap { position: relative; display: inline-block; animation: ovPop 0.45s ease; }
     #baseDeadOverlay .bd-badge { display: block; width: 400px; max-width: 82vw; filter: drop-shadow(0 0 24px rgba(255,40,40,0.5)); }
     /* Titre ecrit DANS la barre centrale du badge */
     #baseDeadOverlay .bd-title {
@@ -286,22 +285,25 @@
     }
     #baseDeadOverlay p { margin: 6px 0 0; color: #ffb3b3; font-size: 14px; }
 
-    /* Badge "vague repoussee" : ennemis totalement detruits */
+    /* Badge "vague eliminee" : ennemis totalement detruits. Plein ecran + fond noir. */
     #victoryOverlay {
-      position: fixed; top: 18%; left: 50%; transform: translateX(-50%);
-      z-index: 140; display: flex; flex-direction: column; align-items: center;
-      pointer-events: none; animation: vcIn 0.5s ease;
+      position: fixed; inset: 0; z-index: 140;
+      display: flex; align-items: center; justify-content: center;
+      background: rgba(0, 0, 0, 0.6); cursor: pointer;
+      animation: ovBgIn 0.35s ease;
     }
     #victoryOverlay.hidden { display: none; }
-    #victoryOverlay .vc-badge { width: 360px; max-width: 80vw; filter: drop-shadow(0 0 18px rgba(64,224,208,0.6)); }
+    #victoryOverlay .vc-badge-wrap { position: relative; animation: ovPop 0.45s ease; }
+    #victoryOverlay .vc-badge { width: 430px; max-width: 84vw; filter: drop-shadow(0 0 22px rgba(64,224,208,0.6)); }
     #victoryOverlay .vc-text {
-      position: absolute; top: 40%; left: 50%; transform: translate(-50%, -50%);
+      position: absolute; top: 43%; left: 50%; transform: translate(-50%, -50%);
       font-family: 'Consolas', monospace; font-weight: bold; letter-spacing: 3px;
-      font-size: 20px; color: #0a6b66; text-shadow: 0 1px 2px rgba(255,255,255,0.6);
+      font-size: 22px; color: #0a6b66; text-shadow: 0 1px 2px rgba(255,255,255,0.6);
       white-space: nowrap;
     }
-    @keyframes vcIn { from { opacity: 0; transform: translateX(-50%) scale(0.8); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
-    #victoryOverlay.fade-out { transition: opacity 0.6s ease; opacity: 0; }
+    @keyframes ovBgIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes ovPop { from { opacity: 0; transform: scale(0.82); } to { opacity: 1; transform: none; } }
+    #victoryOverlay.fade-out, #baseDeadOverlay.fade-out { transition: opacity 0.45s ease; opacity: 0; }
 
     /* Icones de ressources (images) */
     .ico-img { height: 16px; width: auto; vertical-align: -3px; }
@@ -712,10 +714,12 @@
     </div>
   </div>
 
-  <!-- Badge "vague repoussee" (ennemis totalement detruits), affiche brievement -->
+  <!-- Badge "vague eliminee" (ennemis totalement detruits). Clic pour fermer. -->
   <div id="victoryOverlay" class="hidden">
-    <img class="vc-badge" src="/assets/PNG/Victory_Badges.png" alt="">
-    <span class="vc-text">VAGUE REPOUSSÉE</span>
+    <div class="vc-badge-wrap">
+      <img class="vc-badge" src="/assets/PNG/Victory_Badges.png" alt="">
+      <span class="vc-text">VAGUE ÉLIMINÉE</span>
+    </div>
   </div>
   <div id="game"></div>
 

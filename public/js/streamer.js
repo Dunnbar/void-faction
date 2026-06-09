@@ -988,7 +988,8 @@ class MainScene extends Phaser.Scene {
         // la tourelle pivote vers cet angle (transition courte) puis y reste jusqu'au prochain tirage.
         const PATROL_AMP = Math.PI / 4;
         const pickNewPatrolTarget = () => {
-          if (!sprite.active || sprite._targetingEnemy) return;
+          // Tourelle desactivee (base hors tension) -> pas de patrouille (elle reste figee).
+          if (!sprite.active || sprite._targetingEnemy || !SharedScene.isBasePowered()) return;
           // Cible = angle voulu, ramene au PLUS COURT chemin depuis la rotation courante
           // (sinon, si baseRot depasse ±π, le tween fait un tour complet — bug tourelle SO).
           const wanted = Phaser.Math.Angle.Wrap(baseRot + Math.random() * PATROL_AMP);
@@ -1065,7 +1066,8 @@ class MainScene extends Phaser.Scene {
       if (!sprite || !state) continue;
       SharedScene.applyTurretPowerVisual(sprite, powered);
       // Base hors tension : la tourelle est desactivee (la patrouille reprend naturellement).
-      if (!powered) { sprite._targetingEnemy = false; continue; }
+      // Base hors tension : la tourelle est desactivee et FIGE (on stoppe la patrouille).
+      if (!powered) { sprite._targetingEnemy = false; if (sprite._patrolTween) sprite._patrolTween.stop(); continue; }
       // Tourelle = défense autonome : tire en permanence sur l'ennemi le plus proche.
       // L'action 'tir' boost les degats via state.puissance.
       const range = turretRangePx(state);

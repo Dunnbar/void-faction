@@ -351,20 +351,26 @@ function renderLevels() {
   }
 }
 
-// Badge "vague repoussee" (ennemis totalement detruits), affiche ~3s puis fondu.
+// Disparition d'un overlay (victoire / defaite) avec une transition de fondu.
+function dismissOverlay(el) {
+  if (!el || el.classList.contains('hidden') || el.classList.contains('fade-out')) return;
+  el.classList.add('fade-out');
+  setTimeout(() => { el.classList.add('hidden'); el.classList.remove('fade-out'); }, 480);
+}
+// Badge "vague eliminee" (ennemis totalement detruits). Reste affiche ; un clic le
+// fait partir (fondu). Fallback auto au bout de 7s pour ne pas bloquer la vue.
 let _victoryTimer = null;
 function showVictory() {
   const el = document.getElementById('victoryOverlay');
   if (!el) return;
   clearTimeout(_victoryTimer);
   el.classList.remove('hidden', 'fade-out');
-  // relance l'animation d'entree
-  void el.offsetWidth;
-  _victoryTimer = setTimeout(() => {
-    el.classList.add('fade-out');
-    _victoryTimer = setTimeout(() => el.classList.add('hidden'), 650);
-  }, 2600);
+  void el.offsetWidth; // relance l'animation d'entree
+  _victoryTimer = setTimeout(() => dismissOverlay(el), 7000);
 }
+// Clic pour fermer les overlays victoire / defaite (avec transition).
+document.getElementById('victoryOverlay')?.addEventListener('click', () => dismissOverlay(document.getElementById('victoryOverlay')));
+document.getElementById('baseDeadOverlay')?.addEventListener('click', () => dismissOverlay(document.getElementById('baseDeadOverlay')));
 function showLevelUpToast(category, lvl) {
   const label = category === 'PUISSANCE' ? 'TIR' : category === 'DEFENSIF' ? 'DÉFENSE' : 'UTILITAIRE';
   try { showCaptain(`<span class="danger">NIVEAU ${lvl} !</span><br>${label} amélioré.`, 6000); } catch (e) {}
@@ -1277,7 +1283,8 @@ class MainScene extends Phaser.Scene {
       if (!sprite || !state) continue;
       SharedScene.applyTurretPowerVisual(sprite, powered);
       // Base hors tension : la tourelle est desactivee (la patrouille reprend naturellement).
-      if (!powered) { sprite._targetingEnemy = false; continue; }
+      // Base hors tension : la tourelle est desactivee et FIGE (on stoppe la patrouille).
+      if (!powered) { sprite._targetingEnemy = false; if (sprite._patrolTween) sprite._patrolTween.stop(); continue; }
       // Tourelle autonome : tire en permanence sur l'ennemi le plus proche.
       // L'action 'tir' boost les degats via state.puissance.
       const range = turretRangePx(state);
@@ -1524,7 +1531,8 @@ class MainScene extends Phaser.Scene {
         // la tourelle pivote vers cet angle (transition courte) puis y reste jusqu'au prochain tirage.
         const PATROL_AMP = Math.PI / 4;
         const pickNewPatrolTarget = () => {
-          if (!sprite.active || sprite._targetingEnemy) return;
+          // Tourelle desactivee (base hors tension) -> pas de patrouille (elle reste figee).
+          if (!sprite.active || sprite._targetingEnemy || !SharedScene.isBasePowered()) return;
           // Cible ramenee au PLUS COURT chemin depuis la rotation courante (sinon tour complet
           // quand baseRot depasse ±π — bug tourelle SO).
           const wanted = Phaser.Math.Angle.Wrap(baseRot + Math.random() * PATROL_AMP);
