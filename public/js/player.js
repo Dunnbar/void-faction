@@ -107,6 +107,7 @@ let levels = { PUISSANCE: 1, DEFENSIF: 1, UTILITAIRE: 1 }; // niveaux viewer par
 let baseDead = false; // base detruite : aucune action possible en attendant la relance de l'Amiral
 let actionDurationMs = ACTION_MAX_DURATION_MS_DEFAULT;
 let history = [];
+let journal = [];
 let socket = null;
 let authenticated = false;
 let knownBuildTime = null;
@@ -131,6 +132,7 @@ const authBtn = document.getElementById('authBtn');
 const profileMenu = document.getElementById('profileMenu');
 const soundBtn = document.getElementById('soundBtn');
 const historyListEl = document.getElementById('historyList');
+const journalListEl = document.getElementById('journalList');
 
 // ============ Toggle son (visuel + flag global, pas encore branche sur des audio) ============
 window.gameSoundMuted = localStorage.getItem('voidfaction:muted') === '1';
@@ -382,6 +384,29 @@ function renderHistory(_freshTimestamp) {
   // Le panneau d'activite recente est retire de l'UI pour l'instant ; on garde la fonction
   // comme no-op pour que les call sites existants ne plantent pas.
   if (!historyListEl) return;
+}
+
+// ============ Journal d'evenements ============
+function formatClock(at) {
+  const d = new Date(at);
+  const p = (n) => String(n).padStart(2, '0');
+  return `${p(d.getHours())}:${p(d.getMinutes())}`;
+}
+function journalItemHtml(entry) {
+  const type = String(entry.type || '').replace(/[^a-z_]/gi, '');
+  return `<div class="jr-item ${type}"><span class="jr-time">${formatClock(entry.at)}</span>`
+       + `<span class="jr-msg">${escapeHtml(entry.message || '')}</span></div>`;
+}
+function renderJournal() {
+  if (!journalListEl) return;
+  // journal[] est ordonne du plus ancien au plus recent -> on affiche le plus recent en haut.
+  journalListEl.innerHTML = journal.map(journalItemHtml).reverse().join('');
+}
+function addJournalEntry(entry) {
+  if (!entry) return;
+  journal.push(entry);
+  if (journal.length > 40) journal.shift();
+  renderJournal();
 }
 
 setInterval(() => {
@@ -692,6 +717,7 @@ function connectSocket() {
     document.getElementById('baseDeadOverlay')?.classList.toggle('hidden', !baseDead);
     actionDurationMs = data.actionDurationMs || ACTION_MAX_DURATION_MS_DEFAULT;
     history = Array.isArray(data.history) ? data.history : [];
+    journal = Array.isArray(data.journal) ? data.journal : [];
     rebuildActiveElementsMap(data.activeElements);
     if (data.world) {
       WORLD_W = data.world.width;
@@ -713,6 +739,7 @@ function connectSocket() {
     renderBars();
     renderFactionResources();
     renderHistory();
+    renderJournal();
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
     amiralIsOnline = data.watchedAmiral?.online !== false;
     if (data.ship) latestShipState = data.ship; // memorise pour l'appliquer au (re)demarrage de la scene
@@ -865,6 +892,8 @@ function connectSocket() {
     if (history.length > 10) history.pop();
     renderHistory(entry.at);
   });
+
+  socket.on('journal:new', (entry) => addJournalEntry(entry));
 
   socket.on('wave:incoming', (wave) => {
     const scene = game.scene.getScene('main');

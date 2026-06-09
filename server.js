@@ -29,6 +29,7 @@ const USERNAME_RE = /^[a-zA-Z0-9_-]{3,20}$/;
 const ACTION_TICK_MS = 10 * 1000;
 const ACTION_MAX_DURATION_MS = 60 * 60 * 1000;
 const HISTORY_LIMIT = 10;
+const JOURNAL_LIMIT = 40; // nb d'entrees de journal conservees/affichees par base
 
 // Niveaux viewer (par categorie). Max niveau 3. L'XP = nombre de vagues ou le joueur
 // etait present + actif dans cette categorie. Seuils : niv2 a 5 vagues, niv3 a 15.
@@ -290,6 +291,18 @@ db.exec(`
     last_settled_at INTEGER NOT NULL,
     FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
   );
+
+  -- Journal d'evenements par base (vagues, montees de niveau, destructions...).
+  -- Message pre-rendu cote serveur -> le client se contente d'afficher.
+  CREATE TABLE IF NOT EXISTS journal (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amiral_id INTEGER NOT NULL,
+    at INTEGER NOT NULL,
+    type TEXT NOT NULL,
+    message TEXT NOT NULL,
+    FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_journal ON journal (amiral_id, at DESC);
 
   -- Etat persistant des elements (base + tourelles) : HP, et essence pour la base.
   -- Ecrit periodiquement + sur degats/renaissance ; relu au demarrage pour survivre aux maj.
@@ -649,6 +662,7 @@ function rebirthBase(rt) {
   if (rt.id !== 0) { try { stmtSetAmiralBornAt.run(state.bornAt, rt.id); } catch (e) {} }
   persistElementStates(rt);
   io.to(amiralRoom(rt.id)).emit('base:reborn', { id: baseEl.id, state: publicElementState(rt, baseEl.id) });
+  logJournal(rt, 'base_reborn', `La base renaît — jour 0`);
   console.log(`[amiral ${rt.username}] base ${baseEl.id} renaissance (jour 0)`);
 }
 
@@ -692,6 +706,7 @@ function applyBaseDamage(rt, dmg) {
       states: [publicElementState(rt, baseEl.id)],
       activeElements: activeElementStatesForAmiral(rt.id)
     });
+    logJournal(rt, 'base_destroyed', `💥 La base a été détruite !`);
     console.log(`[amiral ${rt.username}] BASE DETRUITE — en attente de relance`);
   } else {
     io.to(amiralRoom(rt.id)).emit('elements:update', { states: [publicElementState(rt, baseEl.id)] });
@@ -724,6 +739,33 @@ function recentHistoryForAmiral(amiralId) {
 }
 
 function amiralRoom(amiralId) { return `amiral-${amiralId}`; }
+
+// ============ Journal d'evenements (par base) ============
+const stmtInsertJournal = db.prepare('INSERT INTO journal (amiral_id, at, type, message) VALUES (?, ?, ?, ?)');
+const stmtRecentJournal = db.prepare('SELECT type, message, at FROM journal WHERE amiral_id = ? ORDER BY at DESC LIMIT ?');
+const stmtTrimJournal   = db.prepare(`
+  DELETE FROM journal WHERE amiral_id = ? AND id NOT IN (
+    SELECT id FROM journal WHERE amiral_id = ? ORDER BY at DESC LIMIT ?
+  )
+`);
+function recentJournalForAmiral(amiralId) {
+  // Renvoie du plus ancien au plus recent (le client prepend les nouveaux).
+  return stmtRecentJournal.all(amiralId, JOURNAL_LIMIT).reverse();
+}
+// Enregistre un evenement et le diffuse en direct a la room de la base.
+// type : 'wave' | 'wave_repelled' | 'levelup' | 'base_destroyed' | 'base_reborn' | 'asteroid' ...
+function logJournal(rt, type, message) {
+  if (!rt) return;
+  const at = Date.now();
+  const entry = { type, message, at };
+  if (rt.id !== 0) { // pas de persistance pour le runtime de demo
+    try {
+      stmtInsertJournal.run(rt.id, at, type, message);
+      stmtTrimJournal.run(rt.id, rt.id, JOURNAL_LIMIT);
+    } catch (e) {}
+  }
+  io.to(amiralRoom(rt.id)).emit('journal:new', entry);
+}
 
 function getOnlineAmiralsList() {
   const out = [];
@@ -1020,6 +1062,7 @@ io.on('connection', (socket) => {
     amiral: socket.data.amiralId ? { username: socket.data.amiralUsername, gridX: rtForInit?.gridX, gridY: rtForInit?.gridY, isOwn: true } : null,
     watchedAmiral: rtForInit && rtForInit.username ? { username: rtForInit.username, gridX: rtForInit.gridX, gridY: rtForInit.gridY, online: !!rtForInit.online } : null,
     history: rtForInit ? recentHistoryForAmiral(rtForInit.id) : [],
+    journal: rtForInit ? recentJournalForAmiral(rtForInit.id) : [],
     elements: rtForInit ? rtForInit.elements : [],
     elementStates: rtForInit ? allElementStates(rtForInit) : [],
     factionResources: rtForInit ? { ...rtForInit.factionResources } : { materiaux: 0, radius: 0 },
@@ -1221,6 +1264,7 @@ function destroyAsteroidGroup(rt, subtype) {
   group.respawnsAt = group.destroyedAt + ASTEROID_RESPAWN_MS;
   const affectedIds = rt.elements.filter(e => e.type === 'asteroid' && e.subtype === subtype).map(e => e.id);
   io.to(amiralRoom(rt.id)).emit('asteroid:group_destroyed', { subtype, ids: affectedIds, respawnsAt: group.respawnsAt });
+  logJournal(rt, 'asteroid', `Gisement ${subtype} épuisé/détruit`);
   console.log(`[amiral ${rt.username}] groupe ${subtype} detruit, respawn a ${new Date(group.respawnsAt).toISOString()}`);
   // Couper les actions en cours sur n'importe quel astéroïde de ce subtype
   for (const id of affectedIds) {
@@ -1341,9 +1385,15 @@ function awardWaveXp(rt) {
     const sockets = socketsByUser.get(r.user_id);
     if (!sockets || sockets.size === 0) continue; // doit etre present (connecte)
     stmtEnsureProgress.run(r.user_id);
+    const levelBefore = userLevels(r.user_id)[r.category] || 1;
     incrementXp(r.user_id, r.category, 1);
     const levels = userLevels(r.user_id);
     for (const s of sockets) s.emit('levels', { levels });
+    const levelAfter = levels[r.category] || 1;
+    if (levelAfter > levelBefore) {
+      const uname = [...sockets][0]?.data?.username || 'Un viewer';
+      logJournal(rt, 'levelup', `${uname} passe niveau ${levelAfter} en ${r.category}`);
+    }
   }
   pushAmiralDashboard(rt.id); // niveaux mis a jour -> rafraichit le tableau de bord
   console.log(`[amiral ${rt.username}] XP de vague attribuee (${rows.length} action(s) active(s))`);
@@ -1568,6 +1618,17 @@ function rollWaveFor(rt, force = false) {
   };
   io.to(amiralRoom(rt.id)).emit('wave:incoming', rt.currentWave);
   console.log(`[amiral ${rt.username}] wave ${rt.currentWave.id} — ${count} ennemis vers ${target.id}`);
+  logJournal(rt, 'wave', `Vague de ${count} ennemis détectée — cible : ${target.label}`);
+
+  // Fin de vague : si la base est toujours debout a l'echeance, on considere la vague repoussee.
+  const waveId = rt.currentWave.id;
+  const repelDelay = Math.max(0, rt.currentWave.endsAt - Date.now());
+  setTimeout(() => {
+    if (amiralsRuntime.get(rt.id) !== rt) return;
+    if (rt.currentWave && rt.currentWave.id !== waveId) return; // une autre vague a pris le relais
+    if (rt.baseDead) return; // base detruite : deja journalise par ailleurs
+    logJournal(rt, 'wave_repelled', `Vague repoussée — la base a tenu`);
+  }, repelDelay);
 
   // XP de vague : a l'arrivee des ennemis, +1 XP aux joueurs presents+actifs (cf. awardWaveXp).
   const xpDelay = Math.max(0, spawnAt - Date.now());
