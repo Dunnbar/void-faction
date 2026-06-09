@@ -193,22 +193,47 @@
     return 40;
   }
   // Cree/maj les labels de compteurs d'actions et le halo de l'element actif de l'utilisateur.
-  function refreshActionOverlay(scene, activeList, myActiveElementId) {
-    if (!scene._actionLabels) scene._actionLabels = new Map();
-    const counts = actionCountsByElement(activeList);
-    const ids = new Set([...counts.keys(), ...scene._actionLabels.keys()]);
-    for (const id of ids) {
-      const txt = formatActionCounts(counts.get(id));
-      let lbl = scene._actionLabels.get(id);
-      if (!txt) { if (lbl) { lbl.destroy(); scene._actionLabels.delete(id); } continue; }
-      if (!lbl) {
-        lbl = scene.add.text(0, 0, '', {
-          fontFamily: 'Consolas, monospace', fontSize: '13px', color: '#cfe6ff',
-          stroke: '#000', strokeThickness: 3, align: 'center'
-        }).setOrigin(0.5, 0).setDepth(13);
-        scene._actionLabels.set(id, lbl);
+  // Cle de texture par action (icones Ability prechargees par chaque scene).
+  const ACTION_ICON_KEY = { tir: 'act-tir', visee: 'act-visee', reparation: 'act-reparation', remplir: 'act-remplir', minage: 'act-minage' };
+
+  // Construit le groupe d'icones d'actions d'un element : une icone par action active,
+  // avec un badge Bg_Hud-Icon en bas a droite indiquant le nombre de joueurs actifs.
+  function buildActionIconGroup(scene, am) {
+    const ICON = 30, GAP = 8;
+    const container = scene.add.container(0, 0).setDepth(13);
+    const entries = [...am.entries()].filter(([, n]) => n > 0);
+    if (!entries.length) return container;
+    const totalW = entries.length * ICON + (entries.length - 1) * GAP;
+    let x = -totalW / 2 + ICON / 2;
+    for (const [act, n] of entries) {
+      const key = ACTION_ICON_KEY[act];
+      if (key && scene.textures.exists(key)) {
+        container.add(scene.add.image(x, 0, key).setDisplaySize(ICON, ICON));
       }
-      lbl.setText(txt);
+      // Badge compteur en bas a droite de l'icone
+      const bx = x + ICON * 0.45, by = ICON * 0.45;
+      if (scene.textures.exists('bg-hud-icon')) {
+        container.add(scene.add.image(bx, by, 'bg-hud-icon').setDisplaySize(17, 17));
+      }
+      container.add(scene.add.text(bx, by, String(n), {
+        fontFamily: 'Consolas, monospace', fontSize: '12px', fontStyle: 'bold',
+        color: '#fff', stroke: '#000', strokeThickness: 3
+      }).setOrigin(0.5));
+      x += ICON + GAP;
+    }
+    return container;
+  }
+
+  function refreshActionOverlay(scene, activeList, myActiveElementId) {
+    if (!scene._actionIcons) scene._actionIcons = new Map();
+    const counts = actionCountsByElement(activeList);
+    const ids = new Set([...counts.keys(), ...scene._actionIcons.keys()]);
+    for (const id of ids) {
+      const am = counts.get(id);
+      const old = scene._actionIcons.get(id);
+      if (old) { old.destroy(); scene._actionIcons.delete(id); }
+      if (!am || am.size === 0) continue;
+      scene._actionIcons.set(id, buildActionIconGroup(scene, am));
     }
     updateMyActiveHalo(scene, myActiveElementId);
     positionActionOverlay(scene);
@@ -235,12 +260,12 @@
   }
   // A appeler chaque frame : suit la position des elements mobiles (vaisseau).
   function positionActionOverlay(scene) {
-    if (scene._actionLabels) {
-      for (const [id, lbl] of scene._actionLabels) {
+    if (scene._actionIcons) {
+      for (const [id, grp] of scene._actionIcons) {
         const p = overlayElementPos(scene, id);
-        if (!p) { lbl.visible = false; continue; }
-        lbl.visible = true;
-        lbl.x = p.x; lbl.y = p.y + overlayLabelOffset(scene, id);
+        if (!p) { grp.visible = false; continue; }
+        grp.visible = true;
+        grp.x = p.x; grp.y = p.y + overlayLabelOffset(scene, id) + 8;
       }
     }
     if (scene._myHalo && scene._myHaloId) {

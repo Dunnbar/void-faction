@@ -440,6 +440,15 @@ setInterval(() => {
 
 // ============ Menu d'action ============
 
+// Icone par action (dossier PNG)
+const ACTION_ICONS = {
+  reparation: '/assets/PNG/Ability21.png',
+  remplir:    '/assets/PNG/Ability10.png',
+  tir:        '/assets/PNG/Ability02.png',
+  visee:      '/assets/PNG/Ability14.png',
+  minage:     '/assets/PNG/Ability24.png'
+};
+
 let actionMenuElementId = null;
 
 function openActionMenu(elementId, anchor) {
@@ -483,7 +492,9 @@ function openActionMenu(elementId, anchor) {
   for (const a of el.actions) {
     const isActive = activeAction && activeAction.element_id === elementId && activeAction.action_id === a.id;
     const btn = document.createElement('button');
-    btn.innerHTML = `<span class="tag cat-tag ${a.category}">${a.category}</span> ${escapeHtml(a.label)}`;
+    btn.className = 'act-block ' + a.category;
+    const icon = ACTION_ICONS[a.id];
+    btn.innerHTML = `${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>`;
     if (isActive) btn.classList.add('active');
     btn.addEventListener('click', () => activateAction(elementId, a.id));
     actionMenuActions.appendChild(btn);
@@ -1032,6 +1043,13 @@ class MainScene extends Phaser.Scene {
     for (let i = 1; i <= 8; i++) {
       this.load.image(`base-ex-${i}`, `/assets/PNG/Ship_Effects/Explosion/Explosion_3_${String(i).padStart(3, '0')}.png`);
     }
+    // Icones d'actions (overlay in-world) + fond de badge compteur
+    this.load.image('act-tir', '/assets/PNG/Ability02.png');
+    this.load.image('act-visee', '/assets/PNG/Ability14.png');
+    this.load.image('act-reparation', '/assets/PNG/Ability21.png');
+    this.load.image('act-remplir', '/assets/PNG/Ability10.png');
+    this.load.image('act-minage', '/assets/PNG/Ability24.png');
+    this.load.image('bg-hud-icon', '/assets/PNG/Bg_Hud-Icon.png');
   }
 
   create() {

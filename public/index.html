@@ -554,17 +554,18 @@
       padding: 0 4px;
     }
     #actionMenu .head .close:hover { color: #fff; }
-    #actionMenu .actions { display: flex; flex-direction: column; gap: 6px; }
+    #actionMenu .actions { display: flex; flex-direction: row; gap: 8px; }
     #actionMenu .actions button {
+      flex: 1 1 0; min-width: 74px;
       background: rgba(255,255,255,0.05); border: 1px solid #2a3e58; color: #fff;
-      font-family: inherit; font-size: 12px; padding: 7px 10px; cursor: pointer; border-radius: 3px;
-      display: flex; align-items: center; gap: 8px; text-align: left;
+      font-family: inherit; cursor: pointer; border-radius: 4px;
+      display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center;
+      padding: 8px 6px;
     }
     #actionMenu .actions button:hover { border-color: var(--c-frame); background: rgba(74,175,255,0.1); }
-    #actionMenu .actions button.active { border-color: #4f8; }
-    #actionMenu .actions button .tag {
-      display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px;
-    }
+    #actionMenu .actions button.active { border-color: #4f8; box-shadow: 0 0 8px rgba(68,255,136,0.4); }
+    #actionMenu .actions .act-ico { width: 40px; height: 40px; border-radius: 4px; display: block; }
+    #actionMenu .actions .act-lbl { font-size: 11px; line-height: 1.15; }
     #actionMenu .deact {
       margin-top: 8px; width: 100%;
       background: transparent; border: 1px solid #f55; color: #f55;

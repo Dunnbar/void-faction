@@ -662,6 +662,13 @@ class MainScene extends Phaser.Scene {
     for (let i = 1; i <= 8; i++) {
       this.load.image(`base-ex-${i}`, `/assets/PNG/Ship_Effects/Explosion/Explosion_3_${String(i).padStart(3, '0')}.png`);
     }
+    // Icones d'actions (overlay in-world) + fond de badge compteur
+    this.load.image('act-tir', '/assets/PNG/Ability02.png');
+    this.load.image('act-visee', '/assets/PNG/Ability14.png');
+    this.load.image('act-reparation', '/assets/PNG/Ability21.png');
+    this.load.image('act-remplir', '/assets/PNG/Ability10.png');
+    this.load.image('act-minage', '/assets/PNG/Ability24.png');
+    this.load.image('bg-hud-icon', '/assets/PNG/Bg_Hud-Icon.png');
   }
 
   create() {
