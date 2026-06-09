@@ -44,6 +44,27 @@ const ENEMY_MIN = 3;
 const ENEMY_MAX = 6;
 const ENEMY_LEVELS_AVAILABLE = [1];
 
+// Montee en difficulte : les ennemis deviennent plus forts au fil des jours de survie
+// de la base (daysAlive). Tempo lent -> progression douce et plafonnee.
+const ENEMY_HP_BASE        = 30;   // HP d'un ennemi au jour 0
+const ENEMY_HP_PER_DAY     = 5;    // +5 HP par jour
+const ENEMY_HP_CAP         = 150;  // plafond HP
+const ENEMY_COUNT_PER_DAYS = 4;    // +1 ennemi tous les 4 jours
+const ENEMY_COUNT_BONUS_CAP = 6;   // +6 ennemis max
+const ENEMY_BASE_DMG_PER_DAYS = 2; // +1 degat sur la base tous les 2 jours
+const ENEMY_BASE_DMG_CAP   = 15;   // plafond degat par tir sur la base
+
+// Jours de survie de la base d'un Amiral (0 = naissance). Sert a la montee en difficulte.
+function daysAliveFor(rt) {
+  const baseEl = rt.elements.find(e => e.type === 'base');
+  const s = baseEl && rt.elementStates.get(baseEl.id);
+  const bornAt = (s && s.bornAt) || Date.now();
+  return Math.max(0, Math.floor((Date.now() - bornAt) / DAY_MS));
+}
+function enemyHpForDay(day)      { return Math.min(ENEMY_HP_CAP, ENEMY_HP_BASE + day * ENEMY_HP_PER_DAY); }
+function enemyCountBonus(day)    { return Math.min(ENEMY_COUNT_BONUS_CAP, Math.floor(day / ENEMY_COUNT_PER_DAYS)); }
+function baseHitDmgForDay(day)   { return Math.min(ENEMY_BASE_DMG_CAP, BASE_HIT_DMG + Math.floor(day / ENEMY_BASE_DMG_PER_DAYS)); }
+
 const CATEGORIES = ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE'];
 const CATEGORY_TO_COLUMN = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILITAIRE: 'utilitaire' };
 
@@ -61,9 +82,8 @@ const BASE_ACTIONS = [
 const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }];
 const SHIP_ACTIONS = [
   { id: 'tir',      label: 'Améliorer Tir',    category: 'PUISSANCE'  },
-  { id: 'visee',    label: 'Améliorer Portée', category: 'PUISSANCE'  },
-  // Capacite du vaisseau : sur le vaisseau de depart, c'est la VITESSE (booste par les viewers).
-  { id: 'capacite', label: 'Améliorer Vitesse', category: 'UTILITAIRE' }
+  { id: 'visee',    label: 'Améliorer Portée', category: 'PUISSANCE'  }
+  // Capacite (vitesse boostee par les viewers) retiree pour l'instant : non utilisee.
 ];
 const SHIP_HP_MAX = 100;
 
@@ -1115,7 +1135,7 @@ io.on('connection', (socket) => {
     if (!socket.data.amiralId) return;
     const rt = amiralsRuntime.get(socket.data.amiralId);
     if (!rt) return;
-    applyBaseDamage(rt, BASE_HIT_DMG);
+    applyBaseDamage(rt, baseHitDmgForDay(daysAliveFor(rt)));
   });
 
   // "Recommencer" : seul l'Amiral relance sa base apres destruction (HP/essence/jour reinitialises).
@@ -1500,7 +1520,9 @@ function rollWaveFor(rt, force = false) {
   if (rt.currentWave && rt.currentWave.endsAt > Date.now()) return;
   if (!force && Math.random() > WAVE_PROBABILITY) return;
 
-  const count = ENEMY_MIN + Math.floor(Math.random() * (ENEMY_MAX - ENEMY_MIN + 1));
+  const day = daysAliveFor(rt);
+  const enemyHp = enemyHpForDay(day);
+  const count = ENEMY_MIN + Math.floor(Math.random() * (ENEMY_MAX - ENEMY_MIN + 1)) + enemyCountBonus(day);
   const baseAngle = Math.random() * Math.PI * 2;
   const spread = 1.9;
   const asteroids = rt.elements.filter(e => e.type === 'asteroid');
@@ -1526,6 +1548,7 @@ function rollWaveFor(rt, force = false) {
     enemies.push({
       id: `e-${rt.id}-${now}-${i}`,
       level,
+      hp: enemyHp, // HP croissant avec les jours de survie de la base
       spawnX, spawnY,
       targetX: target.x, targetY: target.y,
       travelMs: Math.round(travelMs),

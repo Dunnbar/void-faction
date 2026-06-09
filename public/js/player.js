@@ -1683,7 +1683,8 @@ class MainScene extends Phaser.Scene {
       .setDepth(8);
     sprite.play(`enemy${level}-thrust`);
     sprite._level = level;
-    sprite._hp = sprite._hpMax = 30;
+    // HP fourni par le serveur (croit avec les jours de survie de la base) ; 30 par defaut.
+    sprite._hp = sprite._hpMax = (typeof e.hp === 'number' && e.hp > 0) ? e.hp : 30;
     sprite._orbitRadius = ENEMY_ORBIT_R_MIN + Math.random() * (ENEMY_ORBIT_R_MAX - ENEMY_ORBIT_R_MIN);
     sprite._orbitSpeed = (0.20 + Math.random() * 0.20) * (Math.random() < 0.5 ? 1 : -1);
     sprite._engageRef = null;
