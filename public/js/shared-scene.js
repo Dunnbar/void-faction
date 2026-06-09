@@ -377,22 +377,31 @@
     const c = groupCentroid(subtype);
     if (!c) return null;
     const label = subtype === 'materiaux' ? 'MATERIAUX' : (subtype === 'radius' ? 'RADIUS' : subtype.toUpperCase());
-    const timer = scene.add.text(c.x, c.y, '', {
+    // Conteneur : logo TimeIcon (si charge) a gauche + timer restant a droite.
+    const container = scene.add.container(c.x, c.y).setDepth(10);
+    let hasIcon = false;
+    if (scene.textures.exists('time-icon')) {
+      const icon = scene.add.image(-44, 0, 'time-icon').setOrigin(0.5).setDisplaySize(30, 30);
+      container.add(icon);
+      hasIcon = true;
+    }
+    const txt = scene.add.text(hasIcon ? -26 : 0, 0, '', {
       fontFamily: 'Consolas, monospace', fontSize: '16px', color: '#88e0c8',
-      stroke: '#000', strokeThickness: 3, align: 'center'
-    }).setOrigin(0.5).setDepth(10);
+      stroke: '#000', strokeThickness: 3, align: hasIcon ? 'left' : 'center'
+    }).setOrigin(hasIcon ? 0 : 0.5, 0.5);
+    container.add(txt);
     const update = () => {
       const remaining = respawnsAt - Date.now();
-      if (remaining <= 0) { timer.destroy(); return; }
+      if (remaining <= 0) { container.destroy(); return; }
       const m = Math.floor(remaining / 60000);
       const s = Math.floor((remaining % 60000) / 1000);
-      timer.setText(`${label}\nRESPAWN\n${m}m ${String(s).padStart(2, '0')}s`);
+      txt.setText(`${label} — repop\n${m}m ${String(s).padStart(2, '0')}s`);
     };
     update();
     const interval = setInterval(update, 1000);
-    timer.once('destroy', () => clearInterval(interval));
-    scene.groupRespawnTimers.set(subtype, timer);
-    return timer;
+    container.once('destroy', () => clearInterval(interval));
+    scene.groupRespawnTimers.set(subtype, container);
+    return container;
   }
 
   function clearGroupRespawnTimer(scene, subtype) {
@@ -405,6 +414,41 @@
     if (!scene.groupRespawnTimers) { scene.groupRespawnTimers = new Map(); return; }
     for (const t of scene.groupRespawnTimers.values()) t.destroy();
     scene.groupRespawnTimers.clear();
+  }
+
+  // Barre de vie basee sur les assets HealthBar (remplissage) + HealthBar_Line (cadre).
+  // Conserve l'API historique : container.fill.width (largeur affichee) et
+  // container.fill.fillColor (teinte) restent assignables -> aucun appelant a changer.
+  function makeImageHpBar(scene, x, y, width) {
+    const height = 9;
+    const container = scene.add.container(x, y);
+    const hasTex = scene.textures.exists('healthbar') && scene.textures.exists('healthbar-line');
+    let fill;
+    if (hasTex) {
+      const frame = scene.add.image(0, 0, 'healthbar-line').setDisplaySize(width + 4, height + 5);
+      fill = scene.add.image(-width / 2, 0, 'healthbar').setOrigin(0, 0.5).setDisplaySize(width, height);
+      const fh = fill.displayHeight;
+      // Compat : .width pilote la largeur affichee, .fillColor pilote la teinte.
+      Object.defineProperty(fill, 'width', {
+        configurable: true,
+        get() { return this.displayWidth; },
+        set(w) { this.displayWidth = Math.max(0.001, w); this.displayHeight = fh; }
+      });
+      Object.defineProperty(fill, 'fillColor', {
+        configurable: true,
+        get() { return this._fc; },
+        set(c) { this._fc = c; if (c == null || c === 0xffffff || c === 0x4fdb73) this.clearTint(); else this.setTint(c); }
+      });
+      container.add([frame, fill]);
+    } else {
+      // Fallback (textures non chargees) : ancien rendu rectangle.
+      const bg = scene.add.rectangle(0, 0, width, 6, 0x000000, 0.6).setStrokeStyle(1.5, 0xffffff, 0.85);
+      fill = scene.add.rectangle(-width / 2, 0, width, 4, 0x4fdb73).setOrigin(0, 0.5);
+      container.add([bg, fill]);
+    }
+    container.fill = fill;
+    container.maxWidth = width;
+    return container;
   }
 
   // Fade-out d'un asteroide (explosion + alpha->0). Masque la barre de vie.
@@ -433,6 +477,7 @@
     showGroupRespawnTimer,
     clearGroupRespawnTimer,
     clearAllGroupRespawnTimers,
+    makeImageHpBar,
     fadeAsteroidSprite,
     restoreAsteroidSprite,
     isBasePowered,

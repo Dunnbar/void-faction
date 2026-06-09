@@ -645,6 +645,11 @@ class MainScene extends Phaser.Scene {
         `/assets/Asteroids/PNG/asteroid_${v}_with_cracks.png`,
         { frameWidth: meta.w, frameHeight: meta.h });
     }
+    // Assets UI in-world : barre de vie, icone de repop, fleche d'amelioration tourelle
+    this.load.image('healthbar', '/assets/PNG/HealthBar.png');
+    this.load.image('healthbar-line', '/assets/PNG/HealthBar_Line.png');
+    this.load.image('time-icon', '/assets/PNG/TimeIcon.png');
+    this.load.image('upgrade-arrow', '/assets/PNG/User%20interfaces/Shopping%20popup/upgrade%20arrow.png');
   }
 
   create() {
@@ -1022,13 +1027,7 @@ class MainScene extends Phaser.Scene {
   }
 
   makeHpBar(x, y, width, strokeColor) {
-    const c = this.add.container(x, y);
-    const bg = this.add.rectangle(0, 0, width, 6, 0x000000, 0.6).setStrokeStyle(1.5, strokeColor || 0xffffff, 0.85);
-    const fill = this.add.rectangle(-width / 2, 0, width, 4, 0x4fdb73).setOrigin(0, 0.5);
-    c.add([bg, fill]);
-    c.fill = fill; c.bg = bg; c.maxWidth = width;
-    c.strokeColor = strokeColor;
-    return c;
+    return SharedScene.makeImageHpBar(this, x, y, width);
   }
 
   applyAllElementStates() {
@@ -1233,6 +1232,9 @@ class MainScene extends Phaser.Scene {
     const state = elementStates.get(id);
     if (!state) return;
     const level = turretGunLevel(state.puissance);
+    if (sprite._gunLevel == null) sprite._gunLevel = level;
+    else if (level > sprite._gunLevel) { this.showTurretUpgrade(sprite); sprite._gunLevel = level; }
+    else sprite._gunLevel = level;
     const k = String(level).padStart(2, '0');
     const idleKey = `gun-${k}-idle`;
     const shootKey = `gun-${k}-shoot`;
@@ -1248,6 +1250,20 @@ class MainScene extends Phaser.Scene {
       if (sprite.texture && sprite.texture.key !== idleKey) sprite.setTexture(idleKey);
       sprite._currentAnim = null;
     }
+  }
+
+  // Fleche d'amelioration (upgrade arrow) en fondu rapide quand une tourelle monte de niveau.
+  showTurretUpgrade(turretSprite) {
+    if (!this.textures.exists('upgrade-arrow')) return;
+    const arrow = this.add.image(turretSprite.x, turretSprite.y - 30, 'upgrade-arrow')
+      .setDepth(12).setDisplaySize(26, 30).setAlpha(0);
+    this.tweens.add({
+      targets: arrow,
+      y: turretSprite.y - 60,
+      alpha: { from: 0, to: 1 },
+      duration: 220, yoyo: true, hold: 120, ease: 'Sine.easeOut',
+      onComplete: () => arrow.destroy()
+    });
   }
 
   // Astero detruit (un seul). Animation visuelle uniquement ; le timer de respawn
