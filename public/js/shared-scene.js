@@ -376,16 +376,17 @@
     if (existing) { existing.destroy(); scene.groupRespawnTimers.delete(subtype); }
     const c = groupCentroid(subtype);
     if (!c) return null;
-    const label = subtype === 'materiaux' ? 'MATERIAUX' : (subtype === 'radius' ? 'RADIUS' : subtype.toUpperCase());
     // Conteneur : logo TimeIcon (si charge) a gauche + timer restant a droite.
     const container = scene.add.container(c.x, c.y).setDepth(10);
     let hasIcon = false;
     if (scene.textures.exists('time-icon')) {
-      const icon = scene.add.image(-44, 0, 'time-icon').setOrigin(0.5).setDisplaySize(30, 30);
+      // Ratio preserve (hauteur cible 28px) pour ne pas ecraser le logo.
+      const icon = scene.add.image(-26, 0, 'time-icon').setOrigin(0.5);
+      icon.setScale(28 / (icon.height || 28));
       container.add(icon);
       hasIcon = true;
     }
-    const txt = scene.add.text(hasIcon ? -26 : 0, 0, '', {
+    const txt = scene.add.text(hasIcon ? -8 : 0, 0, '', {
       fontFamily: 'Consolas, monospace', fontSize: '16px', color: '#88e0c8',
       stroke: '#000', strokeThickness: 3, align: hasIcon ? 'left' : 'center'
     }).setOrigin(hasIcon ? 0 : 0.5, 0.5);
@@ -395,7 +396,7 @@
       if (remaining <= 0) { container.destroy(); return; }
       const m = Math.floor(remaining / 60000);
       const s = Math.floor((remaining % 60000) / 1000);
-      txt.setText(`${label} — repop\n${m}m ${String(s).padStart(2, '0')}s`);
+      txt.setText(`${m}m ${String(s).padStart(2, '0')}s`);
     };
     update();
     const interval = setInterval(update, 1000);
