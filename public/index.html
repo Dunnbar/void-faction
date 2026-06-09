@@ -269,6 +269,30 @@
     }
     #baseDeadOverlay h1 { margin: 0 0 8px; font-size: 30px; letter-spacing: 4px; color: #ff5a5a; text-shadow: 0 0 16px rgba(255,40,40,0.8); }
     #baseDeadOverlay p { margin: 0; color: #ffb3b3; font-size: 14px; }
+    #baseDeadOverlay .bd-badge { display: block; width: 280px; max-width: 60vw; margin: 0 auto 14px; }
+
+    /* Badge "vague repoussee" : ennemis totalement detruits */
+    #victoryOverlay {
+      position: fixed; top: 18%; left: 50%; transform: translateX(-50%);
+      z-index: 140; display: flex; flex-direction: column; align-items: center;
+      pointer-events: none; animation: vcIn 0.5s ease;
+    }
+    #victoryOverlay.hidden { display: none; }
+    #victoryOverlay .vc-badge { width: 360px; max-width: 80vw; filter: drop-shadow(0 0 18px rgba(64,224,208,0.6)); }
+    #victoryOverlay .vc-text {
+      position: absolute; top: 40%; transform: translateY(-50%);
+      font-family: 'Consolas', monospace; font-weight: bold; letter-spacing: 3px;
+      font-size: 20px; color: #0a6b66; text-shadow: 0 1px 2px rgba(255,255,255,0.6);
+    }
+    @keyframes vcIn { from { opacity: 0; transform: translateX(-50%) scale(0.8); } to { opacity: 1; transform: translateX(-50%) scale(1); } }
+    #victoryOverlay.fade-out { transition: opacity 0.6s ease; opacity: 0; }
+
+    /* Icones de ressources (images) */
+    .ico-img { height: 16px; width: auto; vertical-align: -3px; }
+    /* Badges de niveau viewer (etoiles) */
+    .pm-levels .lvl-cell { display: inline-flex; flex-direction: column; align-items: center; gap: 2px; }
+    .lvl-badge { height: 40px; width: auto; display: block; }
+    .lvl-name { font-size: 10px; letter-spacing: 0.5px; opacity: 0.85; }
 
     /* Bouton son (image asset, a gauche du bouton profil) */
     .sound-btn {
@@ -593,8 +617,8 @@
         <div class="stat-bar"><div id="statEssenceFill" class="stat-bar-fill"></div></div>
       </div>
       <div class="stat-res">
-        <span class="stat-mat"><svg class="icon"><use href="#ic-materiaux"/></svg> Matériaux <strong id="statMateriaux">0</strong></span>
-        <span class="stat-rad"><svg class="icon"><use href="#ic-radius"/></svg> Radius <strong id="statRadius">0</strong></span>
+        <span class="stat-mat"><img class="ico-img" src="/assets/PNG/CrystalIcon.png" alt=""> Matériaux <strong id="statMateriaux">0</strong></span>
+        <span class="stat-rad"><img class="ico-img" src="/assets/PNG/BateryIcon2.png" alt=""> Radius <strong id="statRadius">0</strong></span>
       </div>
     </div>
     <div class="line idle" id="activeAction">
@@ -628,15 +652,15 @@
     <div class="pm-name" id="userLine"><span id="userLabel">Visiteur</span></div>
     <div class="pm-title">Mes niveaux</div>
     <div class="pm-levels" id="pmLevels">
-      <span class="lvl-cell PUISSANCE">Tir <strong id="lvlPuissance">1</strong></span>
-      <span class="lvl-cell DEFENSIF">Défense <strong id="lvlDefensif">1</strong></span>
-      <span class="lvl-cell UTILITAIRE">Utilitaire <strong id="lvlUtilitaire">1</strong></span>
+      <span class="lvl-cell PUISSANCE"><img id="lvlPuissance" class="lvl-badge" src="/assets/PNG/Lvl1Star.png" alt="niv. 1"><span class="lvl-name">Tir</span></span>
+      <span class="lvl-cell DEFENSIF"><img id="lvlDefensif" class="lvl-badge" src="/assets/PNG/Lvl1Star.png" alt="niv. 1"><span class="lvl-name">Défense</span></span>
+      <span class="lvl-cell UTILITAIRE"><img id="lvlUtilitaire" class="lvl-badge" src="/assets/PNG/Lvl1Star.png" alt="niv. 1"><span class="lvl-name">Utilitaire</span></span>
     </div>
     <div class="pm-levels-hint" id="pmLevelsHint">Gagne de l'XP en participant aux vagues (max niv. 3).</div>
     <div class="pm-title">Ressources de faction</div>
     <div class="pm-row">
-      <span class="res-cell"><svg class="icon"><use href="#ic-materiaux"/></svg> Matériaux : <strong id="factionMateriaux">0</strong></span>
-      <span class="res-cell"><svg class="icon"><use href="#ic-radius"/></svg> Radius : <strong id="factionRadius">0</strong></span>
+      <span class="res-cell"><img class="ico-img" src="/assets/PNG/CrystalIcon.png" alt=""> Matériaux : <strong id="factionMateriaux">0</strong></span>
+      <span class="res-cell"><img class="ico-img" src="/assets/PNG/BateryIcon2.png" alt=""> Radius : <strong id="factionRadius">0</strong></span>
     </div>
     <div class="pm-title">Commandes</div>
     <div class="pm-cmd">Clic sur tourelle / astéroïde / base / vaisseau — agir<br>Molette — zoom &nbsp;|&nbsp; Glisser — déplacer la vue</div>
@@ -662,9 +686,16 @@
 
   <div id="baseDeadOverlay" class="hidden">
     <div class="bd-box">
+      <img class="bd-badge" src="/assets/PNG/GameOver_Badges.png" alt="">
       <h1>BASE DÉTRUITE</h1>
       <p>En attente de l'Amiral pour relancer la base…</p>
     </div>
+  </div>
+
+  <!-- Badge "vague repoussee" (ennemis totalement detruits), affiche brievement -->
+  <div id="victoryOverlay" class="hidden">
+    <img class="vc-badge" src="/assets/PNG/Victory_Badges.png" alt="">
+    <span class="vc-text">VAGUE REPOUSSÉE</span>
   </div>
   <div id="game"></div>
 

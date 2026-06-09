@@ -343,8 +343,27 @@ function renderLevels() {
   const map = { PUISSANCE: 'lvlPuissance', DEFENSIF: 'lvlDefensif', UTILITAIRE: 'lvlUtilitaire' };
   for (const cat in map) {
     const el = document.getElementById(map[cat]);
-    if (el) el.textContent = levels[cat] || 1;
+    if (!el) continue;
+    const lvl = Math.max(1, Math.min(3, levels[cat] || 1));
+    // Badge etoile correspondant au niveau (Lvl1Star / Lvl2Star / Lvl3Star)
+    el.src = `/assets/PNG/Lvl${lvl}Star.png`;
+    el.alt = `niv. ${lvl}`;
   }
+}
+
+// Badge "vague repoussee" (ennemis totalement detruits), affiche ~3s puis fondu.
+let _victoryTimer = null;
+function showVictory() {
+  const el = document.getElementById('victoryOverlay');
+  if (!el) return;
+  clearTimeout(_victoryTimer);
+  el.classList.remove('hidden', 'fade-out');
+  // relance l'animation d'entree
+  void el.offsetWidth;
+  _victoryTimer = setTimeout(() => {
+    el.classList.add('fade-out');
+    _victoryTimer = setTimeout(() => el.classList.add('hidden'), 650);
+  }, 2600);
 }
 function showLevelUpToast(category, lvl) {
   const label = category === 'PUISSANCE' ? 'TIR' : category === 'DEFENSIF' ? 'DÉFENSE' : 'UTILITAIRE';
