@@ -1763,7 +1763,7 @@ class MainScene extends Phaser.Scene {
     // Oriente d'emblee vers la base (cap par defaut)
     sprite.rotation = Math.atan2(BASE_Y - e.spawnY, BASE_X - e.spawnX) + Math.PI / 2;
     sprite._hpBar = SharedScene.makeImageHpBar(this, sprite.x, sprite.y - 38, 40,
-      { fillTex: 'enemy-hp-fg', frameTex: 'enemy-hp-bg', tint: false, height: 8 });
+      { fillTex: 'enemy-hp-fg', frameTex: 'enemy-hp-bg', tint: false, uniform: true, fillDy: -1 });
     sprite._hpBar.setDepth(8);
     this.enemies.add(sprite);
   }

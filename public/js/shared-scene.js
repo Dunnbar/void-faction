@@ -433,8 +433,22 @@
     const hasTex = scene.textures.exists(fillTex) && scene.textures.exists(frameTex);
     let fill;
     if (hasTex) {
-      const frame = scene.add.image(0, 0, frameTex).setDisplaySize(width + 4, height + 5);
-      fill = scene.add.image(-width / 2, 0, fillTex).setOrigin(0, 0.5).setDisplaySize(width, height);
+      const frame = scene.add.image(0, 0, frameTex);
+      fill = scene.add.image(0, 0, fillTex).setOrigin(0, 0.5);
+      if (opts.uniform) {
+        // Echelle UNIFORME (basee sur la largeur cible) : pas de distortion verticale,
+        // le remplissage occupe exactement la fente du cadre comme prevu par l'asset.
+        const s = width / fill.width;
+        fill.setScale(s);
+        frame.setScale(s);
+      } else {
+        frame.setDisplaySize(width + 4, height + 5);
+        fill.setDisplaySize(width, height);
+      }
+      fill.x = -fill.displayWidth / 2;
+      if (opts.fillDy) fill.y = opts.fillDy;     // ajustement vertical fin du remplissage
+      if (opts.frameDy) frame.y = opts.frameDy;  // ajustement vertical fin du cadre
+      width = fill.displayWidth; // largeur d'affichage reelle (pour maxWidth)
       const fh = fill.displayHeight;
       // Compat : .width pilote la largeur affichee, .fillColor pilote la teinte.
       Object.defineProperty(fill, 'width', {
