@@ -1013,6 +1013,8 @@ class MainScene extends Phaser.Scene {
     this.load.image('healthbar-line', '/assets/PNG/HealthBar_Line.png');
     this.load.image('time-icon', '/assets/PNG/TimeIcon.png');
     this.load.image('upgrade-arrow', '/assets/PNG/User%20interfaces/Shopping%20popup/upgrade%20arrow.png');
+    this.load.image('enemy-hp-bg', '/assets/PNG/User%20interfaces/enemy%20hp%20bar/enemy%20hp%20bar%20bg.png');
+    this.load.image('enemy-hp-fg', '/assets/PNG/User%20interfaces/enemy%20hp%20bar/enemy%20hp%20bar%20fg.png');
   }
 
   create() {
@@ -1760,7 +1762,8 @@ class MainScene extends Phaser.Scene {
     sprite._engaging = false;
     // Oriente d'emblee vers la base (cap par defaut)
     sprite.rotation = Math.atan2(BASE_Y - e.spawnY, BASE_X - e.spawnX) + Math.PI / 2;
-    sprite._hpBar = this.makeHpBar(sprite.x, sprite.y - 38, 40, 0xff3322);
+    sprite._hpBar = SharedScene.makeImageHpBar(this, sprite.x, sprite.y - 38, 40,
+      { fillTex: 'enemy-hp-fg', frameTex: 'enemy-hp-bg', tint: false, height: 8 });
     sprite._hpBar.setDepth(8);
     this.enemies.add(sprite);
   }

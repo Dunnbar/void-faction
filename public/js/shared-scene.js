@@ -417,17 +417,24 @@
     scene.groupRespawnTimers.clear();
   }
 
-  // Barre de vie basee sur les assets HealthBar (remplissage) + HealthBar_Line (cadre).
-  // Conserve l'API historique : container.fill.width (largeur affichee) et
+  // Barre de vie basee sur des assets image (cadre + remplissage).
+  // Par defaut : HealthBar.png (remplissage) + HealthBar_Line.png (cadre).
+  // opts : { frameTex, fillTex, tint (defaut true), height } -> permet p.ex. la
+  // barre ennemie (enemy hp bar bg/fg) sans recoloration.
+  // Conserve l'API historique : container.fill.width (largeur) et
   // container.fill.fillColor (teinte) restent assignables -> aucun appelant a changer.
-  function makeImageHpBar(scene, x, y, width) {
-    const height = 9;
+  function makeImageHpBar(scene, x, y, width, opts) {
+    opts = opts || {};
+    const fillTex = opts.fillTex || 'healthbar';
+    const frameTex = opts.frameTex || 'healthbar-line';
+    const allowTint = opts.tint !== false;
+    const height = opts.height || 9;
     const container = scene.add.container(x, y);
-    const hasTex = scene.textures.exists('healthbar') && scene.textures.exists('healthbar-line');
+    const hasTex = scene.textures.exists(fillTex) && scene.textures.exists(frameTex);
     let fill;
     if (hasTex) {
-      const frame = scene.add.image(0, 0, 'healthbar-line').setDisplaySize(width + 4, height + 5);
-      fill = scene.add.image(-width / 2, 0, 'healthbar').setOrigin(0, 0.5).setDisplaySize(width, height);
+      const frame = scene.add.image(0, 0, frameTex).setDisplaySize(width + 4, height + 5);
+      fill = scene.add.image(-width / 2, 0, fillTex).setOrigin(0, 0.5).setDisplaySize(width, height);
       const fh = fill.displayHeight;
       // Compat : .width pilote la largeur affichee, .fillColor pilote la teinte.
       Object.defineProperty(fill, 'width', {
@@ -438,7 +445,7 @@
       Object.defineProperty(fill, 'fillColor', {
         configurable: true,
         get() { return this._fc; },
-        set(c) { this._fc = c; if (c == null || c === 0xffffff || c === 0x4fdb73) this.clearTint(); else this.setTint(c); }
+        set(c) { this._fc = c; if (!allowTint) return; if (c == null || c === 0xffffff || c === 0x4fdb73) this.clearTint(); else this.setTint(c); }
       });
       container.add([frame, fill]);
     } else {
