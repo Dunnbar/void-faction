@@ -908,7 +908,14 @@ function connectSocket() {
   socket.on('base:destroyed', () => {
     baseDead = true;
     closeActionMenu();
-    document.getElementById('baseDeadOverlay')?.classList.remove('hidden');
+    const scene = game.scene.getScene('main');
+    if (scene && scene.scene.isActive() && typeof scene.playBaseExplosion === 'function') {
+      scene.playBaseExplosion();
+      // Ecran de fin apres un petit delai (le temps que l'explosion joue).
+      setTimeout(() => { if (baseDead) document.getElementById('baseDeadOverlay')?.classList.remove('hidden'); }, 1200);
+    } else {
+      document.getElementById('baseDeadOverlay')?.classList.remove('hidden');
+    }
   });
 
   socket.on('history:new', (entry) => {
@@ -1021,6 +1028,10 @@ class MainScene extends Phaser.Scene {
     this.load.image('upgrade-arrow', '/assets/PNG/User%20interfaces/Shopping%20popup/upgrade%20arrow.png');
     this.load.image('enemy-hp-bg', '/assets/PNG/User%20interfaces/enemy%20hp%20bar/enemy%20hp%20bar%20bg.png');
     this.load.image('enemy-hp-fg', '/assets/PNG/User%20interfaces/enemy%20hp%20bar/enemy%20hp%20bar%20fg.png');
+    // Explosion de la base (Explosion_3, 8 frames)
+    for (let i = 1; i <= 8; i++) {
+      this.load.image(`base-ex-${i}`, `/assets/PNG/Ship_Effects/Explosion/Explosion_3_${String(i).padStart(3, '0')}.png`);
+    }
   }
 
   create() {
@@ -1436,6 +1447,14 @@ class MainScene extends Phaser.Scene {
         this.anims.create({ key, frames: mkFrames(`gun-${k}-shoot-`, 10, 2), frameRate: 24, repeat: -1 });
       }
     }
+    // Explosion de la base (Explosion_3, frames 1..8)
+    if (!this.anims.exists('base-explode')) {
+      this.anims.create({
+        key: 'base-explode',
+        frames: Array.from({ length: 8 }, (_, i) => ({ key: `base-ex-${i + 1}` })),
+        frameRate: 18, repeat: 0
+      });
+    }
   }
 
   setupParallaxBackground() {
@@ -1824,6 +1843,27 @@ class MainScene extends Phaser.Scene {
     const ex = this.add.sprite(x, y, `enemy${lvl}-ex-000`).setScale(ENEMY_SCALE * 2.2).setDepth(9);
     ex.play(`enemy${lvl}-explode`);
     ex.once('animationcomplete', () => ex.destroy());
+  }
+
+  // Explosion spectaculaire de la base : plusieurs bouffees etalees sur ~0.6s.
+  playBaseExplosion() {
+    if (!this.anims.exists('base-explode')) return;
+    const cx = BASE_X, cy = BASE_Y;
+    const bursts = [
+      { dx: 0, dy: 0, s: 0.42, d: 0 },
+      { dx: -110, dy: -50, s: 0.22, d: 140 },
+      { dx: 100, dy: 70, s: 0.26, d: 260 },
+      { dx: 60, dy: -110, s: 0.20, d: 380 },
+      { dx: -80, dy: 90, s: 0.24, d: 500 },
+      { dx: 0, dy: 0, s: 0.52, d: 600 }
+    ];
+    for (const b of bursts) {
+      this.time.delayedCall(b.d, () => {
+        const ex = this.add.sprite(cx + b.dx, cy + b.dy, 'base-ex-1').setScale(b.s).setDepth(13);
+        ex.play('base-explode');
+        ex.once('animationcomplete', () => ex.destroy());
+      });
+    }
   }
 
   explodeAt(x, y) {
