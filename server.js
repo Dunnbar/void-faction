@@ -1685,14 +1685,21 @@ function rollWaveFor(rt, force = false) {
   console.log(`[amiral ${rt.username}] wave ${rt.currentWave.id} — ${count} ennemis vers ${target.id}`);
   logJournal(rt, 'wave', `Vague de ${count} ennemis détectée`);
 
-  // Fin de vague : si la base est toujours debout a l'echeance, on considere la vague repoussee.
+  // Fin de vague : a l'echeance, on tranche le sort de la vague.
+  //  - Amiral EN LIGNE  : le combat a ete simule par son client -> base debout = repoussee.
+  //  - Amiral HORS-LIGNE : aucun client n'a simule -> resolution server-side (resolveWaveOffline).
   const waveId = rt.currentWave.id;
+  const waveSnapshot = rt.currentWave;
   const repelDelay = Math.max(0, rt.currentWave.endsAt - Date.now());
   setTimeout(() => {
     if (amiralsRuntime.get(rt.id) !== rt) return;
     if (rt.currentWave && rt.currentWave.id !== waveId) return; // une autre vague a pris le relais
     if (rt.baseDead) return; // base detruite : deja journalise par ailleurs
-    logJournal(rt, 'wave_repelled', `Vague repoussée — la base a tenu`);
+    if (rt.online) {
+      logJournal(rt, 'wave_repelled', `Vague repoussée — la base a tenu`);
+    } else {
+      resolveWaveOffline(rt, waveSnapshot);
+    }
   }, repelDelay);
 
   // XP de vague : a l'arrivee des ennemis, +1 XP aux joueurs presents+actifs (cf. awardWaveXp).
@@ -1718,6 +1725,50 @@ function rollWaveFor(rt, force = false) {
       }
     }
   }
+}
+
+// Resolution d'une vague quand l'Amiral est HORS-LIGNE : aucun client ne simule le
+// combat, on tranche donc le sort cote serveur selon les defenses de la base.
+//  - Les tourelles auto-defendent TANT QUE la base a de l'essence -> vague repoussee
+//    (mais defendre brule de l'essence).
+//  - Essence a sec OU aucune tourelle vivante -> les ennemis frappent librement :
+//    degats a la base (destruction possible) + le gisement cible est ronge.
+const OFFLINE_DEFENSE_ESSENCE_PER_ENEMY = 8; // essence brulee par ennemi repousse automatiquement
+const OFFLINE_BASE_HITS_PER_ENEMY       = 2; // tirs encaisses par une base sans defense
+
+function resolveWaveOffline(rt, wave) {
+  const baseEl = rt.elements.find(e => e.type === 'base');
+  const baseState = baseEl && rt.elementStates.get(baseEl.id);
+  if (!baseState || !wave) return;
+  const enemyCount = (wave.enemies && wave.enemies.length) || 0;
+  if (enemyCount <= 0) return;
+  const day = daysAliveFor(rt);
+  const essence = baseState.essence || 0;
+  const aliveTurrets = rt.elements
+    .filter(e => e.type === 'turret')
+    .filter(t => { const s = rt.elementStates.get(t.id); return s && s.hp > 0 && !s.dead; });
+  const defended = essence > 0 && aliveTurrets.length > 0;
+
+  if (defended) {
+    const cost = enemyCount * OFFLINE_DEFENSE_ESSENCE_PER_ENEMY;
+    baseState.essence = Math.max(0, essence - cost);
+    persistElementStates(rt);
+    io.to(amiralRoom(rt.id)).emit('elements:update', { states: [publicElementState(rt, baseEl.id)] });
+    logJournal(rt, 'wave_repelled', `Vague repoussée hors-ligne — défense automatique (essence -${cost})`);
+    console.log(`[amiral ${rt.username}] vague hors-ligne repoussee — essence ${baseState.essence}/${baseState.essenceMax}`);
+    return;
+  }
+
+  // Sans defense : les ennemis ne sont pas arretes.
+  const reason = essence <= 0 ? 'essence à sec' : 'tourelles hors service';
+  const targetEl = rt.elementById[wave.targetId];
+  if (targetEl && targetEl.type === 'asteroid' && targetEl.subtype) {
+    applyAsteroidGroupDamage(rt, targetEl.subtype, enemyCount * ASTEROID_ENEMY_DAMAGE_MS);
+  }
+  const dmg = enemyCount * OFFLINE_BASE_HITS_PER_ENEMY * baseHitDmgForDay(day);
+  logJournal(rt, 'wave', `Vague subie hors-ligne (${reason}) — base touchée -${dmg} HP`);
+  applyBaseDamage(rt, dmg); // gere la destruction (baseDead), le broadcast et le journal associe
+  console.log(`[amiral ${rt.username}] vague hors-ligne SUBIE — base -${dmg} HP (${reason})`);
 }
 
 // ============ Planning des vagues : horaires fixes (TZ Europe/Paris par defaut) ============
@@ -1770,7 +1821,8 @@ function ensureWaveSchedule(rt, t) {
 function tickWaveScheduler() {
   const t = tzNow();
   for (const rt of amiralsRuntime.values()) {
-    if (!rt.online) continue;
+    // Les vagues sont planifiees/declenchees meme hors-ligne : sans pilote, elles
+    // sont resolues cote serveur a l'echeance (cf. resolveWaveOffline).
     ensureWaveSchedule(rt, t);
     for (const [slotKey, { scheduled, slotEnd }] of rt.waveSchedule.entries()) {
       if (rt.waveFiredSlots.has(slotKey)) continue;
