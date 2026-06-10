@@ -1618,7 +1618,7 @@ function rollWaveFor(rt, force = false) {
   };
   io.to(amiralRoom(rt.id)).emit('wave:incoming', rt.currentWave);
   console.log(`[amiral ${rt.username}] wave ${rt.currentWave.id} — ${count} ennemis vers ${target.id}`);
-  logJournal(rt, 'wave', `Vague de ${count} ennemis détectée — cible : ${target.label}`);
+  logJournal(rt, 'wave', `Vague de ${count} ennemis détectée`);
 
   // Fin de vague : si la base est toujours debout a l'echeance, on considere la vague repoussee.
   const waveId = rt.currentWave.id;
