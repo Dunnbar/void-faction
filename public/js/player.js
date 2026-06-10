@@ -231,8 +231,10 @@ const CAPTAIN_FRAMES = (() => {
   for (let i = 0; i < 18; i++) arr.push(`/assets/PNG/CaptainTalk/Talk01/skeleton-LoopTalk_${i}.png`);
   return arr;
 })();
-// Précharge dès l'init du JS pour eviter le flickering au premier affichage
-CAPTAIN_FRAMES.forEach((src) => { const img = new Image(); img.src = src; });
+// Précharge dès l'init du JS pour eviter le flickering au premier affichage.
+// On RETIENT les objets Image (sinon le GC peut les liberer : la 1re vague affichait
+// alors un portrait vide, le temps que les frames soient re-telechargees).
+const _captainPreload = CAPTAIN_FRAMES.map((src) => { const img = new Image(); img.src = src; return img; });
 
 let captainAnimInterval = null;
 let captainHideTimeout = null;
@@ -497,13 +499,13 @@ function openActionMenu(elementId, anchor) {
   const stMenu = elementStates.get(elementId);
   const turretDead = el.type === 'turret' && stMenu && stMenu.dead;
   const actionsToShow = turretDead
-    ? [{ id: 'reparation', label: 'Reconstruire', category: 'DEFENSIF' }]
+    ? [{ id: 'reparation', label: 'Reconstruire', category: 'DEFENSIF', icon: '/assets/PNG/Ability25.png' }]
     : el.actions;
   for (const a of actionsToShow) {
     const isActive = activeAction && activeAction.element_id === elementId && activeAction.action_id === a.id;
     const btn = document.createElement('button');
     btn.className = 'act-block ' + a.category;
-    const icon = ACTION_ICONS[a.id];
+    const icon = a.icon || ACTION_ICONS[a.id];
     btn.innerHTML = `${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>`;
     if (isActive) btn.classList.add('active');
     btn.addEventListener('click', () => activateAction(elementId, a.id));

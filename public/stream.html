@@ -83,6 +83,8 @@
       box-shadow: 0 0 12px rgba(255, 79, 109, 0.4);
     }
     #lockBtn:hover { background: rgba(80, 0, 16, 0.9); color: #fff; }
+    #lockBtn { display: inline-flex; align-items: center; gap: 7px; }
+    #lockBtn .lock-ico { width: 18px; height: 18px; vertical-align: middle; }
     #lockBtn.hidden { display: none; }
     /* Ecran "base detruite" (streameur) */
     #baseDeadOverlay {
@@ -144,14 +146,14 @@
     #profileMenu .pm-logout:hover { background: #f55; color: #000; }
     /* Commandant */
     #captainAlert {
-      position: fixed; bottom: 14px; left: 14px; z-index: 28;
+      position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 28;
       display: flex; align-items: flex-end; gap: 10px; pointer-events: none;
       animation: captainSlideIn 0.4s ease-out;
     }
     #captainAlert.hidden { display: none; }
     @keyframes captainSlideIn {
-      from { transform: translateX(-30px); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
+      from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+      to { transform: translateX(-50%) translateY(0); opacity: 1; }
     }
     #captainAlert .portrait {
       width: 140px; height: 130px;
@@ -369,7 +371,7 @@
     <button class="deactivate-btn" id="deactivateBtn">Stopper l'action</button>
   </div>
   <!-- Cible verrouillee : tir a Espace ; ce bouton retire le verrouillage -->
-  <button id="lockBtn" class="hidden" type="button">🎯 Cible verrouillée — Espace pour tirer · clic pour déverrouiller</button>
+  <button id="lockBtn" class="hidden" type="button"><img class="lock-ico" src="/assets/PNG/Ability05.png" alt=""> Cible verrouillée — Espace pour tirer · clic pour déverrouiller</button>
   <div id="minimapLabel" class="hidden">CARTE — clic pour déplacer la vue</div>
   <canvas id="minimap" class="hidden" width="192" height="108"></canvas>
   <div id="waveBanner" class="hidden">

@@ -334,15 +334,15 @@
 
     /* Commandant qui parle pendant les vagues */
     #captainAlert {
-      position: fixed; bottom: 14px; left: 14px; z-index: 28;
+      position: fixed; bottom: 14px; left: 50%; transform: translateX(-50%); z-index: 28;
       display: flex; align-items: flex-end; gap: 10px;
       pointer-events: none;
       animation: captainSlideIn 0.4s ease-out;
     }
     #captainAlert.hidden { display: none; }
     @keyframes captainSlideIn {
-      from { transform: translateX(-30px); opacity: 0; }
-      to { transform: translateX(0); opacity: 1; }
+      from { transform: translateX(-50%) translateY(20px); opacity: 0; }
+      to { transform: translateX(-50%) translateY(0); opacity: 1; }
     }
     #captainAlert .portrait {
       width: 140px; height: 130px;
