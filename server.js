@@ -312,10 +312,18 @@ db.exec(`
     element_id TEXT NOT NULL,
     hp REAL,
     essence REAL,
+    dead INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (amiral_id, element_id),
     FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
   );
 `);
+// Migration : colonne dead pour les DB element_state existantes (tourelle detruite).
+{
+  const cols = db.prepare("PRAGMA table_info(element_state)").all();
+  if (cols.length && !cols.find(c => c.name === 'dead')) {
+    db.exec("ALTER TABLE element_state ADD COLUMN dead INTEGER NOT NULL DEFAULT 0");
+  }
+}
 
 // Ajoute colonnes de progression a la table amirals si pas encore presentes
 {
@@ -433,11 +441,11 @@ const stmtAmiralActiveOnElement   = db.prepare('SELECT amiral_id, action_id, cat
 
 // Persistance de l'etat des elements (HP base/tourelles, essence base)
 const stmtUpsertElementState = db.prepare(`
-  INSERT INTO element_state (amiral_id, element_id, hp, essence)
-  VALUES (?, ?, ?, ?)
-  ON CONFLICT(amiral_id, element_id) DO UPDATE SET hp = excluded.hp, essence = excluded.essence
+  INSERT INTO element_state (amiral_id, element_id, hp, essence, dead)
+  VALUES (?, ?, ?, ?, ?)
+  ON CONFLICT(amiral_id, element_id) DO UPDATE SET hp = excluded.hp, essence = excluded.essence, dead = excluded.dead
 `);
-const stmtGetElementStates = db.prepare('SELECT element_id, hp, essence FROM element_state WHERE amiral_id = ?');
+const stmtGetElementStates = db.prepare('SELECT element_id, hp, essence, dead FROM element_state WHERE amiral_id = ?');
 
 // Ecrit en DB l'etat (HP + essence pour la base) des elements base/tourelle d'un Amiral.
 // Pas de persistance pour le runtime de demo (id 0).
@@ -447,7 +455,7 @@ function persistElementStates(rt) {
     if (el.type !== 'base' && el.type !== 'turret') continue;
     const s = rt.elementStates.get(el.id);
     if (!s) continue;
-    try { stmtUpsertElementState.run(rt.id, el.id, s.hp, el.type === 'base' ? s.essence : null); } catch (e) {}
+    try { stmtUpsertElementState.run(rt.id, el.id, s.hp, el.type === 'base' ? s.essence : null, (el.type === 'turret' && s.dead) ? 1 : 0); } catch (e) {}
   }
 }
 
@@ -540,6 +548,7 @@ function getOrCreateAmiralRuntime(amiral) {
       if (!s) continue;
       if (row.hp != null && s.hpMax != null) s.hp = Math.max(0, Math.min(row.hp, s.hpMax));
       if (row.essence != null && s.essenceMax != null) s.essence = Math.max(0, Math.min(row.essence, s.essenceMax));
+      if (row.dead) s.dead = true; // tourelle detruite/en reconstruction (<50% HP)
     }
     // Base rechargee a 0 HP -> elle etait detruite : on conserve cet etat.
     if (baseEl) {
@@ -719,6 +728,21 @@ function applyBaseDamage(rt, dmg) {
   } else {
     io.to(amiralRoom(rt.id)).emit('elements:update', { states: [publicElementState(rt, baseEl.id)] });
   }
+}
+// Degats a une tourelle (tir ennemi). A 0 HP -> detruite (dead) : reconstruction requise.
+// Autoritatif serveur + persiste (la barre HP reste a jour apres un rechargement).
+function applyTurretDamage(rt, turretId, dmg) {
+  const el = rt.elementById[turretId];
+  if (!el || el.type !== 'turret') return;
+  const state = rt.elementStates.get(turretId);
+  if (!state || dmg <= 0 || state.hp <= 0) return;
+  state.hp = Math.max(0, state.hp - dmg);
+  if (state.hp <= 0) {
+    state.dead = true;
+    logJournal(rt, 'turret', `${el.label} détruite`);
+  }
+  persistElementStates(rt);
+  io.to(amiralRoom(rt.id)).emit('elements:update', { states: [publicElementState(rt, turretId)] });
 }
 function allElementStates(rt) {
   return rt.elements.map(e => publicElementState(rt, e.id));
@@ -1204,6 +1228,15 @@ io.on('connection', (socket) => {
     const rt = amiralsRuntime.get(socket.data.amiralId);
     if (!rt) return;
     applyBaseDamage(rt, baseHitDmgForDay(daysAliveFor(rt)));
+  });
+
+  // Tir ennemi atteignant une tourelle (autorite streameur, comme la base).
+  socket.on('streamer:turret_hit', (data) => {
+    if (!socket.data.amiralId) return;
+    const rt = amiralsRuntime.get(socket.data.amiralId);
+    if (!rt) return;
+    const id = String(data?.id || '');
+    if (id) applyTurretDamage(rt, id, baseHitDmgForDay(daysAliveFor(rt)));
   });
 
   // "Recommencer" : seul l'Amiral relance sa base apres destruction (HP/essence/jour reinitialises).

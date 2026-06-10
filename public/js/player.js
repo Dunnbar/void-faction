@@ -1242,7 +1242,7 @@ class MainScene extends Phaser.Scene {
           if (s && s.active && s.alpha > 0.5) targets.push({ kind: 'asteroid', sprite: s });
         } else if (el.type === 'turret') {
           const s = this.elementSprites.get(el.id);
-          if (s && s.active) targets.push({ kind: 'turret', sprite: s });
+          if (s && s.active && !s._dead) targets.push({ kind: 'turret', sprite: s });
         }
       }
     }
