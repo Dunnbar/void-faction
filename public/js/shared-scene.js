@@ -258,14 +258,29 @@
     scene._myHalo.setRadius(r);
     scene._myHalo.visible = true;
   }
+  // Barre de vie d'un element (pour caler les icones d'action JUSTE AU-DESSUS).
+  function overlayBarFor(scene, id) {
+    if (id === 'ship-1') return scene.shipHpBar || null;
+    return (scene.elementHpBars && scene.elementHpBars.get(id)) || null;
+  }
   // A appeler chaque frame : suit la position des elements mobiles (vaisseau).
   function positionActionOverlay(scene) {
+    const ICON = 30;
     if (scene._actionIcons) {
       for (const [id, grp] of scene._actionIcons) {
         const p = overlayElementPos(scene, id);
         if (!p) { grp.visible = false; continue; }
         grp.visible = true;
-        grp.x = p.x; grp.y = p.y + overlayLabelOffset(scene, id) + 8;
+        grp.x = p.x;
+        // Icones AU-DESSUS de l'element et de sa barre de vie. S'il y a une barre,
+        // on se cale au-dessus de son cadre ; sinon (asteroide) au-dessus du sprite.
+        const bar = overlayBarFor(scene, id);
+        if (bar && bar.visible) {
+          const barHalf = (bar.fill && bar.fill.displayHeight ? bar.fill.displayHeight : 9) / 2;
+          grp.y = bar.y - barHalf - 8 - ICON / 2;
+        } else {
+          grp.y = p.y - overlayLabelOffset(scene, id) - ICON / 2;
+        }
       }
     }
     if (scene._myHalo && scene._myHaloId) {
