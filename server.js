@@ -833,9 +833,16 @@ const stmtTrimChat   = db.prepare(`
   )
 `);
 function recentChatForAmiral(amiralId) {
-  // Du plus ancien au plus recent (le client append en bas). userId expose pour la moderation.
+  // Du plus ancien au plus recent (le client append en bas). userId expose pour la moderation,
+  // level = niveau courant du joueur (cache par user pour eviter les requetes repetees).
+  const lvlCache = new Map();
+  const lvlFor = (uid) => {
+    if (!uid) return null;
+    if (!lvlCache.has(uid)) lvlCache.set(uid, userDisplayLevel(uid));
+    return lvlCache.get(uid);
+  };
   return stmtRecentChat.all(amiralId, CHAT_LIMIT)
-    .map(r => ({ userId: r.user_id || null, username: r.username, message: r.message, at: r.at }))
+    .map(r => ({ userId: r.user_id || null, username: r.username, message: r.message, at: r.at, level: lvlFor(r.user_id || null) }))
     .reverse();
 }
 
@@ -1344,7 +1351,8 @@ io.on('connection', (socket) => {
       stmtInsertChat.run(amiralId, userId, username, text, at);
       stmtTrimChat.run(amiralId, amiralId, CHAT_LIMIT);
     } catch (e) {}
-    io.to(amiralRoom(amiralId)).emit('chat:new', { userId, username, message: text, at });
+    const level = userId ? userDisplayLevel(userId) : null;
+    io.to(amiralRoom(amiralId)).emit('chat:new', { userId, username, message: text, at, level });
     reply({ ok: true });
   });
 
@@ -1529,6 +1537,11 @@ function userLevels(uid) {
 }
 function userLevelForCategory(uid, category) {
   return userLevels(uid)[category] || 1;
+}
+// Niveau "global" d'un joueur (le plus haut des 3 categories) : affiche dans le chat.
+function userDisplayLevel(uid) {
+  const l = userLevels(uid);
+  return Math.max(l.PUISSANCE, l.DEFENSIF, l.UTILITAIRE);
 }
 // Contribution (multiplicateur) d'un acteur pour une action : niveau du joueur, ou +1 fixe pour l'Amiral.
 function actorContribution(actor, category) {

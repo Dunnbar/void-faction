@@ -494,7 +494,8 @@ function togglePanel(which) {
 // ---- Chat communautaire ----
 function chatMsgHtml(m) {
   const mine = authenticated && username && m.username === username;
-  return `<div class="chat-msg"><span class="cm-author${mine ? ' me' : ''}">${escapeHtml(m.username || '?')}</span>`
+  const lvl = m.level ? `<span class="cm-lvl">Niv ${m.level}</span>` : '';
+  return `<div class="chat-msg">${lvl}<span class="cm-author${mine ? ' me' : ''}">${escapeHtml(m.username || '?')}</span>`
        + `<span class="cm-text">${escapeHtml(m.message || '')}</span>`
        + `<span class="cm-time">${formatClock(m.at)}</span></div>`;
 }

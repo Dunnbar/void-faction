@@ -620,7 +620,8 @@ function chatMsgHtml(m) {
   const modable = !!m.userId;  // seuls les messages de viewers (avec userId) sont moderables
   const cls = 'cm-author' + (mine ? ' me' : '') + (modable ? ' mod' : '');
   const attr = modable ? ` data-uid="${m.userId}" data-uname="${escapeHtml(m.username || '')}"` : '';
-  return `<div class="chat-msg"><span class="${cls}"${attr}>${escapeHtml(m.username || '?')}</span>`
+  const lvl = m.level ? `<span class="cm-lvl">Niv ${m.level}</span>` : '';
+  return `<div class="chat-msg">${lvl}<span class="${cls}"${attr}>${escapeHtml(m.username || '?')}</span>`
        + `<span class="cm-text">${escapeHtml(m.message || '')}</span>`
        + `<span class="cm-time">${chatClock(m.at)}</span></div>`;
 }

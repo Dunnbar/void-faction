@@ -101,7 +101,7 @@
     .hud-btn .badge { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #ff4f6d; color: #fff; font-size: 10px; line-height: 16px; text-align: center; display: none; font-family: 'Consolas', monospace; }
     .hud-btn.has-unread .badge { display: block; }
     #chat {
-      position: fixed; bottom: 72px; left: 12px; z-index: 24; width: 320px;
+      position: fixed; bottom: 76px; left: 12px; z-index: 24; width: 320px;
       background: rgba(0, 20, 40, 0.92); border: 1px solid #2f5d86; border-radius: 4px;
       box-shadow: 0 0 12px rgba(74, 175, 255, 0.3); font-size: 12px; display: flex; flex-direction: column; overflow: hidden;
     }
@@ -110,6 +110,7 @@
     .chat-list { max-height: 34vh; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding: 6px 10px; }
     .chat-list:empty::after { content: "Aucun message."; color: #5d7b9c; font-style: italic; }
     .chat-msg { line-height: 1.35; word-break: break-word; }
+    .chat-msg .cm-lvl { display: inline-block; margin-right: 5px; padding: 0 5px; border-radius: 8px; font-size: 10px; font-weight: bold; color: #04121f; background: #6fc0ff; vertical-align: 1px; }
     .chat-msg .cm-author { color: #7fd0ff; font-weight: bold; margin-right: 5px; }
     .chat-msg .cm-author.me { color: #ffd9a0; }
     .chat-msg .cm-author.mod { cursor: pointer; text-decoration: underline dotted; }
