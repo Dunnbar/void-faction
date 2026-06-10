@@ -109,6 +109,7 @@ let actionDurationMs = ACTION_MAX_DURATION_MS_DEFAULT;
 let history = [];
 let journal = [];
 let chat = [];
+let pendingWave = null; // vague active recue a l'init, appliquee des que la scene est prete
 let socket = null;
 let authenticated = false;
 let knownBuildTime = null;
@@ -923,6 +924,8 @@ function connectSocket() {
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
     amiralIsOnline = data.watchedAmiral?.online !== false;
     if (data.ship) latestShipState = data.ship; // memorise pour l'appliquer au (re)demarrage de la scene
+    // Vague en cours memorisee : appliquee ici si la scene est prete, sinon dans create().
+    pendingWave = data.currentWave || null;
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) {
       if (scene.shipLabel) scene.shipLabel.setText(amiralDisplayName);
@@ -934,7 +937,7 @@ function connectSocket() {
       scene.setupElements(serverElements);
       scene.applyAllElementStates();
       scene.drawBasePerimeter();
-      if (data.currentWave) scene.handleWaveIncoming(data.currentWave);
+      if (pendingWave) { scene.handleWaveIncoming(pendingWave); pendingWave = null; }
     }
     if (data.currentWave) triggerCaptainForWave(data.currentWave);
   });
@@ -1342,6 +1345,8 @@ class MainScene extends Phaser.Scene {
       this.setupElements(serverElements);
       this.applyAllElementStates();
     }
+    // Vague deja en cours a la connexion : on l'affiche maintenant que la scene est prete.
+    if (pendingWave) { this.handleWaveIncoming(pendingWave); triggerCaptainForWave(pendingWave); pendingWave = null; }
   }
 
   update(time, delta) {

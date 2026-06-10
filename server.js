@@ -40,6 +40,7 @@ function levelFromXp(xp) { return (xp >= LEVEL_XP[1]) ? 3 : (xp >= LEVEL_XP[0]) 
 const WAVE_CHECK_INTERVAL_MS = 60 * 1000;
 const WAVE_PROBABILITY = 0.35;
 const WAVE_WARNING_MS = 40 * 60 * 1000;  // 40 min de preavis avant l'arrivee des ennemis
+const COMBAT_WINDOW_MS = 15 * 60 * 1000; // duree max d'un combat avant que les survivants "percent" (fallback)
 const ENEMY_SPEED = 40;
 const ENEMY_MIN = 3;
 const ENEMY_MAX = 6;
@@ -1342,6 +1343,19 @@ io.on('connection', (socket) => {
     if (id) applyTurretDamage(rt, id, baseHitDmgForDay(daysAliveFor(rt)) * mult);
   });
 
+  // Ennemi detruit (autorite streameur). Quand tous les ennemis de la vague sont tues,
+  // la vague est repoussee (fin par le combat, pas par un timer).
+  socket.on('streamer:enemy_down', () => {
+    if (!socket.data.amiralId) return;
+    const rt = amiralsRuntime.get(socket.data.amiralId);
+    if (!rt || !rt.currentWave) return;
+    rt.currentWave.alive = Math.max(0, (rt.currentWave.alive || 0) - 1);
+    if (rt.currentWave.alive <= 0 && !rt.baseDead) {
+      logJournal(rt, 'wave_repelled', `Vague repoussée — tous les ennemis détruits`);
+      rt.currentWave = null;
+    }
+  });
+
   // "Recommencer" : seul l'Amiral relance sa base apres destruction (HP/essence/jour reinitialises).
   socket.on('streamer:rebirth', () => {
     if (!socket.data.amiralId) return;
@@ -1875,7 +1889,8 @@ function rollWaveFor(rt, force = false, type = null) {
     targetLabel: target.label,
     edgeAngle: baseAngle,
     enemies,
-    endsAt: spawnAt + Math.ceil(maxTravel) + 120000
+    alive: enemies.length,   // ennemis encore vivants (decremente par streamer:enemy_down)
+    endsAt: spawnAt + Math.ceil(maxTravel) + COMBAT_WINDOW_MS
   };
   io.to(amiralRoom(rt.id)).emit('wave:incoming', rt.currentWave);
   console.log(`[amiral ${rt.username}] wave ${rt.currentWave.id} (${type}) — ${enemies.length} ennemis vers ${target.id}`);
@@ -1886,22 +1901,27 @@ function rollWaveFor(rt, force = false, type = null) {
       : `Vague de ${enemies.length} ennemis détectée`;
   logJournal(rt, 'wave', journalMsg);
 
-  // Fin de vague : a l'echeance, on tranche le sort de la vague.
-  //  - Amiral EN LIGNE  : le combat a ete simule par son client -> base debout = repoussee.
-  //  - Amiral HORS-LIGNE : aucun client n'a simule -> resolution server-side (resolveWaveOffline).
+  // Echeance de combat (fallback). Normalement la vague se termine AVANT, par le combat :
+  //  - tous les ennemis tues (streamer:enemy_down) -> repoussee + currentWave efface ;
+  //  - base detruite -> baseDead.
+  // Si a l'echeance la vague n'est NI repoussee NI la base detruite :
+  //  - Amiral HORS-LIGNE  -> resolution server-side selon les defenses (resolveWaveOffline) ;
+  //  - Amiral EN LIGNE     -> les survivants "percent" les defenses et infligent des degats
+  //    (plus de repoussee gratuite : ignorer une vague a desormais des consequences).
   const waveId = rt.currentWave.id;
   const waveSnapshot = rt.currentWave;
-  const repelDelay = Math.max(0, rt.currentWave.endsAt - Date.now());
+  const fallbackDelay = Math.max(0, rt.currentWave.endsAt - Date.now());
   setTimeout(() => {
     if (amiralsRuntime.get(rt.id) !== rt) return;
-    if (rt.currentWave && rt.currentWave.id !== waveId) return; // une autre vague a pris le relais
-    if (rt.baseDead) return; // base detruite : deja journalise par ailleurs
-    if (rt.online) {
-      logJournal(rt, 'wave_repelled', `Vague repoussée — la base a tenu`);
-    } else {
+    if (!rt.currentWave || rt.currentWave.id !== waveId) return; // deja resolue (tuee) ou remplacee
+    if (rt.baseDead) { rt.currentWave = null; return; }
+    if (!rt.online) {
       resolveWaveOffline(rt, waveSnapshot);
+    } else {
+      breakthroughWave(rt, rt.currentWave.alive || 0);
     }
-  }, repelDelay);
+    rt.currentWave = null;
+  }, fallbackDelay);
 
   // XP de vague : a l'arrivee des ennemis, +1 XP aux joueurs presents+actifs (cf. awardWaveXp).
   const xpDelay = Math.max(0, spawnAt - Date.now());
@@ -1960,16 +1980,35 @@ function resolveWaveOffline(rt, wave) {
     return;
   }
 
-  // Sans defense : les ennemis ne sont pas arretes.
+  // Sans defense : les ennemis ne sont pas arretes -> ils frappent tourelles ET base.
   const reason = essence <= 0 ? 'essence à sec' : 'tourelles hors service';
   const targetEl = rt.elementById[wave.targetId];
   if (targetEl && targetEl.type === 'asteroid' && targetEl.subtype) {
     applyAsteroidGroupDamage(rt, targetEl.subtype, enemyCount * ASTEROID_ENEMY_DAMAGE_MS);
   }
+  // Les tourelles presentes encaissent (essence a sec : elles ne ripostent pas).
+  const turretDmg = enemyCount * baseHitDmgForDay(day);
+  for (const t of aliveTurrets) applyTurretDamage(rt, t.id, turretDmg);
   const dmg = enemyCount * OFFLINE_BASE_HITS_PER_ENEMY * baseHitDmgForDay(day);
   logJournal(rt, 'wave', `Vague subie hors-ligne (${reason}) — base touchée -${dmg} HP`);
   applyBaseDamage(rt, dmg); // gere la destruction (baseDead), le broadcast et le journal associe
   console.log(`[amiral ${rt.username}] vague hors-ligne SUBIE — base -${dmg} HP (${reason})`);
+}
+
+// Survivants d'une vague EN LIGNE non terminee a l'echeance : ils "percent" les defenses
+// et infligent des degats (tourelles + base). Remplace l'ancienne "repoussee gratuite".
+function breakthroughWave(rt, survivors) {
+  if (survivors <= 0) { logJournal(rt, 'wave_repelled', `Vague repoussée — la base a tenu`); return; }
+  const day = daysAliveFor(rt);
+  const aliveTurrets = rt.elements
+    .filter(e => e.type === 'turret')
+    .filter(t => { const s = rt.elementStates.get(t.id); return s && s.hp > 0 && !s.dead; });
+  const turretDmg = survivors * baseHitDmgForDay(day);
+  for (const t of aliveTurrets) applyTurretDamage(rt, t.id, turretDmg);
+  const dmg = survivors * OFFLINE_BASE_HITS_PER_ENEMY * baseHitDmgForDay(day);
+  logJournal(rt, 'wave', `${survivors} ennemi(s) ont percé les défenses — base touchée -${dmg} HP`);
+  applyBaseDamage(rt, dmg);
+  console.log(`[amiral ${rt.username}] breakthrough : ${survivors} survivant(s) -> base -${dmg} HP`);
 }
 
 // ============ Planning des vagues : horaires fixes (TZ Europe/Paris par defaut) ============

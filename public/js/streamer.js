@@ -1801,6 +1801,8 @@ class MainScene extends Phaser.Scene {
     this.playEnemyExplosion(sprite.x, sprite.y, sprite._level || 1);
     this.enemies.delete(sprite);
     sprite.destroy();
+    // Autorite streameur : on signale la mort -> le serveur termine la vague quand alive=0.
+    if (socket) socket.emit('streamer:enemy_down');
   }
 
   playEnemyExplosion(x, y, level) {
