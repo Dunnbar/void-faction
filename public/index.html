@@ -30,20 +30,6 @@
         0deg, transparent 0, transparent 2px,
         rgba(255,255,255,0.02) 2px, rgba(255,255,255,0.02) 3px);
     }
-    #hud {
-      position: fixed; top: 70px; left: 12px; z-index: 10;
-      display: flex; flex-direction: column; gap: 6px; width: 320px;
-    }
-    .line {
-      background: rgba(0, 20, 40, 0.92);
-      padding: 8px 12px;
-      border: 1px solid var(--c-frame);
-      border-radius: 4px;
-      font-size: 13px;
-      box-shadow: 0 0 12px rgba(74, 175, 255, 0.3);
-      pointer-events: none;
-    }
-    .line strong { color: var(--c-frame); }
     /* HUD stats : barre d'essence + materiaux/radius */
     /* Barre d'essence (sans cadre), placee a droite de l'horloge du jour */
     #essenceBar {
@@ -67,6 +53,46 @@
     #resPanel .res-item .ico-img { height: 22px; }
     #resPanel .res-item.mat strong { color: #ffd9a0; }
     #resPanel .res-item.rad strong { color: #9ff0db; }
+
+    /* Pastille "action en cours" : juste une icone, alignee a droite des ressources */
+    #resPanel .action-chip { position: relative; pointer-events: auto; }
+    #resPanel .action-chip.idle { display: none; }
+    .action-glyph {
+      display: inline-flex; align-items: center; justify-content: center;
+      width: 28px; height: 28px; border-radius: 50%;
+      background: rgba(0,20,40,0.85); border: 1px solid var(--c-frame); color: var(--c-frame);
+      box-shadow: 0 0 8px rgba(74,175,255,0.4); animation: actionPulse 2.4s ease-in-out infinite;
+    }
+    .action-glyph .icon { width: 16px; height: 16px; }
+    .action-glyph.PUISSANCE  { border-color: var(--c-puissance);  color: var(--c-puissance); }
+    .action-glyph.DEFENSIF   { border-color: var(--c-defensif);   color: var(--c-defensif); }
+    .action-glyph.UTILITAIRE { border-color: var(--c-utilitaire); color: var(--c-utilitaire); }
+    /* Croix de stop : cachee, apparait au survol de la pastille */
+    .action-chip .action-stop {
+      position: absolute; top: -7px; right: -7px;
+      width: 18px; height: 18px; padding: 0; line-height: 1;
+      display: none; align-items: center; justify-content: center;
+      border-radius: 50%; border: 1px solid #f55; background: #1a0a0e; color: #f55;
+      font-size: 14px; cursor: pointer; font-family: inherit;
+    }
+    .action-chip:hover .action-stop, .action-chip:focus-within .action-stop { display: inline-flex; }
+    .action-chip .action-stop:hover { background: #f55; color: #000; }
+
+    /* Infobulle generique (essence, ressources, action) : sous-texte explicatif au survol */
+    .hint { position: relative; pointer-events: auto; cursor: help; }
+    .hint-pop {
+      position: absolute; top: calc(100% + 8px); left: 0; width: 230px;
+      padding: 8px 10px; text-align: left; letter-spacing: 0;
+      background: rgba(0,20,40,0.97); border: 1px solid var(--c-frame); border-radius: 4px;
+      box-shadow: 0 0 12px rgba(74,175,255,0.35);
+      font-family: 'Consolas', monospace; font-weight: normal; font-size: 11px; line-height: 1.4; color: #cfe2f5;
+      opacity: 0; transform: translateY(-4px); pointer-events: none;
+      transition: opacity 0.15s ease, transform 0.15s ease; z-index: 60;
+    }
+    .hint:hover .hint-pop, .hint:focus .hint-pop, .hint:focus-within .hint-pop { opacity: 1; transform: none; }
+    .hint-pop strong { color: var(--c-frame); font-size: 12px; }
+    .hint-pop .cat-tag { margin-right: 4px; }
+    .hint-pop .tip-timer { color: #8fb4d8; }
     .resources-line { display: flex; gap: 12px; justify-content: space-between; }
     .resources-line .res-cell { display: inline-flex; align-items: center; gap: 4px; }
     .resources-line .res-cell:nth-child(1) { color: #c8a878; }
@@ -78,9 +104,6 @@
       pointer-events: auto; justify-content: space-between;
     }
     #userLine > span { display: inline-flex; align-items: center; gap: 6px; }
-    .line .icon { vertical-align: -3px; color: var(--c-frame); }
-    #activeAction .label { display: inline-flex; align-items: center; gap: 6px; }
-    #activeAction .label .icon { color: var(--c-frame); }
     #userLine button {
       background: transparent; border: 1px solid var(--c-frame); color: var(--c-frame);
       font-family: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer; border-radius: 3px;
@@ -89,38 +112,18 @@
     #userLine.anon { border-color: #888; }
     #userLine.anon strong { color: #aaa; }
 
-    /* Action active */
-    #activeAction {
-      display: flex; flex-direction: column; gap: 4px;
-      padding: 10px 12px;
-      pointer-events: auto;
-      transition: box-shadow 0.4s;
-    }
-    #activeAction:not(.idle) {
-      box-shadow: 0 0 16px rgba(74, 175, 255, 0.5), inset 0 0 12px rgba(74, 175, 255, 0.08);
-      animation: actionPulse 2.4s ease-in-out infinite;
-    }
+    /* Pulsation partagee par la pastille d'action en cours */
     @keyframes actionPulse {
-      0%, 100% { box-shadow: 0 0 14px rgba(74, 175, 255, 0.35), inset 0 0 10px rgba(74, 175, 255, 0.06); }
-      50%      { box-shadow: 0 0 22px rgba(74, 175, 255, 0.7),  inset 0 0 14px rgba(74, 175, 255, 0.12); }
+      0%, 100% { box-shadow: 0 0 8px rgba(74, 175, 255, 0.35); }
+      50%      { box-shadow: 0 0 14px rgba(74, 175, 255, 0.7); }
     }
-    #activeAction.idle .deactivate-btn { display: none; }
-    #activeAction .row { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
-    #activeAction .label { font-size: 11px; opacity: 0.7; letter-spacing: 1px; }
-    #activeAction .name { font-size: 13px; }
-    #activeAction .name .cat-tag {
-      display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; margin-right: 6px;
+    .cat-tag {
+      display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px;
       vertical-align: 1px;
     }
     .cat-tag.PUISSANCE  { background: var(--c-puissance); color: #fff; }
     .cat-tag.DEFENSIF   { background: var(--c-defensif); color: #fff; }
     .cat-tag.UTILITAIRE { background: var(--c-utilitaire); color: #000; }
-    #activeAction .timer { font-size: 11px; opacity: 0.7; }
-    #activeAction .deactivate-btn {
-      background: transparent; border: 1px solid #f55; color: #f55;
-      font-family: inherit; font-size: 11px; padding: 2px 8px; cursor: pointer; border-radius: 3px;
-    }
-    #activeAction .deactivate-btn:hover { background: #f55; color: #000; }
 
     /* Journal d'evenements */
     #journal {
@@ -630,30 +633,27 @@
   </svg>
 
   <!-- Barre d'essence (sans cadre), a droite de l'horloge du jour -->
-  <div id="essenceBar">
+  <div id="essenceBar" class="hint" tabindex="0">
     <div class="stat-label">ESSENCE <span id="statEssenceVal">0 / 0</span></div>
     <div class="stat-bar"><div id="statEssenceFill" class="stat-bar-fill"></div></div>
+    <span class="hint-pop"><strong>Essence</strong><br>Alimente la base et ses tourelles. Se vide lentement avec le temps. À sec, les tourelles s'arrêtent et la base devient vulnérable aux vagues. Rechargeable via l'action « Remplir » sur la base.</span>
   </div>
 
-  <!-- Ressources (icones + nombres seulement), a droite -->
+  <!-- Ressources (icones + nombres) + pastille action en cours, a droite -->
   <div id="resPanel">
-    <span class="res-item mat"><img class="ico-img" src="/assets/PNG/CrystalIcon.png" alt=""><strong id="statMateriaux">0</strong></span>
-    <span class="res-item rad"><img class="ico-img" src="/assets/PNG/BateryIcon2.png" alt=""><strong id="statRadius">0</strong></span>
-  </div>
-
-  <div id="hud">
-    <div class="line idle" id="activeAction">
-      <div class="row">
-        <span class="label"><svg class="icon"><use href="#ic-power"/></svg> ACTION ACTIVE</span>
-        <button class="deactivate-btn" id="deactivateBtn">Stopper l'action</button>
-      </div>
-      <div class="row">
-        <span class="name" id="activeActionName">— aucune —</span>
-      </div>
-      <div class="row">
-        <span class="timer" id="activeActionTimer"></span>
-      </div>
-    </div>
+    <span class="res-item mat hint" tabindex="0">
+      <img class="ico-img" src="/assets/PNG/CrystalIcon.png" alt=""><strong id="statMateriaux">0</strong>
+      <span class="hint-pop"><strong>Matériaux</strong><br>Ressource de faction récoltée en minant le gisement de matériaux (astéroïdes au sud-est). Réserve commune de la faction pour ses constructions et améliorations.</span>
+    </span>
+    <span class="res-item rad hint" tabindex="0">
+      <img class="ico-img" src="/assets/PNG/BateryIcon2.png" alt=""><strong id="statRadius">0</strong>
+      <span class="hint-pop"><strong>Radius</strong><br>Ressource de faction récoltée en minant le gisement de radius (astéroïdes au nord-ouest). Réserve commune de la faction pour ses constructions et améliorations.</span>
+    </span>
+    <span class="res-item action-chip idle hint" id="actionChip" tabindex="0">
+      <span class="action-glyph" id="actionGlyph"><svg class="icon"><use href="#ic-power"/></svg></span>
+      <button class="action-stop" id="deactivateBtn" type="button" title="Stopper l'action">×</button>
+      <span class="hint-pop" id="actionTip">Aucune action en cours.</span>
+    </span>
   </div>
 
   <!-- Journal d'evenements (bas-gauche) -->

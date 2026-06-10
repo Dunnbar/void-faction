@@ -156,9 +156,9 @@ if (soundBtn) {
     applySoundButtonState();
   });
 }
-const activeActionRow = document.getElementById('activeAction');
-const activeActionName = document.getElementById('activeActionName');
-const activeActionTimer = document.getElementById('activeActionTimer');
+const actionChip = document.getElementById('actionChip');   // pastille "action en cours" (barre de ressources)
+const actionGlyph = document.getElementById('actionGlyph');  // icone teintee par categorie
+const actionTip = document.getElementById('actionTip');      // infobulle au survol
 const deactivateBtn = document.getElementById('deactivateBtn');
 const barEls = {
   PUISSANCE:  { val: document.getElementById('barPuissanceVal'),  fill: document.getElementById('barPuissanceFill') },
@@ -376,32 +376,37 @@ function showLevelUpToast(category, lvl) {
 }
 
 function renderActiveAction() {
-  if (!authenticated) {
-    activeActionRow.classList.add('idle');
-    activeActionName.innerHTML = '<span style="opacity:0.5">connecte-toi pour agir</span>';
-    activeActionTimer.textContent = '';
+  // Pastille compacte : visible seulement quand une action tourne ; l'icone est teintee
+  // par categorie, le detail ("Action en cours : ...") s'affiche au survol via l'infobulle.
+  if (!authenticated || !activeAction) {
+    actionChip.classList.add('idle');
+    actionGlyph.className = 'action-glyph';
+    actionChip.dataset.label = '';
+    actionChip.dataset.cat = '';
+    actionTip.textContent = authenticated ? 'Aucune action en cours.' : 'Connecte-toi pour agir.';
     return;
   }
-  if (!activeAction) {
-    activeActionRow.classList.add('idle');
-    activeActionName.textContent = '— aucune —';
-    activeActionTimer.textContent = '';
-    return;
-  }
-  activeActionRow.classList.remove('idle');
+  actionChip.classList.remove('idle');
   const el = getElement(activeAction.element_id);
   const actionDef = el?.actions.find(a => a.id === activeAction.action_id);
   const cat = activeAction.category;
   const label = actionDef ? actionDef.label : activeAction.action_id;
   const target = el ? el.label : activeAction.element_id;
-  activeActionName.innerHTML = `<span class="cat-tag ${cat}">${cat}</span> <strong>${escapeHtml(label)}</strong> sur ${escapeHtml(target)}`;
+  actionGlyph.className = 'action-glyph ' + cat;
+  actionChip.dataset.label = `${label} sur ${target}`;
+  actionChip.dataset.cat = cat;
   refreshActiveActionTimer();
 }
 
 function refreshActiveActionTimer() {
-  if (!activeAction) { activeActionTimer.textContent = ''; return; }
+  if (!activeAction) return;
+  const cat = actionChip.dataset.cat || '';
+  const label = actionChip.dataset.label || '';
   const remaining = (activeAction.started_at + actionDurationMs) - Date.now();
-  activeActionTimer.textContent = remaining > 0 ? `⏳ ${formatDuration(remaining)} restant` : 'Expiration imminente…';
+  const time = remaining > 0 ? `⏳ ${formatDuration(remaining)} restant` : 'Expiration imminente…';
+  actionTip.innerHTML = `<strong>Action en cours</strong><br>`
+    + `<span class="cat-tag ${cat}">${cat}</span>${escapeHtml(label)}<br>`
+    + `<span class="tip-timer">${time}</span>`;
 }
 
 function renderHistory(_freshTimestamp) {
