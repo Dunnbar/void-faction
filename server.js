@@ -1253,10 +1253,17 @@ function applyActionEffect(rt, actionId, element, amount = 1) {
       // Pas d'accumulation : puissance/portee/capacite sont calculees dynamiquement
       // a partir de la somme des niveaux des acteurs actifs (cf. publicElementState).
       return true;
-    case 'reparation':
+    case 'reparation': {
       if (state.hp >= state.hpMax) return false;
+      const wasDead = element.type === 'turret' && state.dead;
       state.hp = Math.min(state.hp + amount, state.hpMax);
+      // Tourelle en reconstruction : reactivee des 50% HP (+ journal).
+      if (wasDead && state.hp >= state.hpMax * 0.5) {
+        state.dead = false;
+        logJournal(rt, 'turret', `${element.label} réactivée`);
+      }
       return true;
+    }
     case 'remplir':
       if (state.essence >= state.essenceMax) return false;
       state.essence = Math.min(state.essence + amount, state.essenceMax);

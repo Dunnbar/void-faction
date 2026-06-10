@@ -1055,6 +1055,7 @@ class MainScene extends Phaser.Scene {
     // Explosion de tourelle (spritesheet 9 frames de 140x140) + icone alarme essence
     this.load.spritesheet('turret-explosion', '/assets/Explosions/PNG/explosion.png', { frameWidth: 140, frameHeight: 140 });
     this.load.image('turret-alarm', '/assets/HUD/PNG/points_powerup_lifes_05_life_indicator_alarm.png');
+    this.load.image('turret-life', '/assets/HUD/PNG/points_powerup_lifes_05_life_indicator.png');
   }
 
   create() {
@@ -1315,20 +1316,9 @@ class MainScene extends Phaser.Scene {
       const sprite = this.elementSprites.get(el.id);
       const state = elementStates.get(el.id);
       if (!sprite || !state) continue;
-      // Tourelle detruite : inactive (pas de tir, pas d'alarme, apparence geree par enterTurretDead).
-      if (state.dead) { if (sprite._alarmIcon) sprite._alarmIcon.setVisible(false); sprite._targetingEnemy = false; continue; }
+      // Tourelle detruite : inactive (pas de tir ; apparence + coeur geres par enterTurretDead).
+      if (state.dead) { sprite._targetingEnemy = false; continue; }
       SharedScene.applyTurretPowerVisual(sprite, powered);
-      // Icone d'alarme SUR la tourelle (privee d'essence) : grande + pulsation.
-      if (!sprite._alarmIcon && this.textures.exists('turret-alarm')) {
-        const target = Math.max(sprite.displayWidth, sprite.displayHeight) * 0.6;
-        const ico = this.add.image(sprite.x, sprite.y, 'turret-alarm').setDepth(12).setVisible(false);
-        const base = target / (ico.width || target);
-        ico.setScale(base);
-        this.tweens.add({ targets: ico, scaleX: { from: base, to: base * 1.25 }, scaleY: { from: base, to: base * 1.25 },
-          yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
-        sprite._alarmIcon = ico;
-      }
-      if (sprite._alarmIcon) sprite._alarmIcon.setVisible(!powered);
       // Base hors tension : la tourelle est desactivee et FIGE (on stoppe la patrouille).
       if (!powered) { sprite._targetingEnemy = false; if (sprite._patrolTween) sprite._patrolTween.stop(); continue; }
       // Tourelle autonome : tire en permanence sur l'ennemi le plus proche.
@@ -1671,20 +1661,21 @@ class MainScene extends Phaser.Scene {
       if (st && sp) {
         if (st.dead && !sp._dead) this.enterTurretDead(el.id);
         else if (!st.dead && sp._dead) this.exitTurretDead(el.id);
+        else if (st.dead && sp._dead) this.updateTurretDeadVisual(el.id, st);
       }
       if (sp && !sp._dead) this.updateTurretAppearance(el.id);
     }
   }
 
-  // Tourelle detruite : explosion (explosion.png), barre de vie masquee, tourelle grisee
-  // (mais toujours cliquable pour la reconstruire). Redevient normale a 50% HP (exitTurretDead).
+  // Tourelle detruite : explosion, plus d'asset (tourelle masquee) ; un coeur d'alarme
+  // rouge prend sa place et permet d'activer la reconstruction. Des qu'on regagne des HP,
+  // la tourelle reapparait DESACTIVEE (grisee) et garde son coeur jusqu'a 50% HP.
   enterTurretDead(id) {
     const sprite = this.elementSprites.get(id);
     if (!sprite || sprite._dead) return;
     sprite._dead = true;
     const bar = this.elementHpBars && this.elementHpBars.get(id);
     if (bar) bar.setVisible(false);
-    if (sprite._alarmIcon) sprite._alarmIcon.setVisible(false);
     if (sprite._patrolTween) sprite._patrolTween.stop();
     if (sprite.anims && sprite.anims.isPlaying) sprite.anims.stop();
     if (this.anims.exists('turret-explode')) {
@@ -1692,17 +1683,56 @@ class MainScene extends Phaser.Scene {
       ex.play('turret-explode');
       ex.once('animationcomplete', () => ex.destroy());
     }
-    sprite.setAlpha(0.35); sprite.setTint(0x555555);
+    sprite.setVisible(false); // plus d'asset
+    this.showTurretHeart(id, sprite, 'turret-alarm');
   }
+  // Tourelle morte : la tourelle reapparait grisee des qu'elle a des HP (< 50%).
+  updateTurretDeadVisual(id, st) {
+    const sprite = this.elementSprites.get(id);
+    if (!sprite) return;
+    if (st.hp > 0) { sprite.setVisible(true); sprite.setAlpha(0.4); sprite.clearTint(); sprite.setTint(0x666666); }
+    else sprite.setVisible(false);
+  }
+  // Coeur d'alarme/sante a la place de la tourelle ; cliquable -> menu (Reconstruire).
+  showTurretHeart(id, sprite, texKey) {
+    if (sprite._heart) { sprite._heart.destroy(); sprite._heart = null; }
+    if (!this.textures.exists(texKey)) return;
+    const target = Math.max(sprite.displayWidth, sprite.displayHeight) * 0.6 || 36;
+    const ico = this.add.image(sprite.x, sprite.y, texKey).setDepth(13);
+    const base = target / (ico.width || target);
+    ico.setScale(base); ico._baseScale = base;
+    ico.setInteractive({ useHandCursor: true });
+    ico.on('pointerdown', (pointer) => {
+      if (pointer.button !== 0) return;
+      if (this._panState) this._panState.pendingMenu = { id, event: pointer.event };
+    });
+    ico._pulse = this.tweens.add({ targets: ico, scaleX: { from: base, to: base * 1.25 }, scaleY: { from: base, to: base * 1.25 },
+      yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+    sprite._heart = ico;
+  }
+  // 50% HP atteint : on bascule le coeur sur l'icone "sante", il disparait en fondu,
+  // puis la tourelle est reactivee (apparence normale). Le log serveur signale la reactivation.
   exitTurretDead(id) {
     const sprite = this.elementSprites.get(id);
     if (!sprite) return;
     sprite._dead = false;
-    sprite.setAlpha(1); sprite.clearTint();
+    sprite.setVisible(true); sprite.setAlpha(1); sprite.clearTint();
     sprite._gunLevel = null; sprite._currentAnim = null;
     const bar = this.elementHpBars && this.elementHpBars.get(id);
     if (bar) bar.setVisible(true);
     this.updateTurretAppearance(id);
+    const heart = sprite._heart; sprite._heart = null;
+    if (heart) {
+      if (heart._pulse) heart._pulse.stop();
+      heart.disableInteractive();
+      if (this.textures.exists('turret-life')) {
+        heart.setTexture('turret-life');
+        const t = Math.max(sprite.displayWidth, sprite.displayHeight) * 0.6 || 36;
+        heart.setScale(t / (heart.width || t));
+      }
+      this.tweens.add({ targets: heart, alpha: 0, scaleX: heart.scaleX * 1.5, scaleY: heart.scaleY * 1.5,
+        duration: 600, ease: 'Sine.easeOut', onComplete: () => heart.destroy() });
+    }
   }
 
   updateTurretAppearance(id) {
