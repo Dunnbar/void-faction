@@ -933,7 +933,7 @@ class MainScene extends Phaser.Scene {
       const k = String(g).padStart(2, '0');
       const key = `gun-${k}-shoot`;
       if (!this.anims.exists(key)) {
-        this.anims.create({ key, frames: mkFrames(`gun-${k}-shoot-`, 10, 2), frameRate: 24, repeat: -1 });
+        this.anims.create({ key, frames: mkFrames(`gun-${k}-shoot-`, 10, 2), frameRate: 30, repeat: 0 });
       }
     }
     // Explosion de la base (Explosion_3, frames 1..8)
@@ -1265,6 +1265,7 @@ class MainScene extends Phaser.Scene {
         const fireDelay = Math.max(1000, 2000 - (state.puissance || 0) * 30);
         if (now - sprite._lastShotAt >= fireDelay) {
           const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
+          this.playTurretShoot(sprite, turretGunLevel(state.puissance)); // anim UNIQUEMENT au tir
           this.fireTurretLaser(sprite, target);
           this.damageEnemy(target, dmg);
           sprite._lastShotAt = now;
@@ -1296,8 +1297,29 @@ class MainScene extends Phaser.Scene {
     b._vx = Math.cos(angle) * speed; b._vy = Math.sin(angle) * speed;
     b._life = opts.life || 1400;
     b._hitEnemies = !!opts.hitEnemies; b._dmg = opts.dmg || 0;
+    b._hitDefenders = !!opts.hitDefenders;
     this.bullets.push(b);
     return b;
+  }
+  bulletHitsDefender(bx, by) {
+    if (this.elementSprites) {
+      for (const el of serverElements) {
+        if (el.type !== 'turret' && el.type !== 'base' && el.type !== 'asteroid') continue;
+        const sp = this.elementSprites.get(el.id);
+        if (!sp || !sp.visible || sp.alpha < 0.5) continue;
+        const r = Math.max(sp.displayWidth, sp.displayHeight) * 0.4;
+        if (Phaser.Math.Distance.Between(bx, by, sp.x, sp.y) < r) return sp;
+      }
+    }
+    if (this.ship && this.ship.active) {
+      const r = Math.max(this.ship.displayWidth, this.ship.displayHeight) * 0.55;
+      if (Phaser.Math.Distance.Between(bx, by, this.ship.x, this.ship.y) < r) return this.ship;
+    }
+    return null;
+  }
+  impactFlash(x, y) {
+    const f = this.add.circle(x, y, 5, 0xffffff, 0.95).setDepth(10);
+    this.tweens.add({ targets: f, scale: 2.6, alpha: 0, duration: 200, ease: 'Quad.easeOut', onComplete: () => f.destroy() });
   }
   // Verrouillage : clic sur un ennemi le (de)verrouille. Le vaisseau le vise, tir a Espace.
   toggleLock(enemy) {
@@ -1338,8 +1360,13 @@ class MainScene extends Phaser.Scene {
       let hit = false;
       if (b._hitEnemies && this.enemies) {
         for (const e of this.enemies) {
-          if (e.active && Phaser.Math.Distance.Between(b.x, b.y, e.x, e.y) < 28) { this.damageEnemy(e, b._dmg); hit = true; break; }
+          if (e.active && Phaser.Math.Distance.Between(b.x, b.y, e.x, e.y) < 28) {
+            if (b._dmg) this.damageEnemy(e, b._dmg);
+            this.impactFlash(b.x, b.y); hit = true; break;
+          }
         }
+      } else if (b._hitDefenders) {
+        if (this.bulletHitsDefender(b.x, b.y)) { this.impactFlash(b.x, b.y); hit = true; }
       }
       if (hit || b._life <= 0) { b.destroy(); this.bullets.splice(i, 1); }
     }
@@ -1418,20 +1445,17 @@ class MainScene extends Phaser.Scene {
         sprite.x = cx + Math.cos(sprite._orbitAngle) * orbitR;
         sprite.y = cy + Math.sin(sprite._orbitAngle) * orbitR;
         if (!sprite._lastFireAt) sprite._lastFireAt = now - Math.random() * ENEMY_FIRE_MS;
-        // L'ennemi tire DROIT : quand son tir est pret, il s'aligne sur la cible puis tire ;
-        // sinon (tir en CD) il continue son vol orbital (rotation tangente).
-        if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) {
-          const aim = Math.atan2(cy - sprite.y, cx - sprite.x);
-          const desiredRot = aim + Math.PI / 2;
-          sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, desiredRot, 6 * dtSec);
-          if (Math.abs(Phaser.Math.Angle.Wrap(desiredRot - sprite.rotation)) < 0.12) {
-            this.fireEnemyShot(sprite, cx, cy);
-            sprite._lastFireAt = now;
-            if (mode === 'base') socket.emit('streamer:base_hit');
-          }
-        } else {
-          const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2);
-          sprite.rotation = tangent + Math.PI / 2;
+        // Tir DROIT : pivote DOUCEMENT vers la cible quand pret puis tire une fois aligne,
+        // sinon revient (doucement) sur son cap orbital (plus de retournement instantane).
+        const fireReady = (now - sprite._lastFireAt) >= ENEMY_FIRE_MS;
+        const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.PI / 2;
+        let desiredRot = tangent;
+        if (fireReady) desiredRot = Math.atan2(cy - sprite.y, cx - sprite.x) + Math.PI / 2;
+        sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, desiredRot, 5 * dtSec);
+        if (fireReady && Math.abs(Phaser.Math.Angle.Wrap(desiredRot - sprite.rotation)) < 0.12) {
+          this.fireEnemyShot(sprite, cx, cy);
+          sprite._lastFireAt = now;
+          if (mode === 'base') socket.emit('streamer:base_hit');
         }
       }
 
@@ -1463,19 +1487,18 @@ class MainScene extends Phaser.Scene {
     const k = String(level).padStart(2, '0');
     const idleKey = `gun-${k}-idle`;
     const shootKey = `gun-${k}-shoot`;
-    // L'anim de tir ne joue QUE quand la tourelle tire effectivement sur un ennemi
-    // (flag pose par updateTurretTargeting), pas parce qu'un viewer booste sa puissance.
-    const isShooting = !!sprite._firing;
-    if (isShooting) {
-      if (sprite._currentAnim !== shootKey) {
-        sprite.play(shootKey);
-        sprite._currentAnim = shootKey;
-      }
-    } else {
-      if (sprite.anims && sprite.anims.isPlaying) sprite.anims.stop();
-      if (sprite.texture && sprite.texture.key !== idleKey) sprite.setTexture(idleKey);
-      sprite._currentAnim = null;
-    }
+    // L'anim de tir est jouee UNE FOIS au moment du tir (playTurretShoot). Ici on n'interrompt
+    // pas une anim de tir en cours ; sinon on reste sur l'idle du niveau courant.
+    if (sprite.anims && sprite.anims.isPlaying && sprite._currentAnim === shootKey) return;
+    if (sprite.texture && sprite.texture.key !== idleKey) sprite.setTexture(idleKey);
+    sprite._currentAnim = null;
+  }
+
+  playTurretShoot(sprite, level) {
+    const shootKey = `gun-${String(level).padStart(2, '0')}-shoot`;
+    if (!this.anims.exists(shootKey)) return;
+    sprite._currentAnim = shootKey;
+    sprite.play(shootKey);
   }
 
   // Fleche d'amelioration (upgrade arrow) en fondu rapide quand une tourelle monte de niveau.
@@ -1615,7 +1638,8 @@ class MainScene extends Phaser.Scene {
 
   fireEnemyShot(sprite, tx, ty) {
     const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, tx, ty);
-    this.spawnBullet(sprite.x, sprite.y, a, 'bullet-enemy', { scale: 0.7, speed: 520 });
+    // hitDefenders : le tir disparait + fait un eclat blanc quand il touche un defenseur.
+    this.spawnBullet(sprite.x, sprite.y, a, 'bullet-enemy', { scale: 0.7, speed: 520, hitDefenders: true });
   }
 
   destroyEnemy(sprite) {
