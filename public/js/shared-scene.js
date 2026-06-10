@@ -383,7 +383,15 @@
     if (!domEl) return;
     const clock = getGameClock(tz);
     const day = (baseState && Number.isFinite(baseState.daysAlive)) ? baseState.daysAlive : 0;
-    domEl.innerHTML = `<span class="day">JOUR ${day}</span><span class="time">${clock.formatted}</span>`;
+    // On ecrit dans un sous-element .bc-content (cree au besoin) pour ne PAS effacer
+    // une eventuelle infobulle .hint-pop placee dans #baseClock.
+    let content = domEl.querySelector('.bc-content');
+    if (!content) {
+      content = document.createElement('div');
+      content.className = 'bc-content';
+      domEl.prepend(content);
+    }
+    content.innerHTML = `<span class="day">JOUR ${day}</span><span class="time">${clock.formatted}</span>`;
     domEl.classList.toggle('night', clock.isNight);
     domEl.classList.toggle('day-mode', !clock.isNight);
   }

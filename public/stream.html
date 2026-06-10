@@ -250,9 +250,23 @@
       border: 1px solid #2a4060;
       font-family: 'Consolas', monospace; font-weight: bold; letter-spacing: 2px;
       display: flex; flex-direction: column; gap: 2px;
-      pointer-events: none; color: #88aacc;
+      pointer-events: auto; color: #88aacc;
     }
+    #baseClock .bc-content { display: flex; flex-direction: column; gap: 2px; }
     #baseClock.hidden { display: none; }
+    /* Infobulle generique (reutilisee par l'horloge du jour) */
+    .hint { position: relative; cursor: help; }
+    .hint-pop {
+      position: absolute; top: calc(100% + 8px); left: 0; width: 240px;
+      padding: 8px 10px; text-align: left; letter-spacing: 0;
+      background: rgba(0,20,40,0.97); border: 1px solid #4af; border-radius: 4px;
+      box-shadow: 0 0 12px rgba(74,175,255,0.35);
+      font-family: 'Consolas', monospace; font-weight: normal; font-size: 11px; line-height: 1.4; color: #cfe2f5;
+      opacity: 0; transform: translateY(-4px); pointer-events: none;
+      transition: opacity 0.15s ease, transform 0.15s ease; z-index: 60;
+    }
+    .hint:hover .hint-pop, .hint:focus .hint-pop, .hint:focus-within .hint-pop { opacity: 1; transform: none; }
+    .hint-pop strong { color: #4af; font-size: 12px; }
     #baseClock .day { color: #ffd24f; font-size: 12px; }
     #baseClock .time { font-size: 18px; font-variant-numeric: tabular-nums; }
     #baseClock.day-mode .time { color: #ffc04f; text-shadow: 0 0 6px rgba(255, 192, 80, 0.45); }
@@ -394,7 +408,7 @@
       <button id="bdRestart" type="button">↻ Recommencer</button>
     </div>
   </div>
-  <div id="baseClock" class="hidden"></div>
+  <div id="baseClock" class="hidden hint"><span class="hint-pop"><strong>Jour de survie</strong><br>Nombre de jours que la base a tenu. Plus il monte, plus les vagues d'ennemis sont nombreuses et résistantes.</span></div>
   <div id="statsPanel">
     <div class="stat-essence">
       <div class="stat-label">ESSENCE <span id="statEssenceVal">0 / 0</span></div>
