@@ -442,6 +442,8 @@ function wireSocketEvents() {
     factionResources = data.factionResources || factionResources;
     activeAction = data.activeAction || null;
     renderActiveAction();
+    chat = Array.isArray(data.chat) ? data.chat : [];
+    renderChat();
     amiralProgress = data.progress || amiralProgress;
     // Pseudo de l'Amiral sur le vaisseau (le sien). Stocke pour utilisation au demarrage de la scene
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
@@ -580,6 +582,9 @@ function wireSocketEvents() {
       SharedScene.refreshActionOverlay(scene, lastActiveElements, activeAction?.element_id);
     }
   });
+
+  socket.on('chat:new', (m) => addChatMessage(m));
+  socket.on('chat:moderated', () => { /* l'Amiral n'est pas modere sur sa propre base */ });
 }
 
 // Connexion initiale : si un token Amiral est en localStorage, on tente de réutiliser ;
@@ -589,6 +594,90 @@ if (amiralToken) {
 } else {
   setActiveTab('login');
 }
+
+// ============ Chat de la base + moderation (Amiral) ============
+let chat = [];
+let chatUnread = 0;
+const chatEl = document.getElementById('chat');
+const chatBtn = document.getElementById('chatBtn');
+const chatBadge = document.getElementById('chatBadge');
+const chatListEl = document.getElementById('chatList');
+const chatFormEl = document.getElementById('chatForm');
+const chatInputEl = document.getElementById('chatInput');
+const chatModMenu = document.getElementById('chatModMenu');
+const chatModTarget = document.getElementById('chatModTarget');
+let modTargetUserId = null;
+
+function chatIsOpen() { return chatEl && !chatEl.classList.contains('hidden'); }
+function setChatBadge(n) {
+  if (!chatBtn || !chatBadge) return;
+  if (n > 0) { chatBadge.textContent = n > 99 ? '99+' : String(n); chatBtn.classList.add('has-unread'); }
+  else chatBtn.classList.remove('has-unread');
+}
+function chatClock(at) { const d = new Date(at); const p = n => String(n).padStart(2, '0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; }
+function chatMsgHtml(m) {
+  const mine = !m.userId && m.username === amiralDisplayName;
+  const modable = !!m.userId;  // seuls les messages de viewers (avec userId) sont moderables
+  const cls = 'cm-author' + (mine ? ' me' : '') + (modable ? ' mod' : '');
+  const attr = modable ? ` data-uid="${m.userId}" data-uname="${escapeHtml(m.username || '')}"` : '';
+  return `<div class="chat-msg"><span class="${cls}"${attr}>${escapeHtml(m.username || '?')}</span>`
+       + `<span class="cm-text">${escapeHtml(m.message || '')}</span>`
+       + `<span class="cm-time">${chatClock(m.at)}</span></div>`;
+}
+function renderChat() {
+  if (!chatListEl) return;
+  chatListEl.innerHTML = chat.map(chatMsgHtml).join('');
+  chatListEl.scrollTop = chatListEl.scrollHeight;
+}
+function addChatMessage(m) {
+  if (!m) return;
+  chat.push(m); if (chat.length > 50) chat.shift();
+  renderChat();
+  if (!chatIsOpen()) { chatUnread++; setChatBadge(chatUnread); }
+}
+function hideModMenu() { chatModMenu?.classList.add('hidden'); modTargetUserId = null; }
+function showModMenu(x, y, uid, uname) {
+  if (!chatModMenu) return;
+  modTargetUserId = uid;
+  if (chatModTarget) chatModTarget.textContent = uname;
+  chatModMenu.classList.remove('hidden');
+  const r = chatModMenu.getBoundingClientRect();
+  let px = x, py = y;
+  if (px + r.width > window.innerWidth - 8) px = window.innerWidth - r.width - 8;
+  if (py + r.height > window.innerHeight - 8) py = y - r.height;
+  chatModMenu.style.left = px + 'px';
+  chatModMenu.style.top = py + 'px';
+}
+function toggleChat() {
+  if (!chatEl) return;
+  const open = chatEl.classList.contains('hidden');
+  chatEl.classList.toggle('hidden', !open);
+  chatBtn?.classList.toggle('active', open);
+  if (open) { chatUnread = 0; setChatBadge(0); if (chatListEl) chatListEl.scrollTop = chatListEl.scrollHeight; chatInputEl?.focus(); }
+  else hideModMenu();
+}
+chatBtn?.addEventListener('click', toggleChat);
+chatFormEl?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = (chatInputEl?.value || '').trim();
+  if (!text || !socket) return;
+  socket.emit('chat:send', { message: text }, (res) => { if (res && res.ok) chatInputEl.value = ''; });
+});
+chatListEl?.addEventListener('click', (e) => {
+  const a = e.target.closest('.cm-author.mod');
+  if (!a) return;
+  showModMenu(e.clientX, e.clientY, parseInt(a.dataset.uid, 10), a.dataset.uname || '');
+});
+chatModMenu?.addEventListener('click', (e) => {
+  const btn = e.target.closest('button[data-act]');
+  if (!btn || !modTargetUserId || !socket) return;
+  socket.emit('chat:moderate', { userId: modTargetUserId, action: btn.dataset.act }, () => {});
+  hideModMenu();
+});
+document.addEventListener('click', (e) => {
+  if (chatModMenu && !chatModMenu.classList.contains('hidden')
+      && !chatModMenu.contains(e.target) && !e.target.closest('.cm-author.mod')) hideModMenu();
+});
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
 const SHIP_SCALE = 0.035; // vaisseau Amiral discret, ne masque pas la base

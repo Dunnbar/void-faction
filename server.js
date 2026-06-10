@@ -328,6 +328,17 @@ db.exec(`
     FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
   );
   CREATE INDEX IF NOT EXISTS idx_chat ON chat_messages (amiral_id, at DESC);
+
+  -- Moderation du chat par base (decidee par l'Amiral) :
+  --   muted_until = timeout temporaire (ts), banned = 1 -> ban permanent (chat + actions).
+  CREATE TABLE IF NOT EXISTS chat_moderation (
+    amiral_id INTEGER NOT NULL,
+    user_id INTEGER NOT NULL,
+    muted_until INTEGER,
+    banned INTEGER NOT NULL DEFAULT 0,
+    PRIMARY KEY (amiral_id, user_id),
+    FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
+  );
 `);
 // Migration : colonne dead pour les DB element_state existantes (tourelle detruite).
 {
@@ -815,15 +826,40 @@ function logJournal(rt, type, message) {
 const CHAT_LIMIT = 50;            // messages renvoyes a la connexion
 const CHAT_MAX_LEN = 280;         // longueur max d'un message
 const stmtInsertChat = db.prepare('INSERT INTO chat_messages (amiral_id, user_id, username, message, at) VALUES (?, ?, ?, ?, ?)');
-const stmtRecentChat = db.prepare('SELECT username, message, at FROM chat_messages WHERE amiral_id = ? ORDER BY at DESC LIMIT ?');
+const stmtRecentChat = db.prepare('SELECT user_id, username, message, at FROM chat_messages WHERE amiral_id = ? ORDER BY at DESC LIMIT ?');
 const stmtTrimChat   = db.prepare(`
   DELETE FROM chat_messages WHERE amiral_id = ? AND id NOT IN (
     SELECT id FROM chat_messages WHERE amiral_id = ? ORDER BY at DESC LIMIT ?
   )
 `);
 function recentChatForAmiral(amiralId) {
-  // Du plus ancien au plus recent (le client append en bas).
-  return stmtRecentChat.all(amiralId, CHAT_LIMIT).reverse();
+  // Du plus ancien au plus recent (le client append en bas). userId expose pour la moderation.
+  return stmtRecentChat.all(amiralId, CHAT_LIMIT)
+    .map(r => ({ userId: r.user_id || null, username: r.username, message: r.message, at: r.at }))
+    .reverse();
+}
+
+// --- Moderation du chat (par base) ---
+const CHAT_TIMEOUT_MS = 60 * 60 * 1000; // timeout = 1h
+const stmtGetModeration = db.prepare('SELECT muted_until, banned FROM chat_moderation WHERE amiral_id = ? AND user_id = ?');
+const stmtSetModeration = db.prepare(`
+  INSERT INTO chat_moderation (amiral_id, user_id, muted_until, banned) VALUES (?, ?, ?, ?)
+  ON CONFLICT(amiral_id, user_id) DO UPDATE SET muted_until = excluded.muted_until, banned = excluded.banned
+`);
+// banni de cette base (chat + actions) ?
+function isBannedFromBase(amiralId, userId) {
+  if (!amiralId || !userId) return false;
+  const row = stmtGetModeration.get(amiralId, userId);
+  return !!(row && row.banned);
+}
+// peut ecrire dans le chat de cette base ? -> { ok, reason, until }
+function chatModerationStatus(amiralId, userId) {
+  if (!amiralId || !userId) return { ok: true };
+  const row = stmtGetModeration.get(amiralId, userId);
+  if (!row) return { ok: true };
+  if (row.banned) return { ok: false, reason: 'ban' };
+  if (row.muted_until && row.muted_until > Date.now()) return { ok: false, reason: 'mute', until: row.muted_until };
+  return { ok: true };
 }
 
 function getOnlineAmiralsList() {
@@ -1125,6 +1161,9 @@ io.on('connection', (socket) => {
     history: rtForInit ? recentHistoryForAmiral(rtForInit.id) : [],
     journal: rtForInit ? recentJournalForAmiral(rtForInit.id) : [],
     chat: rtForInit && rtForInit.id !== 0 ? recentChatForAmiral(rtForInit.id) : [],
+    chatBlocked: (socket.data.userId && rtForInit && rtForInit.id !== 0)
+      ? (() => { const m = chatModerationStatus(rtForInit.id, socket.data.userId); return m.ok ? null : { reason: m.reason, until: m.until }; })()
+      : null,
     elements: rtForInit ? rtForInit.elements : [],
     elementStates: rtForInit ? allElementStates(rtForInit) : [],
     factionResources: rtForInit ? { ...rtForInit.factionResources } : { materiaux: 0, radius: 0 },
@@ -1153,6 +1192,10 @@ io.on('connection', (socket) => {
     const rt = amiralsRuntime.get(actor.amiralId);
     if (!rt) return respond({ ok: false, error: 'amiral inconnu' });
     if (rt.baseDead) return respond({ ok: false, error: 'base détruite' });
+    // Banni de cette base : ne peut plus agir sur ses elements.
+    if (actor.type === 'user' && isBannedFromBase(rt.id, actor.id)) {
+      return respond({ ok: false, error: 'banni de cette base' });
+    }
     // Les joueurs peuvent agir a tout moment, meme si l'Amiral est hors-ligne
     // (le runtime de l'amiral est toujours en memoire et les actions se reglent au tick).
     const elementId = String(data?.elementId || '');
@@ -1282,20 +1325,52 @@ io.on('connection', (socket) => {
   // Chat communautaire : seul un utilisateur/Amiral connecte (avec pseudo) peut ecrire.
   // Le message est diffuse a la room de la base observee (cette base) et persiste.
   socket.on('chat:send', (data, cb) => {
+    const reply = (p) => { if (typeof cb === 'function') cb(p); };
     const username = socket.data.username || socket.data.amiralUsername;
-    if (!username) { if (typeof cb === 'function') cb({ ok: false, error: 'auth' }); return; }
+    if (!username) return reply({ ok: false, error: 'auth' });
     const amiralId = socket.data.watchedAmiralId;
-    if (!amiralId || amiralId === 0) { if (typeof cb === 'function') cb({ ok: false, error: 'no_base' }); return; }
+    if (!amiralId || amiralId === 0) return reply({ ok: false, error: 'no_base' });
+    // Moderation : un viewer muet/banni ne peut pas ecrire (l'Amiral n'est jamais modere chez lui).
+    if (socket.data.userId) {
+      const mod = chatModerationStatus(amiralId, socket.data.userId);
+      if (!mod.ok) return reply({ ok: false, error: mod.reason, until: mod.until });
+    }
     let text = (data && typeof data.message === 'string') ? data.message.trim() : '';
-    if (!text) { if (typeof cb === 'function') cb({ ok: false, error: 'empty' }); return; }
+    if (!text) return reply({ ok: false, error: 'empty' });
     if (text.length > CHAT_MAX_LEN) text = text.slice(0, CHAT_MAX_LEN);
     const at = Date.now();
+    const userId = socket.data.userId || null;
     try {
-      stmtInsertChat.run(amiralId, socket.data.userId || null, username, text, at);
+      stmtInsertChat.run(amiralId, userId, username, text, at);
       stmtTrimChat.run(amiralId, amiralId, CHAT_LIMIT);
     } catch (e) {}
-    io.to(amiralRoom(amiralId)).emit('chat:new', { username, message: text, at });
-    if (typeof cb === 'function') cb({ ok: true });
+    io.to(amiralRoom(amiralId)).emit('chat:new', { userId, username, message: text, at });
+    reply({ ok: true });
+  });
+
+  // Moderation du chat : reservee a l'Amiral, sur les viewers de SA base.
+  // action : 'mute1h' (timeout 1h) | 'ban' (chat + actions, permanent) | 'unban' (leve tout).
+  socket.on('chat:moderate', (data, cb) => {
+    const reply = (p) => { if (typeof cb === 'function') cb(p); };
+    if (!socket.data.amiralId) return reply({ ok: false, error: 'auth' });
+    const amiralId = socket.data.amiralId;
+    const targetUserId = parseInt(data?.userId, 10);
+    const action = String(data?.action || '');
+    if (!targetUserId) return reply({ ok: false, error: 'no_target' });
+    let muted_until = null, banned = 0, label = '';
+    if (action === 'mute1h') { muted_until = Date.now() + CHAT_TIMEOUT_MS; label = 'timeout 1h'; }
+    else if (action === 'ban') { banned = 1; label = 'banni'; }
+    else if (action === 'unban') { label = 'reintegre'; }
+    else return reply({ ok: false, error: 'bad_action' });
+    try { stmtSetModeration.run(amiralId, targetUserId, muted_until, banned); } catch (e) {}
+    // Notifie la cible si elle est connectee (maj de son UI chat + blocage actions cote serveur).
+    const targetSockets = socketsByUser.get(targetUserId);
+    if (targetSockets) for (const s of targetSockets) {
+      if (s.data.watchedAmiralId === amiralId) s.emit('chat:moderated', { action, until: muted_until });
+    }
+    const uname = stmtGetUserById.get(targetUserId)?.username || `#${targetUserId}`;
+    console.log(`[amiral ${socket.data.amiralUsername}] moderation : ${uname} -> ${label}`);
+    reply({ ok: true, action });
   });
 
   socket.on('disconnect', () => {

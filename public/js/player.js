@@ -135,6 +135,7 @@ const soundBtn = document.getElementById('soundBtn');
 const historyListEl = document.getElementById('historyList');
 const journalListEl = document.getElementById('journalList');
 // Journal + Chat : boutons bas-gauche, panneaux masques par defaut, exclusifs.
+const hudButtons = document.getElementById('hudButtons');
 const journalEl = document.getElementById('journal');
 const chatEl = document.getElementById('chat');
 const journalBtn = document.getElementById('journalBtn');
@@ -509,19 +510,49 @@ function addChatMessage(m) {
   renderChat();
   if (!chatIsOpen()) { chatUnread++; setBadge(chatBtn, chatBadge, chatUnread); }
 }
+let chatBlocked = null;        // null | { reason: 'mute'|'ban', until }
+let chatUnmuteTimer = null;
+function setChatBlock(block) {
+  chatBlocked = block || null;
+  if (chatUnmuteTimer) { clearTimeout(chatUnmuteTimer); chatUnmuteTimer = null; }
+  if (chatBlocked && chatBlocked.reason === 'mute' && chatBlocked.until) {
+    chatUnmuteTimer = setTimeout(() => { chatBlocked = null; updateChatAuthUI(); },
+      Math.max(0, chatBlocked.until - Date.now()) + 500);
+  }
+  updateChatAuthUI();
+}
 function updateChatAuthUI() {
-  if (chatForm) chatForm.classList.toggle('hidden', !authenticated);
-  if (chatLocked) chatLocked.classList.toggle('hidden', authenticated);
+  // Boutons journal/chat reserves aux connectes.
+  if (hudButtons) hudButtons.style.display = authenticated ? 'flex' : 'none';
+  if (!authenticated) closePanels();
+  if (!chatForm || !chatLocked) return;
+  if (authenticated && chatBlocked) {
+    chatForm.classList.add('hidden');
+    chatLocked.classList.remove('hidden');
+    chatLocked.textContent = chatBlocked.reason === 'ban'
+      ? 'Tu as été banni du chat de cette base.'
+      : 'Tu es en sourdine sur cette base (timeout 1h).';
+  } else {
+    chatForm.classList.toggle('hidden', !authenticated);
+    chatLocked.classList.toggle('hidden', authenticated);
+    if (!authenticated) chatLocked.textContent = 'Connecte-toi pour écrire dans le chat.';
+  }
 }
 
-journalBtn?.addEventListener('click', () => togglePanel('journal'));
-chatBtn?.addEventListener('click', () => togglePanel('chat'));
+// Masque l'infobulle apres un clic (le curseur reste sur le bouton mais on ne veut plus la voir).
+function suppressHint(btn) { if (btn) { btn.classList.add('suppress-hint'); btn.blur(); } }
+journalBtn?.addEventListener('click', () => { togglePanel('journal'); suppressHint(journalBtn); });
+chatBtn?.addEventListener('click', () => { togglePanel('chat'); suppressHint(chatBtn); });
+[journalBtn, chatBtn].forEach(b => b?.addEventListener('mouseleave', () => b.classList.remove('suppress-hint')));
 chatForm?.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = (chatInput?.value || '').trim();
   if (!text || !socket || !authenticated) return;
   socket.emit('chat:send', { message: text }, (res) => {
-    if (res && res.ok) chatInput.value = '';
+    if (res && res.ok) { chatInput.value = ''; return; }
+    if (res && (res.error === 'mute' || res.error === 'ban')) {
+      setChatBlock(res.error === 'ban' ? { reason: 'ban' } : { reason: 'mute', until: res.until });
+    }
   });
 });
 
@@ -872,7 +903,7 @@ function connectSocket() {
     renderHistory();
     renderJournal();
     renderChat();
-    updateChatAuthUI();
+    setChatBlock(data.chatBlocked || null);
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
     amiralIsOnline = data.watchedAmiral?.online !== false;
     if (data.ship) latestShipState = data.ship; // memorise pour l'appliquer au (re)demarrage de la scene
@@ -1045,6 +1076,12 @@ function connectSocket() {
 
   socket.on('journal:new', (entry) => addJournalEntry(entry));
   socket.on('chat:new', (m) => addChatMessage(m));
+  socket.on('chat:moderated', (d) => {
+    if (!d) return;
+    if (d.action === 'unban') setChatBlock(null);
+    else if (d.action === 'ban') setChatBlock({ reason: 'ban' });
+    else if (d.action === 'mute1h') setChatBlock({ reason: 'mute', until: d.until });
+  });
 
   socket.on('wave:incoming', (wave) => {
     const scene = game.scene.getScene('main');

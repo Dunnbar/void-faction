@@ -86,6 +86,45 @@
     #lockBtn { display: inline-flex; align-items: center; gap: 7px; }
     #lockBtn .lock-ico { width: 18px; height: 18px; vertical-align: middle; }
     #lockBtn.hidden { display: none; }
+
+    /* ===== Chat de la base (streameur) ===== */
+    #hudButtons { position: fixed; bottom: 12px; left: 12px; z-index: 24; display: flex; gap: 8px; }
+    .hud-btn {
+      width: 52px; height: 52px; padding: 0; position: relative;
+      background: rgba(0, 20, 40, 0.92); border: 1px solid #2f5d86; border-radius: 6px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 10px rgba(74, 175, 255, 0.25); transition: box-shadow 0.2s, border-color 0.2s, background 0.2s;
+    }
+    .hud-btn img { width: 38px; height: 38px; object-fit: contain; }
+    .hud-btn:hover { box-shadow: 0 0 14px rgba(74, 175, 255, 0.5); }
+    .hud-btn.active { border-color: #6fc0ff; background: rgba(20, 50, 90, 0.95); box-shadow: 0 0 16px rgba(74, 175, 255, 0.7); }
+    .hud-btn .badge { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #ff4f6d; color: #fff; font-size: 10px; line-height: 16px; text-align: center; display: none; font-family: 'Consolas', monospace; }
+    .hud-btn.has-unread .badge { display: block; }
+    #chat {
+      position: fixed; bottom: 72px; left: 12px; z-index: 24; width: 320px;
+      background: rgba(0, 20, 40, 0.92); border: 1px solid #2f5d86; border-radius: 4px;
+      box-shadow: 0 0 12px rgba(74, 175, 255, 0.3); font-size: 12px; display: flex; flex-direction: column; overflow: hidden;
+    }
+    #chat.hidden { display: none; }
+    #chat .chat-head { padding: 6px 10px; font-size: 10px; letter-spacing: 1.5px; color: #8fb4d8; border-bottom: 1px solid rgba(74, 175, 255, 0.25); }
+    .chat-list { max-height: 34vh; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding: 6px 10px; }
+    .chat-list:empty::after { content: "Aucun message."; color: #5d7b9c; font-style: italic; }
+    .chat-msg { line-height: 1.35; word-break: break-word; }
+    .chat-msg .cm-author { color: #7fd0ff; font-weight: bold; margin-right: 5px; }
+    .chat-msg .cm-author.me { color: #ffd9a0; }
+    .chat-msg .cm-author.mod { cursor: pointer; text-decoration: underline dotted; }
+    .chat-msg .cm-time { color: #5d7b9c; font-size: 10px; margin-left: 5px; }
+    .chat-form { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid rgba(74, 175, 255, 0.2); }
+    .chat-form input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid #2a4060; border-radius: 3px; color: #fff; font-family: inherit; font-size: 12px; padding: 5px 8px; }
+    .chat-form input:focus { outline: none; border-color: #4af; }
+    .chat-form button { background: transparent; border: 1px solid #4af; color: #4af; border-radius: 3px; cursor: pointer; padding: 0 10px; font-size: 13px; }
+    .chat-form button:hover { background: #4af; color: #000; }
+    #chatModMenu { position: fixed; z-index: 80; background: rgba(0, 20, 40, 0.98); border: 1px solid #4af; border-radius: 5px; box-shadow: 0 0 14px rgba(74,175,255,0.4); display: flex; flex-direction: column; min-width: 170px; overflow: hidden; }
+    #chatModMenu.hidden { display: none; }
+    #chatModMenu .mod-target { padding: 6px 10px; font-size: 11px; color: #8fb4d8; border-bottom: 1px solid rgba(74,175,255,0.2); }
+    #chatModMenu button { background: transparent; border: none; color: #cfe2f5; text-align: left; padding: 8px 10px; font-family: inherit; font-size: 12px; cursor: pointer; }
+    #chatModMenu button:hover { background: rgba(74,175,255,0.18); }
+    #chatModMenu button[data-act="ban"] { color: #ff7a7a; }
     /* Ecran "base detruite" (streameur) */
     #baseDeadOverlay {
       position: fixed; inset: 0; z-index: 200;
@@ -386,6 +425,29 @@
       <span class="msg" id="captainMsg"></span>
     </div>
   </div>
+  <!-- Chat de la base (masque par defaut) -->
+  <div id="chat" class="hidden">
+    <div class="chat-head">CHAT DE LA BASE</div>
+    <div id="chatList" class="chat-list"></div>
+    <form id="chatForm" class="chat-form">
+      <input id="chatInput" type="text" maxlength="280" placeholder="Écris un message…" autocomplete="off">
+      <button type="submit" title="Envoyer">▶</button>
+    </form>
+  </div>
+  <!-- Menu de moderation (apparait au clic sur un pseudo de viewer) -->
+  <div id="chatModMenu" class="hidden">
+    <div class="mod-target" id="chatModTarget"></div>
+    <button data-act="mute1h" type="button">⏳ Timeout chat 1h</button>
+    <button data-act="ban" type="button">⛔ Bannir de la base</button>
+  </div>
+  <!-- Bouton chat (bas-gauche) -->
+  <div id="hudButtons">
+    <button id="chatBtn" class="hud-btn" type="button" title="Chat de la base">
+      <img src="/assets/GUI/PNG/icons_on_buttons_logs_people.png" alt="Chat">
+      <span class="badge" id="chatBadge"></span>
+    </button>
+  </div>
+
   <div id="game"></div>
 
   <div id="actionMenu" class="hidden">
