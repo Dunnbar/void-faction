@@ -171,6 +171,21 @@ if (soundBtn) {
     applySoundButtonState();
   });
 }
+
+// ============ Sons de vagues (annonce + debut), par type ============
+const WAVE_SOUNDS = {
+  normale:  '/assets/sounds/vague_normale.mp3',
+  soutenue: '/assets/sounds/vague_soutenue.mp3',
+  dure:     '/assets/sounds/vague_dure.mp3'
+};
+const _waveAudio = {};
+for (const [k, src] of Object.entries(WAVE_SOUNDS)) { try { const a = new Audio(src); a.preload = 'auto'; _waveAudio[k] = a; } catch (e) {} }
+function playWaveSound(type) {
+  if (window.gameSoundMuted) return;
+  const base = _waveAudio[type] || _waveAudio.normale;
+  if (!base) return;
+  try { const a = base.cloneNode(); a.volume = 0.6; a.play().catch(() => {}); } catch (e) {}
+}
 const actionChip = document.getElementById('actionChip');   // pastille "action en cours" (barre de ressources)
 const actionGlyph = document.getElementById('actionGlyph');  // cercle teinte par categorie
 const actionIco = document.getElementById('actionIco');      // image de l'icone d'action
@@ -2088,6 +2103,13 @@ class MainScene extends Phaser.Scene {
     showWaveBanner(wave, warningRemaining);
     // Icône d'alerte dans le monde, près du point d'arrivée des ennemis
     this.showWaveWarnIcon(wave);
+    // Son de vague : annonce (maintenant) + debut (a l'arrivee). Une seule fois par vague,
+    // et seulement si on est avant le spawn (evite de rejouer sur reconnexion en plein combat).
+    if (warningRemaining > 0 && this._soundWaveId !== wave.id) {
+      this._soundWaveId = wave.id;
+      playWaveSound(wave.type);
+      this.time.delayedCall(warningRemaining, () => playWaveSound(wave.type));
+    }
     // Programmer le spawn des ennemis
     for (const enemy of wave.enemies) {
       const delay = warningRemaining + (enemy.spawnOffsetMs || 0);
