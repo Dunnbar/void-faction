@@ -726,6 +726,11 @@ class MainScene extends Phaser.Scene {
     this.enemies = new Set();
     this.bullets = [];
     this.waveWarnIcon = null;
+    // Verrouillage de cible (clic sur un ennemi) : le vaisseau le vise, tir a Espace.
+    this.lockedEnemy = null;
+    this.lockReticle = null;
+    this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    { const _lb = document.getElementById('lockBtn'); if (_lb) _lb.onclick = () => this.clearLock(); }
 
     // Thruster particle texture
     const tg = this.make.graphics({ x: 0, y: 0, add: false });
@@ -852,11 +857,10 @@ class MainScene extends Phaser.Scene {
     this.input.on('pointerup', (pointer) => {
       if (pointer.button !== 0) return;
       const wasPanning = this._panState.moved > DRAG_THRESHOLD_PX;
-      if (!wasPanning && this._panState.pendingMenu) {
-        openActionMenu(this._panState.pendingMenu.id, this._panState.pendingMenu.event);
-      } else if (!wasPanning) {
-        // Clic gauche dans le vide = tir du vaisseau (vers le curseur).
-        this.fireShip(pointer);
+      const pm = this._panState.pendingMenu;
+      if (!wasPanning && pm) {
+        if (pm.lockEnemy) this.toggleLock(pm.lockEnemy); // clic sur un ennemi = (de)verrouiller
+        else openActionMenu(pm.id, pm.event);
       }
       this._panState.active = false;
       this._panState.moved = 0;
@@ -1296,14 +1300,31 @@ class MainScene extends Phaser.Scene {
     this.bullets.push(b);
     return b;
   }
-  // Tir manuel du vaisseau (clic gauche) vers le curseur : bullet_blaster_small1.
-  // Diffuse aux viewers via 'ship:fire'. Leger cooldown anti-spam.
-  fireShip(pointer) {
-    if (!this.ship || !this.ship.active) return;
+  // Verrouillage : clic sur un ennemi le (de)verrouille. Le vaisseau le vise, tir a Espace.
+  toggleLock(enemy) {
+    if (this.lockedEnemy === enemy) { this.clearLock(); return; }
+    this.lockedEnemy = enemy;
+    if (!this.lockReticle) {
+      this.lockReticle = this.add.circle(enemy.x, enemy.y, 34, 0xff4f6d, 0)
+        .setStrokeStyle(2.5, 0xff4f6d, 0.95).setDepth(11);
+      this.tweens.add({ targets: this.lockReticle, scaleX: { from: 1, to: 1.18 }, scaleY: { from: 1, to: 1.18 },
+        yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+    }
+    this.lockReticle.setPosition(enemy.x, enemy.y).setVisible(true);
+    const btn = document.getElementById('lockBtn'); if (btn) btn.classList.remove('hidden');
+  }
+  clearLock() {
+    this.lockedEnemy = null;
+    if (this.lockReticle) this.lockReticle.setVisible(false);
+    const btn = document.getElementById('lockBtn'); if (btn) btn.classList.add('hidden');
+  }
+  // Tir sur la cible verrouillee (touche Espace), cadence limitee. Diffuse aux viewers.
+  tryFireLocked() {
+    if (!this.ship || !this.ship.active || !this.lockedEnemy || !this.lockedEnemy.active) return;
     const now = this.time.now;
-    if (this.ship._lastShotAt && now - this.ship._lastShotAt < 150) return;
+    if (this.ship._lastShotAt && now - this.ship._lastShotAt < 200) return;
     this.ship._lastShotAt = now;
-    const a = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, pointer.worldX, pointer.worldY);
+    const a = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.lockedEnemy.x, this.lockedEnemy.y);
     const state = elementStates.get('ship-1') || {};
     const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
     this.spawnBullet(this.ship.x, this.ship.y, a, 'bullet-ship', { scale: 0.7, speed: 900, hitEnemies: true, dmg });
@@ -1570,6 +1591,12 @@ class MainScene extends Phaser.Scene {
     sprite._hpBar = SharedScene.makeImageHpBar(this, sprite.x, sprite.y - 38, 40,
       { fillTex: 'enemy-hp-fg', frameTex: 'enemy-hp-bg', tint: false, uniform: true, fillDy: -1 });
     sprite._hpBar.setDepth(8);
+    // Cliquable : verrouille / deverrouille la cible (gere au pointerup pour ne pas gener le pan).
+    sprite.setInteractive({ useHandCursor: true });
+    sprite.on('pointerdown', (pointer) => {
+      if (pointer.button !== 0) return;
+      if (this._panState) this._panState.pendingMenu = { lockEnemy: sprite, event: pointer.event };
+    });
     this.enemies.add(sprite);
   }
 
@@ -1594,6 +1621,7 @@ class MainScene extends Phaser.Scene {
 
   destroyEnemy(sprite) {
     if (!sprite.active) return;
+    if (sprite === this.lockedEnemy) this.clearLock();
     if (sprite._hpBar) sprite._hpBar.destroy();
     this.playEnemyExplosion(sprite.x, sprite.y, sprite._level || 1);
     this.enemies.delete(sprite);
@@ -1714,13 +1742,21 @@ class MainScene extends Phaser.Scene {
     }
     this.thrust.emitting = moving;
 
-    // Orientation : le vaisseau pointe vers le curseur (visee souris), rotation progressive.
+    // Cible verrouillee disparue -> on retire le verrouillage.
+    if (this.lockedEnemy && !this.lockedEnemy.active) this.clearLock();
+    // Orientation : vers la cible verrouillee si active, sinon vers le curseur.
     {
-      const p = this.input.activePointer;
-      const targetRot = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, p.worldX, p.worldY) + SHIP_SPRITE_OFFSET;
-      const TURN_SPEED = 9; // rad/s
-      const maxStep = TURN_SPEED * ((delta || 16) / 1000);
+      let aimX, aimY;
+      if (this.lockedEnemy && this.lockedEnemy.active) { aimX = this.lockedEnemy.x; aimY = this.lockedEnemy.y; }
+      else { const p = this.input.activePointer; aimX = p.worldX; aimY = p.worldY; }
+      const targetRot = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, aimX, aimY) + SHIP_SPRITE_OFFSET;
+      const maxStep = 9 * ((delta || 16) / 1000);
       this.ship.rotation = Phaser.Math.Angle.RotateTo(this.ship.rotation, targetRot, maxStep);
+    }
+    // Reticule de verrouillage suit la cible ; tir a Espace (maintenu = tir continu cadence).
+    if (this.lockedEnemy && this.lockedEnemy.active) {
+      if (this.lockReticle) { this.lockReticle.x = this.lockedEnemy.x; this.lockReticle.y = this.lockedEnemy.y; }
+      if (this.keySpace && this.keySpace.isDown) this.tryFireLocked();
     }
 
     // Borne le vaisseau a la grille de cases (memes bornes que le serveur).

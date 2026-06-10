@@ -74,6 +74,16 @@
       font-family: inherit; font-size: 11px; padding: 5px; cursor: pointer; border-radius: 3px;
     }
     #activeAction .deactivate-btn:hover { background: #f55; color: #000; }
+    /* Bouton cible verrouillee (haut-centre) */
+    #lockBtn {
+      position: fixed; top: 14px; left: 50%; transform: translateX(-50%); z-index: 35;
+      background: rgba(40, 0, 8, 0.82); border: 1px solid #ff4f6d; color: #ffb3c0;
+      font-family: 'Consolas', monospace; font-size: 12px; letter-spacing: 0.5px;
+      padding: 6px 12px; border-radius: 4px; cursor: pointer;
+      box-shadow: 0 0 12px rgba(255, 79, 109, 0.4);
+    }
+    #lockBtn:hover { background: rgba(80, 0, 16, 0.9); color: #fff; }
+    #lockBtn.hidden { display: none; }
     /* Ecran "base detruite" (streameur) */
     #baseDeadOverlay {
       position: fixed; inset: 0; z-index: 200;
@@ -358,6 +368,8 @@
     <span class="aa-name" id="activeActionName">— aucune —</span>
     <button class="deactivate-btn" id="deactivateBtn">Stopper l'action</button>
   </div>
+  <!-- Cible verrouillee : tir a Espace ; ce bouton retire le verrouillage -->
+  <button id="lockBtn" class="hidden" type="button">🎯 Cible verrouillée — Espace pour tirer · clic pour déverrouiller</button>
   <div id="minimapLabel" class="hidden">CARTE — clic pour déplacer la vue</div>
   <canvas id="minimap" class="hidden" width="192" height="108"></canvas>
   <div id="waveBanner" class="hidden">
