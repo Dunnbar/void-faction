@@ -1256,13 +1256,10 @@ class MainScene extends Phaser.Scene {
         sprite._targetingEnemy = true;
         sprite._firing = true; // -> anim de tir (updateTurretAppearance)
         const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, target.x, target.y);
-        // Vise l'ennemi mais reste dans l'arc exterieur de la tourelle (±90° autour de
-        // _baseRotation) : sans ce clamp, un ennemi qui orbite la base fait pivoter la
-        // tourelle sur un tour complet (bug "tours complets" tourelle SO).
-        const off = Phaser.Math.Angle.Wrap((a + Math.PI / 2) - sprite._baseRotation);
-        const aimed = sprite._baseRotation + Phaser.Math.Clamp(off, -Math.PI / 2, Math.PI / 2);
-        // Application par plus court chemin (evite tout tour complet residuel).
-        sprite.rotation += Phaser.Math.Angle.Wrap(aimed - sprite.rotation);
+        // Ciblage : rotation LIBRE 360° pour suivre l'ennemi (plus court chemin). Le clamp
+        // ±90° vers l'exterieur ne s'applique qu'au repos (patrouille), cf. pickNewPatrolTarget.
+        const desiredRot = a + Math.PI / 2;
+        sprite.rotation += Phaser.Math.Angle.Wrap(desiredRot - sprite.rotation);
         if (!sprite._lastShotAt) sprite._lastShotAt = 0;
         // Cadence de tir : 2s de base, descend a ~1s si tir est tres ameliore
         const fireDelay = Math.max(1000, 2000 - (state.puissance || 0) * 30);
@@ -1284,7 +1281,9 @@ class MainScene extends Phaser.Scene {
   // Tir tourelle : projectile bullet_blaster_big1 vers l'ennemi (tracer).
   fireTurretLaser(turretSprite, enemySprite) {
     const a = Phaser.Math.Angle.Between(turretSprite.x, turretSprite.y, enemySprite.x, enemySprite.y);
-    this.spawnBullet(turretSprite.x, turretSprite.y, a, 'bullet-turret', { scale: 0.6, speed: 820 });
+    // dmg:0 -> degats deja appliques par updateTurretTargeting ; le projectile disparait
+    // simplement au contact d'un ennemi (hitEnemies).
+    this.spawnBullet(turretSprite.x, turretSprite.y, a, 'bullet-turret', { scale: 0.6, speed: 820, hitEnemies: true, dmg: 0 });
   }
 
   // ===== Projectiles =====
