@@ -316,6 +316,18 @@ db.exec(`
     PRIMARY KEY (amiral_id, element_id),
     FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
   );
+
+  -- Chat communautaire par base : messages des joueurs connectes sur l'Amiral.
+  CREATE TABLE IF NOT EXISTS chat_messages (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    amiral_id INTEGER NOT NULL,
+    user_id INTEGER,
+    username TEXT NOT NULL,
+    message TEXT NOT NULL,
+    at INTEGER NOT NULL,
+    FOREIGN KEY (amiral_id) REFERENCES amirals(id) ON DELETE CASCADE
+  );
+  CREATE INDEX IF NOT EXISTS idx_chat ON chat_messages (amiral_id, at DESC);
 `);
 // Migration : colonne dead pour les DB element_state existantes (tourelle detruite).
 {
@@ -799,6 +811,21 @@ function logJournal(rt, type, message) {
   io.to(amiralRoom(rt.id)).emit('journal:new', entry);
 }
 
+// ============ Chat communautaire (par base) ============
+const CHAT_LIMIT = 50;            // messages renvoyes a la connexion
+const CHAT_MAX_LEN = 280;         // longueur max d'un message
+const stmtInsertChat = db.prepare('INSERT INTO chat_messages (amiral_id, user_id, username, message, at) VALUES (?, ?, ?, ?, ?)');
+const stmtRecentChat = db.prepare('SELECT username, message, at FROM chat_messages WHERE amiral_id = ? ORDER BY at DESC LIMIT ?');
+const stmtTrimChat   = db.prepare(`
+  DELETE FROM chat_messages WHERE amiral_id = ? AND id NOT IN (
+    SELECT id FROM chat_messages WHERE amiral_id = ? ORDER BY at DESC LIMIT ?
+  )
+`);
+function recentChatForAmiral(amiralId) {
+  // Du plus ancien au plus recent (le client append en bas).
+  return stmtRecentChat.all(amiralId, CHAT_LIMIT).reverse();
+}
+
 function getOnlineAmiralsList() {
   const out = [];
   for (const rt of amiralsRuntime.values()) {
@@ -1086,6 +1113,8 @@ io.on('connection', (socket) => {
   if (rtForInit && rtForInit.id !== 0 && !socket.data.amiralId && !socket.data.userAmiralId) {
     socket.join(amiralRoom(rtForInit.id));
   }
+  // Base actuellement observee : sert de cible pour le chat communautaire.
+  socket.data.watchedAmiralId = rtForInit ? rtForInit.id : null;
 
   socket.emit('init', {
     resource: getResource(),
@@ -1095,6 +1124,7 @@ io.on('connection', (socket) => {
     watchedAmiral: rtForInit && rtForInit.username ? { username: rtForInit.username, gridX: rtForInit.gridX, gridY: rtForInit.gridY, online: !!rtForInit.online } : null,
     history: rtForInit ? recentHistoryForAmiral(rtForInit.id) : [],
     journal: rtForInit ? recentJournalForAmiral(rtForInit.id) : [],
+    chat: rtForInit && rtForInit.id !== 0 ? recentChatForAmiral(rtForInit.id) : [],
     elements: rtForInit ? rtForInit.elements : [],
     elementStates: rtForInit ? allElementStates(rtForInit) : [],
     factionResources: rtForInit ? { ...rtForInit.factionResources } : { materiaux: 0, radius: 0 },
@@ -1247,6 +1277,25 @@ io.on('connection', (socket) => {
     rt.baseDead = false;
     rebirthBase(rt);
     console.log(`[amiral ${rt.username}] base relancee (Recommencer)`);
+  });
+
+  // Chat communautaire : seul un utilisateur/Amiral connecte (avec pseudo) peut ecrire.
+  // Le message est diffuse a la room de la base observee (cette base) et persiste.
+  socket.on('chat:send', (data, cb) => {
+    const username = socket.data.username || socket.data.amiralUsername;
+    if (!username) { if (typeof cb === 'function') cb({ ok: false, error: 'auth' }); return; }
+    const amiralId = socket.data.watchedAmiralId;
+    if (!amiralId || amiralId === 0) { if (typeof cb === 'function') cb({ ok: false, error: 'no_base' }); return; }
+    let text = (data && typeof data.message === 'string') ? data.message.trim() : '';
+    if (!text) { if (typeof cb === 'function') cb({ ok: false, error: 'empty' }); return; }
+    if (text.length > CHAT_MAX_LEN) text = text.slice(0, CHAT_MAX_LEN);
+    const at = Date.now();
+    try {
+      stmtInsertChat.run(amiralId, socket.data.userId || null, username, text, at);
+      stmtTrimChat.run(amiralId, amiralId, CHAT_LIMIT);
+    } catch (e) {}
+    io.to(amiralRoom(amiralId)).emit('chat:new', { username, message: text, at });
+    if (typeof cb === 'function') cb({ ok: true });
   });
 
   socket.on('disconnect', () => {

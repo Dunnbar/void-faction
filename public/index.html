@@ -125,9 +125,9 @@
     .cat-tag.DEFENSIF   { background: var(--c-defensif); color: #fff; }
     .cat-tag.UTILITAIRE { background: var(--c-utilitaire); color: #000; }
 
-    /* Journal d'evenements */
+    /* Journal d'evenements (ouvert au-dessus de la barre de boutons bas-gauche) */
     #journal {
-      position: fixed; bottom: 12px; left: 12px; z-index: 10; width: 320px;
+      position: fixed; bottom: 62px; left: 12px; z-index: 11; width: 320px;
       background: rgba(0, 20, 40, 0.92);
       border: 1px solid var(--c-frame);
       border-radius: 4px;
@@ -135,6 +135,7 @@
       font-size: 12px;
       overflow: hidden;
     }
+    #journal.hidden { display: none; }
     #journal .jr-head {
       display: flex; align-items: center; gap: 6px;
       padding: 6px 10px; font-size: 10px; letter-spacing: 1.5px; color: #8fb4d8;
@@ -164,6 +165,57 @@
     .jr-item.base_reborn   { border-left-color: #4af; }
     .jr-item.asteroid      { border-left-color: #d4b487; }
     @keyframes jrIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
+
+    /* Barre de boutons HUD (bas-gauche) : journal + chat */
+    #hudButtons {
+      position: fixed; bottom: 12px; left: 12px; z-index: 12;
+      display: flex; gap: 8px;
+    }
+    .hud-btn {
+      width: 42px; height: 42px; padding: 0; position: relative;
+      background: rgba(0, 20, 40, 0.92); border: 1px solid var(--c-frame); border-radius: 6px;
+      cursor: pointer; display: flex; align-items: center; justify-content: center;
+      box-shadow: 0 0 10px rgba(74, 175, 255, 0.25); transition: box-shadow 0.2s, border-color 0.2s, background 0.2s;
+    }
+    .hud-btn img { width: 24px; height: 24px; object-fit: contain; }
+    .hud-btn:hover { box-shadow: 0 0 14px rgba(74, 175, 255, 0.5); }
+    .hud-btn.active { border-color: #6fc0ff; background: rgba(20, 50, 90, 0.95); box-shadow: 0 0 16px rgba(74, 175, 255, 0.7); }
+    .hud-btn .badge {
+      position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px;
+      border-radius: 8px; background: #ff4f6d; color: #fff; font-size: 10px; line-height: 16px;
+      text-align: center; display: none; font-family: 'Consolas', monospace;
+    }
+    .hud-btn.has-unread .badge { display: block; }
+    /* infobulle orientee vers le HAUT (boutons en bas) */
+    .hint-pop.hint-up { top: auto; bottom: calc(100% + 8px); transform: translateY(4px); }
+    .hint:hover .hint-pop.hint-up, .hint:focus .hint-pop.hint-up, .hint:focus-within .hint-pop.hint-up { transform: none; }
+
+    /* Chat communautaire (meme ancrage que le journal) */
+    #chat {
+      position: fixed; bottom: 62px; left: 12px; z-index: 11; width: 320px;
+      background: rgba(0, 20, 40, 0.92); border: 1px solid var(--c-frame); border-radius: 4px;
+      box-shadow: 0 0 12px rgba(74, 175, 255, 0.3); font-size: 12px;
+      display: flex; flex-direction: column; overflow: hidden;
+    }
+    #chat.hidden { display: none; }
+    #chat .jr-head {
+      display: flex; align-items: center; gap: 6px; padding: 6px 10px;
+      font-size: 10px; letter-spacing: 1.5px; color: #8fb4d8; border-bottom: 1px solid rgba(74, 175, 255, 0.25);
+    }
+    #chat .jr-head .icon { color: var(--c-frame); vertical-align: -2px; }
+    .chat-list { max-height: 30vh; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding: 6px 10px; }
+    .chat-list:empty::after { content: "Aucun message. Lance la discussion !"; color: #5d7b9c; font-style: italic; }
+    .chat-msg { line-height: 1.35; word-break: break-word; }
+    .chat-msg .cm-author { color: #7fd0ff; font-weight: bold; margin-right: 5px; }
+    .chat-msg .cm-author.me { color: #ffd9a0; }
+    .chat-msg .cm-time { color: #5d7b9c; font-size: 10px; margin-left: 5px; }
+    .chat-form { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid rgba(74, 175, 255, 0.2); }
+    .chat-form input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid #2a4060; border-radius: 3px; color: #fff; font-family: inherit; font-size: 12px; padding: 5px 8px; }
+    .chat-form input:focus { outline: none; border-color: var(--c-frame); }
+    .chat-form button { background: transparent; border: 1px solid var(--c-frame); color: var(--c-frame); border-radius: 3px; cursor: pointer; padding: 0 10px; font-size: 13px; }
+    .chat-form button:hover { background: var(--c-frame); color: #000; }
+    .chat-locked { padding: 8px 10px; color: #8fb4d8; font-style: italic; border-top: 1px solid rgba(74, 175, 255, 0.2); }
+    .chat-locked.hidden, .chat-form.hidden { display: none; }
 
     /* Barres de progression par catégorie */
     .bars { display: flex; flex-direction: column; gap: 5px; }
@@ -656,10 +708,35 @@
     </span>
   </div>
 
-  <!-- Journal d'evenements (bas-gauche) -->
-  <div id="journal">
-    <div class="jr-head"><svg class="icon"><use href="#ic-pulse"/></svg> JOURNAL</div>
+  <!-- Journal d'evenements (masque par defaut, ouvert via le bouton) -->
+  <div id="journal" class="hidden">
+    <div class="jr-head"><svg class="icon"><use href="#ic-pulse"/></svg> JOURNAL D'ACTIVITÉ</div>
     <div id="journalList" class="jr-list"></div>
+  </div>
+
+  <!-- Chat communautaire de la base (masque par defaut) -->
+  <div id="chat" class="hidden">
+    <div class="jr-head"><svg class="icon"><use href="#ic-user"/></svg> CHAT DE LA BASE</div>
+    <div id="chatList" class="chat-list"></div>
+    <form id="chatForm" class="chat-form hidden">
+      <input id="chatInput" type="text" maxlength="280" placeholder="Écris un message…" autocomplete="off">
+      <button type="submit" title="Envoyer">▶</button>
+    </form>
+    <div id="chatLocked" class="chat-locked">Connecte-toi pour écrire dans le chat.</div>
+  </div>
+
+  <!-- Barre de boutons HUD (bas-gauche) : journal + chat -->
+  <div id="hudButtons">
+    <button id="journalBtn" class="hud-btn hint" type="button">
+      <img src="/assets/GUI/PNG/icons_on_buttons_logs.png" alt="Journal">
+      <span class="badge" id="journalBadge"></span>
+      <span class="hint-pop hint-up">Journal d'activité — évènements de la base (vagues, niveaux, destructions…).</span>
+    </button>
+    <button id="chatBtn" class="hud-btn hint" type="button">
+      <img src="/assets/GUI/PNG/icons_on_buttons_logs_people.png" alt="Chat">
+      <span class="badge" id="chatBadge"></span>
+      <span class="hint-pop hint-up">Chat de la base — discute avec les joueurs connectés (connexion requise).</span>
+    </button>
   </div>
 
   <!-- Bouton son (a gauche du bouton profil) -->

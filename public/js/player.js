@@ -108,6 +108,7 @@ let baseDead = false; // base detruite : aucune action possible en attendant la 
 let actionDurationMs = ACTION_MAX_DURATION_MS_DEFAULT;
 let history = [];
 let journal = [];
+let chat = [];
 let socket = null;
 let authenticated = false;
 let knownBuildTime = null;
@@ -133,6 +134,19 @@ const profileMenu = document.getElementById('profileMenu');
 const soundBtn = document.getElementById('soundBtn');
 const historyListEl = document.getElementById('historyList');
 const journalListEl = document.getElementById('journalList');
+// Journal + Chat : boutons bas-gauche, panneaux masques par defaut, exclusifs.
+const journalEl = document.getElementById('journal');
+const chatEl = document.getElementById('chat');
+const journalBtn = document.getElementById('journalBtn');
+const chatBtn = document.getElementById('chatBtn');
+const journalBadge = document.getElementById('journalBadge');
+const chatBadge = document.getElementById('chatBadge');
+const chatListEl = document.getElementById('chatList');
+const chatForm = document.getElementById('chatForm');
+const chatInput = document.getElementById('chatInput');
+const chatLocked = document.getElementById('chatLocked');
+let journalUnread = 0;
+let chatUnread = 0;
 
 // ============ Toggle son (visuel + flag global, pas encore branche sur des audio) ============
 window.gameSoundMuted = localStorage.getItem('voidfaction:muted') === '1';
@@ -438,7 +452,78 @@ function addJournalEntry(entry) {
   journal.push(entry);
   if (journal.length > 40) journal.shift();
   renderJournal();
+  if (!journalIsOpen()) { journalUnread++; setBadge(journalBtn, journalBadge, journalUnread); }
 }
+
+// ============ Panneaux bas-gauche : journal + chat (exclusifs) ============
+function setBadge(btn, badgeEl, n) {
+  if (!btn || !badgeEl) return;
+  if (n > 0) { badgeEl.textContent = n > 99 ? '99+' : String(n); btn.classList.add('has-unread'); }
+  else btn.classList.remove('has-unread');
+}
+function journalIsOpen() { return journalEl && !journalEl.classList.contains('hidden'); }
+function chatIsOpen() { return chatEl && !chatEl.classList.contains('hidden'); }
+function closePanels() {
+  journalEl?.classList.add('hidden');
+  chatEl?.classList.add('hidden');
+  journalBtn?.classList.remove('active');
+  chatBtn?.classList.remove('active');
+}
+function openPanel(which) {
+  closePanels();
+  if (which === 'journal') {
+    journalEl?.classList.remove('hidden');
+    journalBtn?.classList.add('active');
+    journalUnread = 0; setBadge(journalBtn, journalBadge, 0);
+  } else if (which === 'chat') {
+    chatEl?.classList.remove('hidden');
+    chatBtn?.classList.add('active');
+    chatUnread = 0; setBadge(chatBtn, chatBadge, 0);
+    if (chatListEl) chatListEl.scrollTop = chatListEl.scrollHeight;
+    if (authenticated && chatInput) chatInput.focus();
+  }
+}
+function togglePanel(which) {
+  const el = which === 'journal' ? journalEl : chatEl;
+  if (!el) return;
+  if (el.classList.contains('hidden')) openPanel(which);
+  else closePanels();
+}
+
+// ---- Chat communautaire ----
+function chatMsgHtml(m) {
+  const mine = authenticated && username && m.username === username;
+  return `<div class="chat-msg"><span class="cm-author${mine ? ' me' : ''}">${escapeHtml(m.username || '?')}</span>`
+       + `<span class="cm-text">${escapeHtml(m.message || '')}</span>`
+       + `<span class="cm-time">${formatClock(m.at)}</span></div>`;
+}
+function renderChat() {
+  if (!chatListEl) return;
+  chatListEl.innerHTML = chat.map(chatMsgHtml).join('');
+  chatListEl.scrollTop = chatListEl.scrollHeight;
+}
+function addChatMessage(m) {
+  if (!m) return;
+  chat.push(m);
+  if (chat.length > 50) chat.shift();
+  renderChat();
+  if (!chatIsOpen()) { chatUnread++; setBadge(chatBtn, chatBadge, chatUnread); }
+}
+function updateChatAuthUI() {
+  if (chatForm) chatForm.classList.toggle('hidden', !authenticated);
+  if (chatLocked) chatLocked.classList.toggle('hidden', authenticated);
+}
+
+journalBtn?.addEventListener('click', () => togglePanel('journal'));
+chatBtn?.addEventListener('click', () => togglePanel('chat'));
+chatForm?.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const text = (chatInput?.value || '').trim();
+  if (!text || !socket || !authenticated) return;
+  socket.emit('chat:send', { message: text }, (res) => {
+    if (res && res.ok) chatInput.value = '';
+  });
+});
 
 setInterval(() => {
   refreshActiveActionTimer();
@@ -763,6 +848,7 @@ function connectSocket() {
     actionDurationMs = data.actionDurationMs || ACTION_MAX_DURATION_MS_DEFAULT;
     history = Array.isArray(data.history) ? data.history : [];
     journal = Array.isArray(data.journal) ? data.journal : [];
+    chat = Array.isArray(data.chat) ? data.chat : [];
     rebuildActiveElementsMap(data.activeElements);
     if (data.world) {
       WORLD_W = data.world.width;
@@ -785,6 +871,8 @@ function connectSocket() {
     renderFactionResources();
     renderHistory();
     renderJournal();
+    renderChat();
+    updateChatAuthUI();
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
     amiralIsOnline = data.watchedAmiral?.online !== false;
     if (data.ship) latestShipState = data.ship; // memorise pour l'appliquer au (re)demarrage de la scene
@@ -956,6 +1044,7 @@ function connectSocket() {
   });
 
   socket.on('journal:new', (entry) => addJournalEntry(entry));
+  socket.on('chat:new', (m) => addChatMessage(m));
 
   socket.on('wave:incoming', (wave) => {
     const scene = game.scene.getScene('main');
