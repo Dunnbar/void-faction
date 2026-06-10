@@ -1318,10 +1318,15 @@ class MainScene extends Phaser.Scene {
       // Tourelle detruite : inactive (pas de tir, pas d'alarme, apparence geree par enterTurretDead).
       if (state.dead) { if (sprite._alarmIcon) sprite._alarmIcon.setVisible(false); sprite._targetingEnemy = false; continue; }
       SharedScene.applyTurretPowerVisual(sprite, powered);
-      // Icone d'alarme (a droite de la barre de vie) quand la tourelle est privee d'essence.
+      // Icone d'alarme SUR la tourelle (privee d'essence) : grande + pulsation.
       if (!sprite._alarmIcon && this.textures.exists('turret-alarm')) {
-        sprite._alarmIcon = this.add.image(sprite.x + 62, sprite.y - 70, 'turret-alarm').setDepth(12).setVisible(false);
-        sprite._alarmIcon.setScale(22 / (sprite._alarmIcon.height || 22));
+        const target = Math.max(sprite.displayWidth, sprite.displayHeight) * 0.85;
+        const ico = this.add.image(sprite.x, sprite.y, 'turret-alarm').setDepth(12).setVisible(false);
+        const base = target / (ico.width || target);
+        ico.setScale(base);
+        this.tweens.add({ targets: ico, scaleX: { from: base, to: base * 1.25 }, scaleY: { from: base, to: base * 1.25 },
+          yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+        sprite._alarmIcon = ico;
       }
       if (sprite._alarmIcon) sprite._alarmIcon.setVisible(!powered);
       // Base hors tension : la tourelle est desactivee et FIGE (on stoppe la patrouille).
