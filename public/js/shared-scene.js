@@ -484,7 +484,10 @@
       Object.defineProperty(fill, 'fillColor', {
         configurable: true,
         get() { return this._fc; },
-        set(c) { this._fc = c; if (!allowTint) return; if (c == null || c === 0xffffff || c === 0x4fdb73) this.clearTint(); else this.setTint(c); }
+        // Vert (plein) : couleur native de l'asset (clearTint). Jaune/rouge (endommage) :
+        // teinte PLEINE (setTintFill) pour une couleur franche, sinon le tint multiplicatif
+        // sur un asset deja vert resterait verdatre.
+        set(c) { this._fc = c; if (!allowTint) return; if (c == null || c === 0xffffff || c === 0x4fdb73) this.clearTint(); else this.setTintFill(c); }
       });
       container.add([frame, fill]);
     } else {
