@@ -1458,35 +1458,36 @@ class MainScene extends Phaser.Scene {
   updateEnemyEngage(sprite, cx, cy, orbitR, dtSec, now, mode, best) {
     const step = ENEMY_SPEED_PX * dtSec;
     const turn = 5 * dtSec;
+    const bearing = Math.atan2(sprite.y - cy, sprite.x - cx);
     const distT = Math.hypot(sprite.x - cx, sprite.y - cy) || 1;
-    const dirAway = Math.atan2(sprite.y - cy, sprite.x - cx) + Math.PI / 2;
-    const dirToward = Math.atan2(cy - sprite.y, cx - sprite.x) + Math.PI / 2;
+    const dirAway = bearing + Math.PI / 2;
+    const dirToward = bearing + Math.PI + Math.PI / 2;
     const moveFwd = (spd) => { const f = sprite.rotation - Math.PI / 2; sprite.x += Math.cos(f) * spd; sprite.y += Math.sin(f) * spd; };
 
-    if (sprite._phase === 'pullback') {
-      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirAway, turn * 1.4);
-      moveFwd(step * 1.5);
-      if (distT >= orbitR + 70) { sprite._phase = 'strafe'; sprite._firedThisRun = false; }
+    if (sprite._phase === 'exit') {
+      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirAway, turn * 0.6);
+      moveFwd(step * 1.6);
+      if (distT >= orbitR + 130) { sprite._phase = 'dive'; sprite._firedThisRun = false; sprite._peelSide = Math.random() < 0.5 ? 1 : -1; }
       return;
     }
-    if (sprite._phase === 'strafe') {
-      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirToward, turn * 2);
+    if (sprite._phase === 'dive') {
+      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirToward, turn * 1.3);
       moveFwd(step * 2.6);
       if (!sprite._firedThisRun && Math.abs(Phaser.Math.Angle.Wrap(dirToward - sprite.rotation)) < 0.2) {
         this.fireEnemyShot(sprite, cx, cy);
         sprite._firedThisRun = true;
         this.onEnemyFiredAt(mode, best);
       }
-      if (distT <= Math.max(orbitR - 110, orbitR * 0.5)) sprite._phase = 'return';
+      if (distT <= Math.max(orbitR - 110, orbitR * 0.5)) sprite._phase = 'peel';
       return;
     }
-    if (sprite._phase === 'return') {
-      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirAway, turn * 1.4);
-      moveFwd(step * 1.5);
+    if (sprite._phase === 'peel') {
+      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirAway + sprite._peelSide * (Math.PI / 4), turn);
+      moveFwd(step * 1.8);
       if (distT >= orbitR) {
         sprite._phase = 'cruise';
         sprite._lastFireAt = now;
-        sprite._orbitAngle = Math.atan2(sprite.y - cy, sprite.x - cx);
+        sprite._orbitAngle = bearing;
       }
       return;
     }
@@ -1496,7 +1497,7 @@ class MainScene extends Phaser.Scene {
     sprite.y = cy + Math.sin(sprite._orbitAngle) * r;
     const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.PI / 2;
     sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, tangent, turn);
-    if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) sprite._phase = 'pullback';
+    if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) sprite._phase = 'exit';
   }
   // Cote streameur : autoritatif -> on emet les degats (base / tourelle).
   onEnemyFiredAt(mode, best) {
