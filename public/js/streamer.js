@@ -1234,18 +1234,23 @@ class MainScene extends Phaser.Scene {
       const state = elementStates.get(el.id);
       if (!sprite || !state) continue;
       // Tourelle detruite : inactive (pas de tir ; apparence + coeur geres par enterTurretDead).
-      if (state.dead) { sprite._targetingEnemy = false; continue; }
+      if (state.dead) { sprite._targetingEnemy = false; sprite._firing = false; continue; }
       SharedScene.applyTurretPowerVisual(sprite, powered);
       // Base hors tension : la tourelle est desactivee et FIGE (on stoppe la patrouille).
-      if (!powered) { sprite._targetingEnemy = false; if (sprite._patrolTween) sprite._patrolTween.stop(); continue; }
-      // Tourelle = défense autonome : tire en permanence sur l'ennemi le plus proche.
-      // L'action 'tir' boost les degats via state.puissance.
+      if (!powered) {
+        sprite._targetingEnemy = false; sprite._firing = false;
+        if (sprite._patrolTween) sprite._patrolTween.stop();
+        this.updateTurretAppearance(el.id);
+        continue;
+      }
+      // Tourelle autonome : tire sur l'ennemi le plus proche en portee.
       const range = turretRangePx(state);
       const target = this.findNearestEnemyInRange(sprite.x, sprite.y, range);
       if (target) {
         // Stoppe la patrouille pour ne pas se battre avec le tween
         if (sprite._patrolTween) sprite._patrolTween.stop();
         sprite._targetingEnemy = true;
+        sprite._firing = true; // -> anim de tir (updateTurretAppearance)
         const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, target.x, target.y);
         // Vise l'ennemi mais reste dans l'arc exterieur de la tourelle (±90° autour de
         // _baseRotation) : sans ce clamp, un ennemi qui orbite la base fait pivoter la
@@ -1266,7 +1271,9 @@ class MainScene extends Phaser.Scene {
       } else {
         // Pas d'ennemi : la patrouille reprend au prochain tick du timer (max 5s)
         sprite._targetingEnemy = false;
+        sprite._firing = false;
       }
+      this.updateTurretAppearance(el.id); // synchronise l'anim tir/idle avec _firing
     }
   }
 
@@ -1390,14 +1397,21 @@ class MainScene extends Phaser.Scene {
         sprite._orbitAngle += sprite._orbitSpeed * dtSec;
         sprite.x = cx + Math.cos(sprite._orbitAngle) * orbitR;
         sprite.y = cy + Math.sin(sprite._orbitAngle) * orbitR;
-        const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2);
-        sprite.rotation = tangent + Math.PI / 2;
-        // Tir sur la cible (base incluse : les degats base sont appliques cote serveur)
         if (!sprite._lastFireAt) sprite._lastFireAt = now - Math.random() * ENEMY_FIRE_MS;
+        // L'ennemi tire DROIT : quand son tir est pret, il s'aligne sur la cible puis tire ;
+        // sinon (tir en CD) il continue son vol orbital (rotation tangente).
         if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) {
-          this.fireEnemyShot(sprite, cx, cy);
-          sprite._lastFireAt = now;
-          if (mode === 'base') socket.emit('streamer:base_hit');
+          const aim = Math.atan2(cy - sprite.y, cx - sprite.x);
+          const desiredRot = aim + Math.PI / 2;
+          sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, desiredRot, 6 * dtSec);
+          if (Math.abs(Phaser.Math.Angle.Wrap(desiredRot - sprite.rotation)) < 0.12) {
+            this.fireEnemyShot(sprite, cx, cy);
+            sprite._lastFireAt = now;
+            if (mode === 'base') socket.emit('streamer:base_hit');
+          }
+        } else {
+          const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2);
+          sprite.rotation = tangent + Math.PI / 2;
         }
       }
 
@@ -1429,8 +1443,9 @@ class MainScene extends Phaser.Scene {
     const k = String(level).padStart(2, '0');
     const idleKey = `gun-${k}-idle`;
     const shootKey = `gun-${k}-shoot`;
-    const active = (lastActiveElements || []).find(a => a.element_id === id);
-    const isShooting = active && active.action_id === 'tir';
+    // L'anim de tir ne joue QUE quand la tourelle tire effectivement sur un ennemi
+    // (flag pose par updateTurretTargeting), pas parce qu'un viewer booste sa puissance.
+    const isShooting = !!sprite._firing;
     if (isShooting) {
       if (sprite._currentAnim !== shootKey) {
         sprite.play(shootKey);
