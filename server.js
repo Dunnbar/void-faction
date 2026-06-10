@@ -1973,12 +1973,18 @@ function resolveWaveOffline(rt, wave) {
 }
 
 // ============ Planning des vagues : horaires fixes (TZ Europe/Paris par defaut) ============
-// Jour : 5 vagues entre 9h et 23h, spawn aleatoire dans la fenetre de 2h qui suit chaque slot
-// Nuit : 1 seule vague entre 2h et 6h, spawn aleatoire dans la fenetre de 4h
+// Jour : 1 vague par creneau de 2h, de 9h jusqu'a 1h du matin (dernier creneau 23h->1h).
+// Nuit : 1 seule vague entre 2h et 6h.
+// Le "jour de jeu" est ancre a 7h du matin (apres la nuit, avant le 1er creneau) : ainsi
+// toute la journee — y compris le creneau 23h->1h et la nuit 2h-6h — tient dans une plage
+// continue sans coupure a minuit (sinon minuteOfDay repartirait a 0 et casserait le creneau).
 // On peut surclasser la TZ via env var GAME_TZ
 const GAME_TZ = process.env.GAME_TZ || 'Europe/Paris';
-const DAY_WAVE_SLOT_HOURS = [9, 11, 13, 15, 17, 19, 21]; // creneaux toutes les 2h (fenetre de 2h chacun)
+const DAY_WAVE_SLOT_HOURS = [9, 11, 13, 15, 17, 19, 21, 23]; // creneaux toutes les 2h, dernier 23h->1h
 const NIGHT_WAVE_WINDOW   = { startHour: 2, endHour: 6 };
+const DAY_ANCHOR_HOUR     = 7;  // debut du "jour de jeu"
+// Heure reelle -> minute dans le jour de jeu (0 = DAY_ANCHOR_HOUR). Monotone sur [0,1440).
+const toGamingMin = (h) => ((h - DAY_ANCHOR_HOUR + 24) % 24) * 60;
 
 const tzPartsFmt = new Intl.DateTimeFormat('en-CA', {
   timeZone: GAME_TZ,
@@ -1991,36 +1997,44 @@ function tzNow() {
   const get = (t) => parseInt(parts.find(p => p.type === t)?.value || '0', 10);
   const year = get('year'), month = get('month'), day = get('day');
   const hour = get('hour'), minute = get('minute');
+  const minuteOfDay = hour * 60 + minute;
+  // Cle + minute du "jour de jeu" (ancre a 7h). Avant 7h on appartient au jour de jeu
+  // de la veille -> on calcule la date a partir de l'instant decale de -7h.
+  const sp = tzPartsFmt.formatToParts(new Date(now.getTime() - DAY_ANCHOR_HOUR * 3600 * 1000));
+  const sget = (t) => sp.find(p => p.type === t)?.value || '00';
   return {
     dateKey: `${year}-${String(month).padStart(2,'0')}-${String(day).padStart(2,'0')}`,
-    hour, minute,
-    minuteOfDay: hour * 60 + minute
+    hour, minute, minuteOfDay,
+    gamingDayKey: `${sget('year')}-${sget('month')}-${sget('day')}`,
+    gamingMinute: (minuteOfDay - DAY_ANCHOR_HOUR * 60 + 1440) % 1440
   };
 }
 
 function ensureWaveSchedule(rt, t) {
-  if (rt.waveScheduleDay === t.dateKey) return;
-  rt.waveScheduleDay = t.dateKey;
+  if (rt.waveScheduleDay === t.gamingDayKey) return;
+  rt.waveScheduleDay = t.gamingDayKey;
   rt.waveFiredSlots = new Set();
   rt.waveSchedule = new Map();
-  // Fenetre de 2h par slot (windows : [9h-11h], [12h-14h], [15h-17h], [18h-20h], [21h-23h])
+  // Slots exprimes en minutes du jour de jeu (fenetre de 2h chacun ; le slot 23h va jusqu'a 1h).
   const DAY_WINDOW_MIN = 120;
   for (const h of DAY_WAVE_SLOT_HOURS) {
-    const scheduled = h * 60 + Math.floor(Math.random() * DAY_WINDOW_MIN);
-    rt.waveSchedule.set(`day${h}`, { scheduled, slotEnd: h * 60 + DAY_WINDOW_MIN });
+    const gStart = toGamingMin(h);
+    const scheduled = gStart + Math.floor(Math.random() * DAY_WINDOW_MIN);
+    rt.waveSchedule.set(`day${h}`, { scheduled, slotEnd: gStart + DAY_WINDOW_MIN });
   }
-  const nightStartMin = NIGHT_WAVE_WINDOW.startHour * 60;
-  const nightEndMin   = NIGHT_WAVE_WINDOW.endHour * 60;
-  const nightScheduled = nightStartMin + Math.floor(Math.random() * (nightEndMin - nightStartMin));
-  rt.waveSchedule.set('night', { scheduled: nightScheduled, slotEnd: nightEndMin });
+  const nightStart = toGamingMin(NIGHT_WAVE_WINDOW.startHour);
+  const nightEnd   = toGamingMin(NIGHT_WAVE_WINDOW.endHour);
+  const nightScheduled = nightStart + Math.floor(Math.random() * (nightEnd - nightStart));
+  rt.waveSchedule.set('night', { scheduled: nightScheduled, slotEnd: nightEnd });
 
   // Une seule vague DURE par jour, sur un creneau de JOUR choisi au hasard (jamais la nuit).
   const hardHour = DAY_WAVE_SLOT_HOURS[Math.floor(Math.random() * DAY_WAVE_SLOT_HOURS.length)];
   rt.hardWaveSlot = `day${hardHour}`;
 
-  const fmtMin = m => `${Math.floor(m/60)}h${String(m%60).padStart(2,'0')}`;
+  // Affichage : reconvertit la minute de jeu en heure reelle.
+  const fmtMin = gm => { const r = (gm + DAY_ANCHOR_HOUR * 60) % 1440; return `${Math.floor(r/60)}h${String(r%60).padStart(2,'0')}`; };
   const summary = [...rt.waveSchedule.entries()].map(([k, v]) => `${k}@${fmtMin(v.scheduled)}`).join(', ');
-  console.log(`[amiral ${rt.username}] planning vagues ${t.dateKey} (${GAME_TZ}) : ${summary} | dure=${rt.hardWaveSlot}`);
+  console.log(`[amiral ${rt.username}] planning vagues ${t.gamingDayKey} (${GAME_TZ}) : ${summary} | dure=${rt.hardWaveSlot}`);
 }
 
 function tickWaveScheduler() {
@@ -2031,12 +2045,12 @@ function tickWaveScheduler() {
     ensureWaveSchedule(rt, t);
     for (const [slotKey, { scheduled, slotEnd }] of rt.waveSchedule.entries()) {
       if (rt.waveFiredSlots.has(slotKey)) continue;
-      if (t.minuteOfDay >= scheduled && t.minuteOfDay < slotEnd) {
+      if (t.gamingMinute >= scheduled && t.gamingMinute < slotEnd) {
         rt.waveFiredSlots.add(slotKey);
         // Creneau dure du jour -> vague dure ; sinon 25% soutenue / 75% normale.
         const type = (slotKey === rt.hardWaveSlot) ? 'dure' : pickNonHardType();
         rollWaveFor(rt, true, type);
-      } else if (t.minuteOfDay >= slotEnd) {
+      } else if (t.gamingMinute >= slotEnd) {
         // Slot dépassé (server eteint pendant la fenetre, ou Amiral pas en ligne au bon moment)
         // → on marque comme "fired" pour ne pas declencher en retard ; il sera reschedule demain
         rt.waveFiredSlots.add(slotKey);
