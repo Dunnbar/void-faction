@@ -1230,14 +1230,7 @@ class MainScene extends Phaser.Scene {
     this.applyFitZoom();
     SharedScene.updateCaseCamera(this, this.ship ? this.ship.x : BASE_X, this.ship ? this.ship.y : BASE_Y);
     this._cameraInitFromShip = false; // recadre une 1re fois sur le vaisseau des reception de sa position
-    // Minimap : clic = teleporter la vue (rejoindre le streameur / explorer).
-    // Minimap : uniquement si la carte a plusieurs cases (sinon inutile -> cachee).
-    const multiCase = (MAP_BOUNDS.maxI > MAP_BOUNDS.minI) || (MAP_BOUNDS.maxJ > MAP_BOUNDS.minJ);
-    if (multiCase) {
-      this._minimap = SharedScene.setupMinimap({ bounds: MAP_BOUNDS, onTp: (wx, wy) => SharedScene.tpCameraTo(this, wx, wy, true) });
-      document.getElementById('minimap')?.classList.remove('hidden');
-      document.getElementById('minimapLabel')?.classList.remove('hidden');
-    }
+    // (Minimap retiree : le monde tient sur un seul ecran, plus de navigation multi-cases.)
     this.scale.on('resize', () => this.onResize());
 
     // Background parallax (background_04 : fond fixe + planètes parallax)
@@ -2101,8 +2094,6 @@ class MainScene extends Phaser.Scene {
     const warningRemaining = Math.max(0, wave.warningEndsAt - now);
     // UI bannière
     showWaveBanner(wave, warningRemaining);
-    // Icône d'alerte dans le monde, près du point d'arrivée des ennemis
-    this.showWaveWarnIcon(wave);
     // Son de vague : annonce (maintenant) + debut (a l'arrivee). Une seule fois par vague,
     // et seulement si on est avant le spawn (evite de rejouer sur reconnexion en plein combat).
     if (warningRemaining > 0 && this._soundWaveId !== wave.id) {
@@ -2115,8 +2106,6 @@ class MainScene extends Phaser.Scene {
       const delay = warningRemaining + (enemy.spawnOffsetMs || 0);
       this.time.delayedCall(delay, () => this.spawnEnemy(enemy));
     }
-    // Nettoyage du marqueur de bord après le warning
-    this.time.delayedCall(warningRemaining + 600, () => this.hideWaveWarnIcon());
   }
 
   showWaveWarnIcon(wave) {
