@@ -1523,7 +1523,7 @@ class MainScene extends Phaser.Scene {
         // Phase d'approche : on fonce en ligne droite vers la cible
         const dx = cx - sprite.x, dy = cy - sprite.y;
         const dn = distToCenter || 1;
-        const step = ENEMY_SPEED_PX * dtSec;
+        const step = ENEMY_SPEED_PX * (sprite._speedFactor || 1) * dtSec;
         sprite.x += (dx / dn) * step;
         sprite.y += (dy / dn) * step;
         sprite.rotation = Math.atan2(dy, dx) + Math.PI / 2;
@@ -1541,14 +1541,14 @@ class MainScene extends Phaser.Scene {
 
       if (sprite._hpBar) {
         sprite._hpBar.x = sprite.x;
-        sprite._hpBar.y = sprite.y - 38;
+        sprite._hpBar.y = sprite.y + (sprite._hpBarDy || -38);
       }
     }
   }
 
   // Voir player.js : cruise (orbite ondulante) -> pullback -> strafe (passe + tir) -> return.
   updateEnemyEngage(sprite, cx, cy, orbitR, dtSec, now, mode, best) {
-    const step = ENEMY_SPEED_PX * dtSec;
+    const step = ENEMY_SPEED_PX * (sprite._speedFactor || 1) * dtSec;
     const turn = 5 * dtSec;
     const bearing = Math.atan2(sprite.y - cy, sprite.x - cx);
     const distT = Math.hypot(sprite.x - cx, sprite.y - cy) || 1;
@@ -1568,7 +1568,7 @@ class MainScene extends Phaser.Scene {
       if (!sprite._firedThisRun && Math.abs(Phaser.Math.Angle.Wrap(dirToward - sprite.rotation)) < 0.2) {
         this.fireEnemyShot(sprite, cx, cy);
         sprite._firedThisRun = true;
-        this.onEnemyFiredAt(mode, best);
+        this.onEnemyFiredAt(mode, best, sprite);
       }
       if (distT <= Math.max(orbitR - 110, orbitR * 0.5)) sprite._phase = 'peel';
       return;
@@ -1592,9 +1592,10 @@ class MainScene extends Phaser.Scene {
     if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) sprite._phase = 'exit';
   }
   // Cote streameur : autoritatif -> on emet les degats (base / tourelle).
-  onEnemyFiredAt(mode, best) {
-    if (mode === 'base') socket.emit('streamer:base_hit');
-    else if (mode === 'turret' && best && best.id) socket.emit('streamer:turret_hit', { id: best.id });
+  onEnemyFiredAt(mode, best, sprite) {
+    const boss = !!(sprite && sprite._boss);  // le boss inflige plus de degats (facteur serveur)
+    if (mode === 'base') socket.emit('streamer:base_hit', { boss });
+    else if (mode === 'turret' && best && best.id) socket.emit('streamer:turret_hit', { id: best.id, boss });
   }
 
   findNearestEnemyInRange(tx, ty, range) {
@@ -1729,10 +1730,13 @@ class MainScene extends Phaser.Scene {
 
   spawnEnemy(e) {
     const level = 1;
+    const boss = !!e.boss;
     const sprite = this.add.sprite(e.spawnX, e.spawnY, `enemy${level}-fr-000`)
-      .setScale(ENEMY_SCALE).setOrigin(0.5, 0.36).setDepth(8);
+      .setScale(ENEMY_SCALE * (e.scale || 1)).setOrigin(0.5, 0.36).setDepth(boss ? 9 : 8);
     sprite.play(`enemy${level}-thrust`);
     sprite._level = level;
+    sprite._boss = boss;
+    sprite._speedFactor = e.speedFactor || 1;  // boss plus lent
     // HP fourni par le serveur (croit avec les jours de survie de la base) ; 30 par defaut.
     sprite._hp = sprite._hpMax = (typeof e.hp === 'number' && e.hp > 0) ? e.hp : 30;
     sprite._orbitRadius = ENEMY_ORBIT_R_MIN + Math.random() * (ENEMY_ORBIT_R_MAX - ENEMY_ORBIT_R_MIN);
@@ -1741,9 +1745,11 @@ class MainScene extends Phaser.Scene {
     sprite._engaging = false;
     // Oriente d'emblee vers la base (cap par defaut)
     sprite.rotation = Math.atan2(BASE_Y - e.spawnY, BASE_X - e.spawnX) + Math.PI / 2;
-    sprite._hpBar = SharedScene.makeImageHpBar(this, sprite.x, sprite.y - 38, 40,
+    const barW = boss ? 64 : 40, barDy = boss ? -64 : -38;
+    sprite._hpBarDy = barDy;
+    sprite._hpBar = SharedScene.makeImageHpBar(this, sprite.x, sprite.y + barDy, barW,
       { fillTex: 'enemy-hp-fg', frameTex: 'enemy-hp-bg', tint: false, uniform: true, fillDy: -1 });
-    sprite._hpBar.setDepth(8);
+    sprite._hpBar.setDepth(boss ? 10 : 8);
     // Cliquable : verrouille / deverrouille la cible (gere au pointerup pour ne pas gener le pan).
     sprite.setInteractive({ useHandCursor: true });
     sprite.on('pointerdown', (pointer) => {

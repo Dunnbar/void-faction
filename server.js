@@ -45,6 +45,18 @@ const ENEMY_MIN = 3;
 const ENEMY_MAX = 6;
 const ENEMY_LEVELS_AVAILABLE = [1];
 
+// Types de vagues :
+//  - normale  : 1 point de spawn, WAVE_GROUP_SIZE vaisseaux.
+//  - soutenue : SOUTENUE_GROUPS points de spawn simultanes, WAVE_GROUP_SIZE chacun.
+//  - dure     : 1 point de spawn + 1 boss (plus tanky/lent/dangereux). 1 seule/jour, jamais la nuit.
+const WAVE_GROUP_SIZE      = 5;     // vaisseaux par point de spawn
+const SOUTENUE_GROUPS      = 3;     // vague soutenue : 3 spawns en meme temps
+const SOUTENUE_PROBABILITY = 0.25;  // hors vague dure : 25% soutenue, 75% normale
+const BOSS_HP_FACTOR    = 4;        // boss : HP x4 (tanky)
+const BOSS_DMG_FACTOR   = 3;        // boss : degats x3 sur base/tourelle
+const BOSS_SPEED_FACTOR = 0.5;      // boss : 2x plus lent
+const BOSS_SCALE        = 2.6;      // boss : sprite plus gros (cote client)
+
 // Montee en difficulte : les ennemis deviennent plus forts au fil des jours de survie
 // de la base (daysAlive). Tempo lent -> progression douce et plafonnee.
 const ENEMY_HP_BASE        = 30;   // HP d'un ennemi au jour 0
@@ -1312,11 +1324,12 @@ io.on('connection', (socket) => {
 
   // Tir ennemi atteignant la base : seul le client Amiral (streameur) fait autorite.
   // Le serveur applique un degat fixe (le client ne dicte pas la valeur).
-  socket.on('streamer:base_hit', () => {
+  socket.on('streamer:base_hit', (data) => {
     if (!socket.data.amiralId) return;
     const rt = amiralsRuntime.get(socket.data.amiralId);
     if (!rt) return;
-    applyBaseDamage(rt, baseHitDmgForDay(daysAliveFor(rt)));
+    const mult = data && data.boss ? BOSS_DMG_FACTOR : 1;
+    applyBaseDamage(rt, baseHitDmgForDay(daysAliveFor(rt)) * mult);
   });
 
   // Tir ennemi atteignant une tourelle (autorite streameur, comme la base).
@@ -1325,7 +1338,8 @@ io.on('connection', (socket) => {
     const rt = amiralsRuntime.get(socket.data.amiralId);
     if (!rt) return;
     const id = String(data?.id || '');
-    if (id) applyTurretDamage(rt, id, baseHitDmgForDay(daysAliveFor(rt)));
+    const mult = data && data.boss ? BOSS_DMG_FACTOR : 1;
+    if (id) applyTurretDamage(rt, id, baseHitDmgForDay(daysAliveFor(rt)) * mult);
   });
 
   // "Recommencer" : seul l'Amiral relance sa base apres destruction (HP/essence/jour reinitialises).
@@ -1777,47 +1791,83 @@ setInterval(tickActions, ACTION_TICK_MS);
 
 // ============ Vagues (par Amiral en ligne) ============
 
-function rollWaveFor(rt, force = false) {
+// Hors vague dure : 25% soutenue, 75% normale.
+function pickNonHardType() {
+  return Math.random() < SOUTENUE_PROBABILITY ? 'soutenue' : 'normale';
+}
+
+// Construit un groupe de `size` ennemis arrivant d'une direction (baseAngle) vers la cible.
+function buildEnemyGroup(target, baseAngle, size, hp, now, idPrefix) {
+  const cx = WORLD_W / 2, cy = WORLD_H / 2;
+  const r = Math.max(WORLD_W, WORLD_H) * 1.2;
+  const margin = 80;
+  const spread = 1.2; // un peu plus resserre qu'avant : plusieurs groupes peuvent coexister
+  const out = [];
+  let maxTravel = 0;
+  for (let i = 0; i < size; i++) {
+    const a = baseAngle + (Math.random() - 0.5) * spread;
+    const spawnX = Math.max(-margin, Math.min(WORLD_W + margin, cx + Math.cos(a) * r));
+    const spawnY = Math.max(-margin, Math.min(WORLD_H + margin, cy + Math.sin(a) * r));
+    const travelMs = (Math.hypot(target.x - spawnX, target.y - spawnY) / ENEMY_SPEED) * 1000;
+    if (travelMs > maxTravel) maxTravel = travelMs;
+    out.push({
+      id: `${idPrefix}-${i}`, level: 1, hp,
+      spawnX, spawnY, targetX: target.x, targetY: target.y,
+      travelMs: Math.round(travelMs), spawnOffsetMs: Math.floor(Math.random() * 3500)
+    });
+  }
+  return { enemies: out, maxTravel };
+}
+
+function rollWaveFor(rt, force = false, type = null) {
   if (rt.currentWave && rt.currentWave.endsAt > Date.now()) return;
   if (!force && Math.random() > WAVE_PROBABILITY) return;
+  if (!type) type = pickNonHardType();
 
   const day = daysAliveFor(rt);
   const enemyHp = enemyHpForDay(day);
-  const count = ENEMY_MIN + Math.floor(Math.random() * (ENEMY_MAX - ENEMY_MIN + 1)) + enemyCountBonus(day);
-  const baseAngle = Math.random() * Math.PI * 2;
-  const spread = 1.9;
   const asteroids = rt.elements.filter(e => e.type === 'asteroid');
   const target = Math.random() < 0.4 ? rt.elementById['turret-1'] : asteroids[Math.floor(Math.random() * asteroids.length)];
-  const cx = WORLD_W / 2;
-  const cy = WORLD_H / 2;
-  const r = Math.max(WORLD_W, WORLD_H) * 1.2;
-  const margin = 80;
   const now = Date.now();
   const spawnAt = now + WAVE_WARNING_MS;
+  const baseAngle = Math.random() * Math.PI * 2;
   const enemies = [];
   let maxTravel = 0;
-  for (let i = 0; i < count; i++) {
-    const a = baseAngle + (Math.random() - 0.5) * spread;
-    const rawX = cx + Math.cos(a) * r;
-    const rawY = cy + Math.sin(a) * r;
-    const spawnX = Math.max(-margin, Math.min(WORLD_W + margin, rawX));
-    const spawnY = Math.max(-margin, Math.min(WORLD_H + margin, rawY));
-    const dist = Math.hypot(target.x - spawnX, target.y - spawnY);
-    const travelMs = (dist / ENEMY_SPEED) * 1000;
-    if (travelMs > maxTravel) maxTravel = travelMs;
-    const level = ENEMY_LEVELS_AVAILABLE[Math.floor(Math.random() * ENEMY_LEVELS_AVAILABLE.length)];
-    enemies.push({
-      id: `e-${rt.id}-${now}-${i}`,
-      level,
-      hp: enemyHp, // HP croissant avec les jours de survie de la base
-      spawnX, spawnY,
-      targetX: target.x, targetY: target.y,
-      travelMs: Math.round(travelMs),
-      spawnOffsetMs: Math.floor(Math.random() * 3500)
-    });
+
+  if (type === 'soutenue') {
+    // 3 points de spawn repartis autour, WAVE_GROUP_SIZE vaisseaux chacun.
+    for (let g = 0; g < SOUTENUE_GROUPS; g++) {
+      const ang = baseAngle + g * (Math.PI * 2 / SOUTENUE_GROUPS);
+      const grp = buildEnemyGroup(target, ang, WAVE_GROUP_SIZE, enemyHp, now, `e-${rt.id}-${now}-g${g}`);
+      enemies.push(...grp.enemies);
+      if (grp.maxTravel > maxTravel) maxTravel = grp.maxTravel;
+    }
+  } else {
+    // normale et dure : 1 point de spawn, WAVE_GROUP_SIZE vaisseaux.
+    const grp = buildEnemyGroup(target, baseAngle, WAVE_GROUP_SIZE, enemyHp, now, `e-${rt.id}-${now}`);
+    enemies.push(...grp.enemies);
+    maxTravel = grp.maxTravel;
+    if (type === 'dure') {
+      // + 1 boss : plus tanky, plus lent, plus de degats, plus gros (rendu cote client via les flags).
+      const cx = WORLD_W / 2, cy = WORLD_H / 2, r = Math.max(WORLD_W, WORLD_H) * 1.2, margin = 80;
+      const a = baseAngle + (Math.random() - 0.5) * 0.4;
+      const spawnX = Math.max(-margin, Math.min(WORLD_W + margin, cx + Math.cos(a) * r));
+      const spawnY = Math.max(-margin, Math.min(WORLD_H + margin, cy + Math.sin(a) * r));
+      const travelMs = (Math.hypot(target.x - spawnX, target.y - spawnY) / (ENEMY_SPEED * BOSS_SPEED_FACTOR)) * 1000;
+      if (travelMs > maxTravel) maxTravel = travelMs;
+      enemies.push({
+        id: `e-${rt.id}-${now}-boss`, level: 1, boss: true,
+        hp: Math.round(enemyHp * BOSS_HP_FACTOR),
+        scale: BOSS_SCALE, speedFactor: BOSS_SPEED_FACTOR, dmgFactor: BOSS_DMG_FACTOR,
+        spawnX, spawnY, targetX: target.x, targetY: target.y,
+        travelMs: Math.round(travelMs), spawnOffsetMs: 0
+      });
+    }
   }
+
   rt.currentWave = {
     id: `w-${rt.id}-${now}`,
+    type,
     startedAt: now,
     warningEndsAt: spawnAt,
     spawnAt,
@@ -1828,8 +1878,13 @@ function rollWaveFor(rt, force = false) {
     endsAt: spawnAt + Math.ceil(maxTravel) + 120000
   };
   io.to(amiralRoom(rt.id)).emit('wave:incoming', rt.currentWave);
-  console.log(`[amiral ${rt.username}] wave ${rt.currentWave.id} — ${count} ennemis vers ${target.id}`);
-  logJournal(rt, 'wave', `Vague de ${count} ennemis détectée`);
+  console.log(`[amiral ${rt.username}] wave ${rt.currentWave.id} (${type}) — ${enemies.length} ennemis vers ${target.id}`);
+  const journalMsg = type === 'dure'
+    ? `Vague dure — ${enemies.length} ennemis dont un vaisseau lourd !`
+    : type === 'soutenue'
+      ? `Vague soutenue — ${enemies.length} ennemis sur plusieurs fronts`
+      : `Vague de ${enemies.length} ennemis détectée`;
+  logJournal(rt, 'wave', journalMsg);
 
   // Fin de vague : a l'echeance, on tranche le sort de la vague.
   //  - Amiral EN LIGNE  : le combat a ete simule par son client -> base debout = repoussee.
@@ -1922,7 +1977,7 @@ function resolveWaveOffline(rt, wave) {
 // Nuit : 1 seule vague entre 2h et 6h, spawn aleatoire dans la fenetre de 4h
 // On peut surclasser la TZ via env var GAME_TZ
 const GAME_TZ = process.env.GAME_TZ || 'Europe/Paris';
-const DAY_WAVE_SLOT_HOURS = [9, 12, 15, 18, 21];       // chaque slot ouvre une fenetre [h, h+1]
+const DAY_WAVE_SLOT_HOURS = [9, 11, 13, 15, 17, 19, 21]; // creneaux toutes les 2h (fenetre de 2h chacun)
 const NIGHT_WAVE_WINDOW   = { startHour: 2, endHour: 6 };
 
 const tzPartsFmt = new Intl.DateTimeFormat('en-CA', {
@@ -1959,9 +2014,13 @@ function ensureWaveSchedule(rt, t) {
   const nightScheduled = nightStartMin + Math.floor(Math.random() * (nightEndMin - nightStartMin));
   rt.waveSchedule.set('night', { scheduled: nightScheduled, slotEnd: nightEndMin });
 
+  // Une seule vague DURE par jour, sur un creneau de JOUR choisi au hasard (jamais la nuit).
+  const hardHour = DAY_WAVE_SLOT_HOURS[Math.floor(Math.random() * DAY_WAVE_SLOT_HOURS.length)];
+  rt.hardWaveSlot = `day${hardHour}`;
+
   const fmtMin = m => `${Math.floor(m/60)}h${String(m%60).padStart(2,'0')}`;
   const summary = [...rt.waveSchedule.entries()].map(([k, v]) => `${k}@${fmtMin(v.scheduled)}`).join(', ');
-  console.log(`[amiral ${rt.username}] planning vagues ${t.dateKey} (${GAME_TZ}) : ${summary}`);
+  console.log(`[amiral ${rt.username}] planning vagues ${t.dateKey} (${GAME_TZ}) : ${summary} | dure=${rt.hardWaveSlot}`);
 }
 
 function tickWaveScheduler() {
@@ -1974,7 +2033,9 @@ function tickWaveScheduler() {
       if (rt.waveFiredSlots.has(slotKey)) continue;
       if (t.minuteOfDay >= scheduled && t.minuteOfDay < slotEnd) {
         rt.waveFiredSlots.add(slotKey);
-        rollWaveFor(rt, true);
+        // Creneau dure du jour -> vague dure ; sinon 25% soutenue / 75% normale.
+        const type = (slotKey === rt.hardWaveSlot) ? 'dure' : pickNonHardType();
+        rollWaveFor(rt, true, type);
       } else if (t.minuteOfDay >= slotEnd) {
         // Slot dépassé (server eteint pendant la fenetre, ou Amiral pas en ligne au bon moment)
         // → on marque comme "fired" pour ne pas declencher en retard ; il sera reschedule demain

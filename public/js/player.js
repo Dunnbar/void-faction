@@ -1425,7 +1425,7 @@ class MainScene extends Phaser.Scene {
         // Phase d'approche : on fonce en ligne droite vers la cible
         const dx = cx - sprite.x, dy = cy - sprite.y;
         const dn = distToCenter || 1;
-        const step = ENEMY_SPEED_PX * dtSec;
+        const step = ENEMY_SPEED_PX * (sprite._speedFactor || 1) * dtSec;
         sprite.x += (dx / dn) * step;
         sprite.y += (dy / dn) * step;
         sprite.rotation = Math.atan2(dy, dx) + Math.PI / 2;
@@ -1443,7 +1443,7 @@ class MainScene extends Phaser.Scene {
 
       if (sprite._hpBar) {
         sprite._hpBar.x = sprite.x;
-        sprite._hpBar.y = sprite.y - 38;
+        sprite._hpBar.y = sprite.y + (sprite._hpBarDy || -38);
       }
     }
   }
@@ -1451,7 +1451,7 @@ class MainScene extends Phaser.Scene {
   // Machine d'etats d'attaque d'un ennemi engage autour de sa cible (cx,cy) :
   // cruise (orbite ondulante) -> pullback (recul) -> strafe (passe droite + tir) -> return.
   updateEnemyEngage(sprite, cx, cy, orbitR, dtSec, now, mode, best) {
-    const step = ENEMY_SPEED_PX * dtSec;
+    const step = ENEMY_SPEED_PX * (sprite._speedFactor || 1) * dtSec;
     const turn = 5 * dtSec;
     const bearing = Math.atan2(sprite.y - cy, sprite.x - cx);            // direction "vers l'exterieur"
     const distT = Math.hypot(sprite.x - cx, sprite.y - cy) || 1;
@@ -2122,12 +2122,15 @@ class MainScene extends Phaser.Scene {
 
   spawnEnemy(e) {
     const level = 1;
+    const boss = !!e.boss;
     const sprite = this.add.sprite(e.spawnX, e.spawnY, `enemy${level}-fr-000`)
-      .setScale(ENEMY_SCALE)
+      .setScale(ENEMY_SCALE * (e.scale || 1))
       .setOrigin(0.5, 0.36)
-      .setDepth(8);
+      .setDepth(boss ? 9 : 8);
     sprite.play(`enemy${level}-thrust`);
     sprite._level = level;
+    sprite._boss = boss;
+    sprite._speedFactor = e.speedFactor || 1;  // boss plus lent
     // HP fourni par le serveur (croit avec les jours de survie de la base) ; 30 par defaut.
     sprite._hp = sprite._hpMax = (typeof e.hp === 'number' && e.hp > 0) ? e.hp : 30;
     sprite._orbitRadius = ENEMY_ORBIT_R_MIN + Math.random() * (ENEMY_ORBIT_R_MAX - ENEMY_ORBIT_R_MIN);
@@ -2136,9 +2139,11 @@ class MainScene extends Phaser.Scene {
     sprite._engaging = false;
     // Oriente d'emblee vers la base (cap par defaut)
     sprite.rotation = Math.atan2(BASE_Y - e.spawnY, BASE_X - e.spawnX) + Math.PI / 2;
-    sprite._hpBar = SharedScene.makeImageHpBar(this, sprite.x, sprite.y - 38, 40,
+    const barW = boss ? 64 : 40, barDy = boss ? -64 : -38;
+    sprite._hpBarDy = barDy;
+    sprite._hpBar = SharedScene.makeImageHpBar(this, sprite.x, sprite.y + barDy, barW,
       { fillTex: 'enemy-hp-fg', frameTex: 'enemy-hp-bg', tint: false, uniform: true, fillDy: -1 });
-    sprite._hpBar.setDepth(8);
+    sprite._hpBar.setDepth(boss ? 10 : 8);
     this.enemies.add(sprite);
   }
 
