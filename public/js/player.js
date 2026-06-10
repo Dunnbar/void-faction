@@ -805,6 +805,16 @@ function connectSocket() {
     if (scene && scene.scene.isActive()) scene.setShipState(data);
   });
 
+  // Tir manuel du vaisseau (relaye par le streameur) : on affiche le projectile.
+  socket.on('ship:fire', (data) => {
+    if (!data) return;
+    const scene = game.scene.getScene('main');
+    if (!scene || !scene.scene.isActive() || typeof scene.spawnBullet !== 'function') return;
+    const state = elementStates.get('ship-1') || {};
+    const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
+    scene.spawnBullet(data.x, data.y, data.angle, 'bullet-ship', { scale: 0.7, speed: 900, hitEnemies: true, dmg });
+  });
+
   // Mise a jour des niveaux (gain d'XP a une vague)
   socket.on('levels', (data) => {
     if (data && data.levels) {

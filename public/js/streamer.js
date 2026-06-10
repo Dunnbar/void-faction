@@ -854,6 +854,9 @@ class MainScene extends Phaser.Scene {
       const wasPanning = this._panState.moved > DRAG_THRESHOLD_PX;
       if (!wasPanning && this._panState.pendingMenu) {
         openActionMenu(this._panState.pendingMenu.id, this._panState.pendingMenu.event);
+      } else if (!wasPanning) {
+        // Clic gauche dans le vide = tir du vaisseau (vers le curseur).
+        this.fireShip(pointer);
       }
       this._panState.active = false;
       this._panState.moved = 0;
@@ -1286,6 +1289,19 @@ class MainScene extends Phaser.Scene {
     this.bullets.push(b);
     return b;
   }
+  // Tir manuel du vaisseau (clic gauche) vers le curseur : bullet_blaster_small1.
+  // Diffuse aux viewers via 'ship:fire'. Leger cooldown anti-spam.
+  fireShip(pointer) {
+    if (!this.ship || !this.ship.active) return;
+    const now = this.time.now;
+    if (this.ship._lastShotAt && now - this.ship._lastShotAt < 150) return;
+    this.ship._lastShotAt = now;
+    const a = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, pointer.worldX, pointer.worldY);
+    const state = elementStates.get('ship-1') || {};
+    const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
+    this.spawnBullet(this.ship.x, this.ship.y, a, 'bullet-ship', { scale: 0.7, speed: 900, hitEnemies: true, dmg });
+    if (typeof socket !== 'undefined' && socket) socket.emit('ship:fire', { x: this.ship.x, y: this.ship.y, angle: a });
+  }
   updateBullets(delta) {
     if (!this.bullets || !this.bullets.length) return;
     const dt = (delta || 16) / 1000;
@@ -1683,11 +1699,11 @@ class MainScene extends Phaser.Scene {
     }
     this.thrust.emitting = moving;
 
-    // Orientation : rotation PROGRESSIVE vers le cap (pas de retournement brusque au clic).
-    // On fige l'orientation a l'approche (< 45px) pour eviter le demi-tour parasite a l'arrivee.
-    if (this.destination && distToDest > 45) {
-      const targetRot = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.destination.x, this.destination.y) + SHIP_SPRITE_OFFSET;
-      const TURN_SPEED = 5.5; // rad/s
+    // Orientation : le vaisseau pointe vers le curseur (visee souris), rotation progressive.
+    {
+      const p = this.input.activePointer;
+      const targetRot = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, p.worldX, p.worldY) + SHIP_SPRITE_OFFSET;
+      const TURN_SPEED = 9; // rad/s
       const maxStep = TURN_SPEED * ((delta || 16) / 1000);
       this.ship.rotation = Phaser.Math.Angle.RotateTo(this.ship.rotation, targetRot, maxStep);
     }

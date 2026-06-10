@@ -1187,6 +1187,16 @@ io.on('connection', (socket) => {
     }
   });
 
+  // Tir manuel du vaisseau (clic gauche du streameur) : on relaie aux viewers de la
+  // base pour qu'ils affichent le projectile (et l'appliquent a leur copie locale).
+  socket.on('ship:fire', (data) => {
+    if (!socket.data.amiralId) return;
+    const rt = amiralsRuntime.get(socket.data.amiralId);
+    if (!rt) return;
+    if (!data || typeof data.x !== 'number' || typeof data.y !== 'number' || typeof data.angle !== 'number') return;
+    socket.broadcast.to(amiralRoom(rt.id)).emit('ship:fire', { x: data.x, y: data.y, angle: data.angle });
+  });
+
   // Tir ennemi atteignant la base : seul le client Amiral (streameur) fait autorite.
   // Le serveur applique un degat fixe (le client ne dicte pas la valeur).
   socket.on('streamer:base_hit', () => {
