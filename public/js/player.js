@@ -1296,27 +1296,15 @@ class MainScene extends Phaser.Scene {
         sprite.y += (dy / dn) * step;
         sprite.rotation = Math.atan2(dy, dx) + Math.PI / 2;
       } else {
-        // Phase d'orbite (a l'entree, on cale l'angle sur la position d'approche courante)
+        // Engagement : croisiere orbitale (avec variation) + passes d'attaque en ligne droite.
         if (!sprite._engaging) {
           sprite._engaging = true;
           sprite._orbitAngle = Math.atan2(sprite.y - cy, sprite.x - cx);
+          sprite._phase = 'cruise';
+          if (sprite._wobblePhase == null) sprite._wobblePhase = Math.random() * Math.PI * 2;
         }
-        sprite._orbitAngle += sprite._orbitSpeed * dtSec;
-        sprite.x = cx + Math.cos(sprite._orbitAngle) * orbitR;
-        sprite.y = cy + Math.sin(sprite._orbitAngle) * orbitR;
         if (!sprite._lastFireAt) sprite._lastFireAt = now - Math.random() * ENEMY_FIRE_MS;
-        // L'ennemi tire DROIT : il pivote DOUCEMENT vers la cible quand son tir est pret
-        // puis tire une fois aligne ; sinon il revient (doucement) sur son cap orbital.
-        // Toutes les rotations passent par RotateTo -> plus de retournement instantane.
-        const fireReady = (now - sprite._lastFireAt) >= ENEMY_FIRE_MS;
-        const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.PI / 2;
-        let desiredRot = tangent;
-        if (fireReady) desiredRot = Math.atan2(cy - sprite.y, cx - sprite.x) + Math.PI / 2;
-        sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, desiredRot, 5 * dtSec);
-        if (fireReady && Math.abs(Phaser.Math.Angle.Wrap(desiredRot - sprite.rotation)) < 0.12) {
-          this.fireEnemyShot(sprite, cx, cy); // aligne -> tir droit vers la cible
-          sprite._lastFireAt = now;
-        }
+        this.updateEnemyEngage(sprite, cx, cy, orbitR, dtSec, now, mode, best);
       }
 
       if (sprite._hpBar) {
@@ -1325,6 +1313,63 @@ class MainScene extends Phaser.Scene {
       }
     }
   }
+
+  // Machine d'etats d'attaque d'un ennemi engage autour de sa cible (cx,cy) :
+  // cruise (orbite ondulante) -> pullback (recul) -> strafe (passe droite + tir) -> return.
+  updateEnemyEngage(sprite, cx, cy, orbitR, dtSec, now, mode, best) {
+    const step = ENEMY_SPEED_PX * dtSec;
+    const turn = 5 * dtSec;
+    const faceTarget = () => Math.atan2(cy - sprite.y, cx - sprite.x) + Math.PI / 2;
+
+    if (sprite._phase === 'pullback') {
+      const launchDist = orbitR + 70;
+      const lx = cx + Math.cos(sprite._runTheta) * launchDist;
+      const ly = cy + Math.sin(sprite._runTheta) * launchDist;
+      const dx = lx - sprite.x, dy = ly - sprite.y, dn = Math.hypot(dx, dy) || 1;
+      sprite.x += (dx / dn) * step * 1.4; sprite.y += (dy / dn) * step * 1.4;
+      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, faceTarget(), turn * 1.6);
+      if (dn < 10) { sprite._phase = 'strafe'; sprite._firedThisRun = false; }
+      return;
+    }
+    if (sprite._phase === 'strafe') {
+      const dx = cx - sprite.x, dy = cy - sprite.y, dn = Math.hypot(dx, dy) || 1;
+      const aimRot = Math.atan2(dy, dx) + Math.PI / 2;
+      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, aimRot, turn * 2.2);
+      sprite.x += (dx / dn) * step * 2.6; sprite.y += (dy / dn) * step * 2.6;
+      if (!sprite._firedThisRun && Math.abs(Phaser.Math.Angle.Wrap(aimRot - sprite.rotation)) < 0.2) {
+        this.fireEnemyShot(sprite, cx, cy);
+        sprite._firedThisRun = true;
+        this.onEnemyFiredAt(mode, best);
+      }
+      const strikeDist = Math.max(orbitR - 110, orbitR * 0.5);
+      if (dn <= strikeDist) { sprite._phase = 'return'; }
+      return;
+    }
+    if (sprite._phase === 'return') {
+      const dx = sprite.x - cx, dy = sprite.y - cy, dn = Math.hypot(dx, dy) || 1;
+      sprite.x += (dx / dn) * step * 1.4; sprite.y += (dy / dn) * step * 1.4;
+      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, Math.atan2(dy, dx) + Math.PI / 2, turn);
+      if (dn >= orbitR) {
+        sprite._phase = 'cruise';
+        sprite._lastFireAt = now;
+        sprite._orbitAngle = Math.atan2(sprite.y - cy, sprite.x - cx);
+      }
+      return;
+    }
+    // cruise : orbite avec rayon qui ondule (trajectoire non parfaitement circulaire)
+    sprite._orbitAngle += sprite._orbitSpeed * dtSec;
+    const r = orbitR + Math.sin(now * 0.0011 + sprite._wobblePhase) * (orbitR * 0.18);
+    sprite.x = cx + Math.cos(sprite._orbitAngle) * r;
+    sprite.y = cy + Math.sin(sprite._orbitAngle) * r;
+    const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.PI / 2;
+    sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, tangent, turn);
+    if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) {
+      sprite._phase = 'pullback';
+      sprite._runTheta = Math.atan2(sprite.y - cy, sprite.x - cx);
+    }
+  }
+  // Hook au tir d'un ennemi : cote viewer, rien a emettre (degats geres par le streameur).
+  onEnemyFiredAt(/* mode, best */) {}
 
   updateTurretTargeting() {
     if (!this.elementSprites || !this.enemies) return;
