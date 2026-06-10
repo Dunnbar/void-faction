@@ -367,6 +367,11 @@ db.exec(`
   if (!cols.find(c => c.name === 'base_born_at')) {
     db.exec("ALTER TABLE amirals ADD COLUMN base_born_at INTEGER");
   }
+  // Ressources de faction recoltees (minage) : persistent entre redemarrages.
+  if (!cols.find(c => c.name === 'res_materiaux')) {
+    db.exec("ALTER TABLE amirals ADD COLUMN res_materiaux INTEGER NOT NULL DEFAULT 0");
+    db.exec("ALTER TABLE amirals ADD COLUMN res_radius INTEGER NOT NULL DEFAULT 0");
+  }
 }
 // XP par categorie (niveaux viewer) sur user_progress
 {
@@ -385,10 +390,11 @@ const stmtSetState           = db.prepare('UPDATE state SET value = ? WHERE key 
 
 const stmtInsertAmiral       = db.prepare('INSERT INTO amirals (username, password_hash, created_at, grid_x, grid_y) VALUES (?, ?, ?, ?, ?)');
 const stmtGetAmiralByName    = db.prepare('SELECT id, username, password_hash, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at FROM amirals WHERE username = ?');
-const stmtGetAmiralById      = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at FROM amirals WHERE id = ?');
-const stmtAllAmirals         = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at FROM amirals');
+const stmtGetAmiralById      = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at, res_materiaux, res_radius FROM amirals WHERE id = ?');
+const stmtAllAmirals         = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at, res_materiaux, res_radius FROM amirals');
 const stmtSetAmiralShip      = db.prepare('UPDATE amirals SET ship_x = ?, ship_y = ?, ship_rot = ? WHERE id = ?');
 const stmtSetAmiralBornAt    = db.prepare('UPDATE amirals SET base_born_at = ? WHERE id = ?');
+const stmtSetAmiralResources = db.prepare('UPDATE amirals SET res_materiaux = ?, res_radius = ? WHERE id = ?');
 const stmtAmiralGridUsed     = db.prepare('SELECT 1 AS x FROM amirals WHERE grid_x = ? AND grid_y = ?');
 const stmtInsertAmiralSess   = db.prepare('INSERT INTO amiral_sessions (token, amiral_id, created_at) VALUES (?, ?, ?)');
 const stmtGetAmiralSess      = db.prepare('SELECT amiral_id FROM amiral_sessions WHERE token = ?');
@@ -480,6 +486,8 @@ function persistElementStates(rt) {
     if (!s) continue;
     try { stmtUpsertElementState.run(rt.id, el.id, s.hp, el.type === 'base' ? s.essence : null, (el.type === 'turret' && s.dead) ? 1 : 0); } catch (e) {}
   }
+  // Ressources de faction (minage) : persistees ici aussi, meme cadence que HP/essence.
+  try { stmtSetAmiralResources.run(Math.round(rt.factionResources.materiaux || 0), Math.round(rt.factionResources.radius || 0), rt.id); } catch (e) {}
 }
 
 // Amiral progression
@@ -549,7 +557,8 @@ function getOrCreateAmiralRuntime(amiral) {
     elements,
     elementById: Object.fromEntries(elements.map(e => [e.id, e])),
     elementStates,
-    factionResources: { materiaux: 0, radius: 0 },
+    // Ressources de faction restaurees depuis la DB (persistent entre redemarrages).
+    factionResources: { materiaux: amiral.res_materiaux || 0, radius: amiral.res_radius || 0 },
     currentWave: null,
     asteroidGroups: makeFreshAsteroidGroups()
   };
