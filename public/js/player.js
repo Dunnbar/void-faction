@@ -171,8 +171,10 @@ if (soundBtn) {
   });
 }
 const actionChip = document.getElementById('actionChip');   // pastille "action en cours" (barre de ressources)
-const actionGlyph = document.getElementById('actionGlyph');  // icone teintee par categorie
-const actionTip = document.getElementById('actionTip');      // infobulle au survol
+const actionGlyph = document.getElementById('actionGlyph');  // cercle teinte par categorie
+const actionIco = document.getElementById('actionIco');      // image de l'icone d'action
+const actionTime = document.getElementById('actionTime');    // temps restant sous l'icone
+const actionTip = document.getElementById('actionTip');      // infobulle au survol = nom de l'action
 const deactivateBtn = document.getElementById('deactivateBtn');
 const barEls = {
   PUISSANCE:  { val: document.getElementById('barPuissanceVal'),  fill: document.getElementById('barPuissanceFill') },
@@ -392,14 +394,13 @@ function showLevelUpToast(category, lvl) {
 }
 
 function renderActiveAction() {
-  // Pastille compacte : visible seulement quand une action tourne ; l'icone est teintee
-  // par categorie, le detail ("Action en cours : ...") s'affiche au survol via l'infobulle.
+  // Pastille compacte : visible seulement quand une action tourne. On affiche l'icone
+  // de l'action (minage, reparation, ...) ; au survol -> juste le nom ; dessous -> temps restant.
   if (!authenticated || !activeAction) {
     actionChip.classList.add('idle');
     actionGlyph.className = 'action-glyph';
-    actionChip.dataset.label = '';
-    actionChip.dataset.cat = '';
-    actionTip.textContent = authenticated ? 'Aucune action en cours.' : 'Connecte-toi pour agir.';
+    if (actionTime) actionTime.textContent = '';
+    if (actionTip) actionTip.textContent = '';
     return;
   }
   actionChip.classList.remove('idle');
@@ -407,22 +408,21 @@ function renderActiveAction() {
   const actionDef = el?.actions.find(a => a.id === activeAction.action_id);
   const cat = activeAction.category;
   const label = actionDef ? actionDef.label : activeAction.action_id;
-  const target = el ? el.label : activeAction.element_id;
   actionGlyph.className = 'action-glyph ' + cat;
-  actionChip.dataset.label = `${label} sur ${target}`;
-  actionChip.dataset.cat = cat;
+  // Icone de l'action (reconstruction = icone reparation, comme dans le menu)
+  const icon = ACTION_ICONS[activeAction.action_id];
+  if (actionIco) {
+    if (icon) { actionIco.src = icon; actionIco.style.display = ''; }
+    else actionIco.style.display = 'none';
+  }
+  if (actionTip) actionTip.textContent = label;   // hover = nom seul
   refreshActiveActionTimer();
 }
 
 function refreshActiveActionTimer() {
-  if (!activeAction) return;
-  const cat = actionChip.dataset.cat || '';
-  const label = actionChip.dataset.label || '';
+  if (!activeAction || !actionTime) return;
   const remaining = (activeAction.started_at + actionDurationMs) - Date.now();
-  const time = remaining > 0 ? `⏳ ${formatDuration(remaining)} restant` : 'Expiration imminente…';
-  actionTip.innerHTML = `<strong>Action en cours</strong><br>`
-    + `<span class="cat-tag ${cat}">${cat}</span>${escapeHtml(label)}<br>`
-    + `<span class="tip-timer">${time}</span>`;
+  actionTime.textContent = remaining > 0 ? formatDuration(remaining) : '0s';
 }
 
 function renderHistory(_freshTimestamp) {

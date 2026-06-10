@@ -54,19 +54,21 @@
     #resPanel .res-item.mat strong { color: #ffd9a0; }
     #resPanel .res-item.rad strong { color: #9ff0db; }
 
-    /* Pastille "action en cours" : juste une icone, alignee a droite des ressources */
-    #resPanel .action-chip { position: relative; pointer-events: auto; }
+    /* Pastille "action en cours" : icone de l'action + temps restant dessous */
+    #resPanel .action-chip { position: relative; pointer-events: auto; flex-direction: column; gap: 2px; align-items: center; }
     #resPanel .action-chip.idle { display: none; }
     .action-glyph {
       display: inline-flex; align-items: center; justify-content: center;
-      width: 28px; height: 28px; border-radius: 50%;
-      background: rgba(0,20,40,0.85); border: 1px solid var(--c-frame); color: var(--c-frame);
+      width: 30px; height: 30px; border-radius: 50%; overflow: hidden;
+      background: rgba(0,20,40,0.85); border: 1px solid var(--c-frame);
       box-shadow: 0 0 8px rgba(74,175,255,0.4); animation: actionPulse 2.4s ease-in-out infinite;
     }
-    .action-glyph .icon { width: 16px; height: 16px; }
-    .action-glyph.PUISSANCE  { border-color: var(--c-puissance);  color: var(--c-puissance); }
-    .action-glyph.DEFENSIF   { border-color: var(--c-defensif);   color: var(--c-defensif); }
-    .action-glyph.UTILITAIRE { border-color: var(--c-utilitaire); color: var(--c-utilitaire); }
+    .action-glyph img { width: 22px; height: 22px; object-fit: contain; }
+    .action-glyph.PUISSANCE  { border-color: var(--c-puissance); }
+    .action-glyph.DEFENSIF   { border-color: var(--c-defensif); }
+    .action-glyph.UTILITAIRE { border-color: var(--c-utilitaire); }
+    .action-time { font-family: 'Consolas', monospace; font-size: 10px; line-height: 1; color: #8fb4d8; font-variant-numeric: tabular-nums; }
+    #actionTip { width: auto; white-space: nowrap; }
     /* Croix de stop : cachee, apparait au survol de la pastille */
     .action-chip .action-stop {
       position: absolute; top: -7px; right: -7px;
@@ -695,16 +697,17 @@
   <div id="resPanel">
     <span class="res-item mat hint" tabindex="0">
       <img class="ico-img" src="/assets/PNG/CrystalIcon.png" alt=""><strong id="statMateriaux">0</strong>
-      <span class="hint-pop"><strong>Matériaux</strong><br>Ressource de faction récoltée en minant le gisement de matériaux (astéroïdes au sud-est). Réserve commune de la faction pour ses constructions et améliorations.</span>
+      <span class="hint-pop"><strong>Minéraux</strong><br>Ressource récoltée en minant des astéroïdes. Sert à remplir la base d'essence.</span>
     </span>
     <span class="res-item rad hint" tabindex="0">
       <img class="ico-img" src="/assets/PNG/BateryIcon2.png" alt=""><strong id="statRadius">0</strong>
-      <span class="hint-pop"><strong>Radius</strong><br>Ressource de faction récoltée en minant le gisement de radius (astéroïdes au nord-ouest). Réserve commune de la faction pour ses constructions et améliorations.</span>
+      <span class="hint-pop"><strong>Radius</strong><br>Ressource récoltée en minant des astéroïdes. Sert à remplir la base d'essence.</span>
     </span>
     <span class="res-item action-chip idle hint" id="actionChip" tabindex="0">
-      <span class="action-glyph" id="actionGlyph"><svg class="icon"><use href="#ic-power"/></svg></span>
+      <span class="action-glyph" id="actionGlyph"><img id="actionIco" alt=""></span>
       <button class="action-stop" id="deactivateBtn" type="button" title="Stopper l'action">×</button>
-      <span class="hint-pop" id="actionTip">Aucune action en cours.</span>
+      <span class="action-time" id="actionTime"></span>
+      <span class="hint-pop" id="actionTip"></span>
     </span>
   </div>
 
