@@ -1056,6 +1056,10 @@ class MainScene extends Phaser.Scene {
     this.load.spritesheet('turret-explosion', '/assets/Explosions/PNG/explosion.png', { frameWidth: 140, frameHeight: 140 });
     this.load.image('turret-alarm', '/assets/HUD/PNG/points_powerup_lifes_05_life_indicator_alarm.png');
     this.load.image('turret-life', '/assets/HUD/PNG/points_powerup_lifes_05_life_indicator.png');
+    // Projectiles : vaisseau (small1), tourelles (big1), ennemis (short6)
+    this.load.image('bullet-ship', '/assets/Weapons/PNG/bullet_blaster_small1.png');
+    this.load.image('bullet-turret', '/assets/Weapons/PNG/bullet_blaster_big1.png');
+    this.load.image('bullet-enemy', '/assets/Weapons/PNG/bullet_short6.png');
   }
 
   create() {
@@ -1136,6 +1140,7 @@ class MainScene extends Phaser.Scene {
 
     // Conteneur pour les ennemis
     this.enemies = new Set();
+    this.bullets = [];
     this.waveWarnIcon = null;
 
     // Zoom molette (vers le curseur), borne a la case courante.
@@ -1208,8 +1213,8 @@ class MainScene extends Phaser.Scene {
       }
     }
     this.updateTurretTargeting();
-    this.updateShipTargeting();
     this.updateEnemies(delta);
+    this.updateBullets(delta);
     // Le viewer suit la case du streameur, toujours centree (comme le streameur sur la sienne).
     if (this.ship) SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
     if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship ? this.ship.x : null, this.ship ? this.ship.y : null);
@@ -1351,33 +1356,39 @@ class MainScene extends Phaser.Scene {
     }
   }
 
+  // Tir tourelle : projectile bullet_blaster_big1 vers l'ennemi (tracer ; les degats
+  // sont appliques par updateTurretTargeting).
   fireTurretLaser(turretSprite, enemySprite) {
-    const line = this.add.graphics().setDepth(9);
-    line.lineStyle(3, 0x4afff8, 0.95);
-    line.beginPath();
-    line.moveTo(turretSprite.x, turretSprite.y);
-    line.lineTo(enemySprite.x, enemySprite.y);
-    line.strokePath();
-    this.tweens.add({ targets: line, alpha: 0, duration: 200, onComplete: () => line.destroy() });
+    const a = Phaser.Math.Angle.Between(turretSprite.x, turretSprite.y, enemySprite.x, enemySprite.y);
+    this.spawnBullet(turretSprite.x, turretSprite.y, a, 'bullet-turret', { scale: 0.6, speed: 820 });
   }
 
-  // Vaisseau : meme principe que les tourelles mais source mobile (this.ship).
-  // Stats derivees du nombre d'acteurs actifs sur 'tir'/'visee'. Independant de l'essence base.
-  updateShipTargeting() {
-    if (!this.ship || !this.ship.active || !this.enemies) return;
-    const state = elementStates.get('ship-1');
-    if (!state) return;
-    const range = turretRangePx(state);
-    const target = this.findNearestEnemyInRange(this.ship.x, this.ship.y, range);
-    if (!target) return;
-    const now = Date.now();
-    if (!this.ship._lastShotAt) this.ship._lastShotAt = 0;
-    const fireDelay = Math.max(1000, 2000 - (state.puissance || 0) * 30);
-    if (now - this.ship._lastShotAt >= fireDelay) {
-      const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
-      this.fireTurretLaser(this.ship, target);
-      this.damageEnemy(target, dmg);
-      this.ship._lastShotAt = now;
+  // ===== Projectiles =====
+  spawnBullet(x, y, angle, texKey, opts) {
+    if (!this.bullets) this.bullets = [];
+    opts = opts || {};
+    if (!this.textures.exists(texKey)) return null;
+    const b = this.add.image(x, y, texKey).setDepth(9).setRotation(angle + Math.PI / 2).setScale(opts.scale || 0.7);
+    const speed = opts.speed || 700;
+    b._vx = Math.cos(angle) * speed; b._vy = Math.sin(angle) * speed;
+    b._life = opts.life || 1400;
+    b._hitEnemies = !!opts.hitEnemies; b._dmg = opts.dmg || 0;
+    this.bullets.push(b);
+    return b;
+  }
+  updateBullets(delta) {
+    if (!this.bullets || !this.bullets.length) return;
+    const dt = (delta || 16) / 1000;
+    for (let i = this.bullets.length - 1; i >= 0; i--) {
+      const b = this.bullets[i];
+      b.x += b._vx * dt; b.y += b._vy * dt; b._life -= (delta || 16);
+      let hit = false;
+      if (b._hitEnemies && this.enemies) {
+        for (const e of this.enemies) {
+          if (e.active && Phaser.Math.Distance.Between(b.x, b.y, e.x, e.y) < 28) { this.damageEnemy(e, b._dmg); hit = true; break; }
+        }
+      }
+      if (hit || b._life <= 0) { b.destroy(); this.bullets.splice(i, 1); }
     }
   }
 
@@ -1921,15 +1932,8 @@ class MainScene extends Phaser.Scene {
   }
 
   fireEnemyShot(sprite, tx, ty) {
-    const line = this.add.graphics().setDepth(9);
-    line.lineStyle(3, 0xff3322, 0.95);
-    line.beginPath();
-    line.moveTo(sprite.x, sprite.y);
-    line.lineTo(tx, ty);
-    line.strokePath();
-    this.tweens.add({ targets: line, alpha: 0, duration: 220, onComplete: () => line.destroy() });
-    const spark = this.add.circle(tx, ty, 9, 0xff7733, 0.9).setDepth(9);
-    this.tweens.add({ targets: spark, alpha: 0, scale: 1.8, duration: 280, onComplete: () => spark.destroy() });
+    const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, tx, ty);
+    this.spawnBullet(sprite.x, sprite.y, a, 'bullet-enemy', { scale: 0.7, speed: 520 });
   }
 
   destroyEnemy(sprite) {
