@@ -1320,7 +1320,7 @@ class MainScene extends Phaser.Scene {
       SharedScene.applyTurretPowerVisual(sprite, powered);
       // Icone d'alarme SUR la tourelle (privee d'essence) : grande + pulsation.
       if (!sprite._alarmIcon && this.textures.exists('turret-alarm')) {
-        const target = Math.max(sprite.displayWidth, sprite.displayHeight) * 0.85;
+        const target = Math.max(sprite.displayWidth, sprite.displayHeight) * 0.6;
         const ico = this.add.image(sprite.x, sprite.y, 'turret-alarm').setDepth(12).setVisible(false);
         const base = target / (ico.width || target);
         ico.setScale(base);
