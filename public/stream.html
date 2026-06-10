@@ -60,6 +60,20 @@
     #statsPanel .stat-res { display: flex; justify-content: space-between; font-size: 11px; }
     #statsPanel .stat-mat { color: #d4b487; } #statsPanel .stat-mat strong { color: #ffd9a0; }
     #statsPanel .stat-rad { color: #66e1c5; } #statsPanel .stat-rad strong { color: #9ff0db; }
+    /* Action en cours (Amiral) + bouton Stopper l'action */
+    #activeAction {
+      position: fixed; top: 168px; left: 14px; z-index: 30; width: 230px;
+      background: rgba(0, 12, 24, 0.82); border: 1px solid #2a4060; border-radius: 6px;
+      padding: 8px 12px; font-family: 'Consolas', monospace;
+      display: flex; flex-direction: column; gap: 6px;
+    }
+    #activeAction .aa-name { font-size: 12px; color: #cfe2f5; }
+    #activeAction .aa-name .cat-tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; margin-right: 4px; }
+    #activeAction .deactivate-btn {
+      background: transparent; border: 1px solid #f55; color: #f55;
+      font-family: inherit; font-size: 11px; padding: 5px; cursor: pointer; border-radius: 3px;
+    }
+    #activeAction .deactivate-btn:hover { background: #f55; color: #000; }
     /* Ecran "base detruite" (streameur) */
     #baseDeadOverlay {
       position: fixed; inset: 0; z-index: 200;
@@ -234,15 +248,18 @@
     #actionMenu .head .title { color: #4af; font-size: 12px; letter-spacing: 1px; }
     #actionMenu .head .close { background: transparent; border: 0; color: #888; font-size: 16px; cursor: pointer; padding: 0 4px; }
     #actionMenu .head .close:hover { color: #fff; }
-    #actionMenu .actions { display: flex; flex-direction: column; gap: 6px; }
+    #actionMenu .actions { display: flex; flex-direction: row; gap: 8px; }
     #actionMenu .actions button {
+      flex: 1 1 0; min-width: 74px;
       background: rgba(255,255,255,0.05); border: 1px solid #2a3e58; color: #fff;
-      font-family: inherit; font-size: 12px; padding: 7px 10px; cursor: pointer; border-radius: 3px;
-      display: flex; align-items: center; gap: 8px; text-align: left;
+      font-family: inherit; cursor: pointer; border-radius: 4px;
+      display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center;
+      padding: 8px 6px;
     }
     #actionMenu .actions button:hover { border-color: #4af; background: rgba(74,175,255,0.1); }
-    #actionMenu .actions button.active { border-color: #4f8; }
-    #actionMenu .actions button .tag { display: inline-block; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
+    #actionMenu .actions button.active { border-color: #4f8; box-shadow: 0 0 8px rgba(68,255,136,0.4); }
+    #actionMenu .actions .act-ico { width: 40px; height: 40px; border-radius: 4px; display: block; }
+    #actionMenu .actions .act-lbl { font-size: 11px; line-height: 1.15; }
     .cat-tag.PUISSANCE  { background: rgba(255, 100, 100, 0.2); color: #ff8a8a; }
     .cat-tag.DEFENSIF   { background: rgba(100, 200, 255, 0.2); color: #8ad3ff; }
     .cat-tag.UTILITAIRE { background: rgba(180, 255, 100, 0.2); color: #d3ff8a; }
@@ -336,6 +353,11 @@
       <span class="stat-rad">✦ Radius <strong id="statRadius">0</strong></span>
     </div>
   </div>
+  <!-- Action en cours de l'Amiral : libelle + "Stopper l'action" (commun avec le viewer) -->
+  <div id="activeAction" class="hidden">
+    <span class="aa-name" id="activeActionName">— aucune —</span>
+    <button class="deactivate-btn" id="deactivateBtn">Stopper l'action</button>
+  </div>
   <div id="minimapLabel" class="hidden">CARTE — clic pour déplacer la vue</div>
   <canvas id="minimap" class="hidden" width="192" height="108"></canvas>
   <div id="waveBanner" class="hidden">
@@ -359,7 +381,6 @@
     </div>
     <div class="stats hidden" id="actionMenuStats"></div>
     <div class="actions" id="actionMenuActions"></div>
-    <button class="deact hidden" id="actionMenuDeact">Désactiver</button>
     <div class="note hidden" id="actionMenuNote"></div>
   </div>
 

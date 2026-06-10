@@ -169,7 +169,6 @@ const actionMenu = document.getElementById('actionMenu');
 const actionMenuTitle = document.getElementById('actionMenuTitle');
 const actionMenuActions = document.getElementById('actionMenuActions');
 const actionMenuClose = document.getElementById('actionMenuClose');
-const actionMenuDeact = document.getElementById('actionMenuDeact');
 const actionMenuNote = document.getElementById('actionMenuNote');
 const authModal = document.getElementById('authModal');
 const authClose = document.getElementById('authClose');
@@ -499,11 +498,9 @@ function openActionMenu(elementId, anchor) {
     btn.addEventListener('click', () => activateAction(elementId, a.id));
     actionMenuActions.appendChild(btn);
   }
-  const activeHere = activeAction && activeAction.element_id === elementId;
-  actionMenuDeact.classList.toggle('hidden', !activeHere);
   actionMenuNote.style.color = ''; // reset (peut avoir ete passe en rouge par un echec)
   if (activeAction && activeAction.element_id !== elementId) {
-    actionMenuNote.textContent = `Tu vas désactiver ton action en cours.`;
+    actionMenuNote.textContent = `Tu vas remplacer ton action en cours.`;
     actionMenuNote.classList.remove('hidden');
   } else {
     actionMenuNote.classList.add('hidden');
@@ -530,7 +527,6 @@ function closeActionMenu() {
 }
 
 actionMenuClose.addEventListener('click', closeActionMenu);
-actionMenuDeact.addEventListener('click', () => deactivateCurrent());
 
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeActionMenu(); });
 
@@ -1050,6 +1046,9 @@ class MainScene extends Phaser.Scene {
     this.load.image('act-remplir', '/assets/PNG/Ability10.png');
     this.load.image('act-minage', '/assets/PNG/Ability24.png');
     this.load.image('bg-hud-icon', '/assets/PNG/Bg_Hud-Icon.png');
+    // Explosion de tourelle (spritesheet 9 frames de 140x140) + icone alarme essence
+    this.load.spritesheet('turret-explosion', '/assets/Explosions/PNG/explosion.png', { frameWidth: 140, frameHeight: 140 });
+    this.load.image('turret-alarm', '/assets/HUD/PNG/points_powerup_lifes_05_life_indicator_alarm.png');
   }
 
   create() {
@@ -1311,7 +1310,12 @@ class MainScene extends Phaser.Scene {
       const state = elementStates.get(el.id);
       if (!sprite || !state) continue;
       SharedScene.applyTurretPowerVisual(sprite, powered);
-      // Base hors tension : la tourelle est desactivee (la patrouille reprend naturellement).
+      // Icone d'alarme (a droite de la barre de vie) quand la tourelle est privee d'essence.
+      if (!sprite._alarmIcon && this.textures.exists('turret-alarm')) {
+        sprite._alarmIcon = this.add.image(sprite.x + 62, sprite.y - 70, 'turret-alarm').setDepth(12).setVisible(false);
+        sprite._alarmIcon.setScale(22 / (sprite._alarmIcon.height || 22));
+      }
+      if (sprite._alarmIcon) sprite._alarmIcon.setVisible(!powered && !sprite._exploded);
       // Base hors tension : la tourelle est desactivee et FIGE (on stoppe la patrouille).
       if (!powered) { sprite._targetingEnemy = false; if (sprite._patrolTween) sprite._patrolTween.stop(); continue; }
       // Tourelle autonome : tire en permanence sur l'ennemi le plus proche.
@@ -1471,6 +1475,14 @@ class MainScene extends Phaser.Scene {
         key: 'base-explode',
         frames: Array.from({ length: 8 }, (_, i) => ({ key: `base-ex-${i + 1}` })),
         frameRate: 18, repeat: 0
+      });
+    }
+    // Explosion de tourelle (spritesheet explosion.png, 9 frames)
+    if (this.textures.exists('turret-explosion') && !this.anims.exists('turret-explode')) {
+      this.anims.create({
+        key: 'turret-explode',
+        frames: this.anims.generateFrameNumbers('turret-explosion', { start: 0, end: 8 }),
+        frameRate: 20, repeat: 0
       });
     }
   }
@@ -1637,10 +1649,37 @@ class MainScene extends Phaser.Scene {
         sprite.setFrame(asteroidFrameFor(sprite._asteroidVariant, ratio));
       }
     }
-    // Apparence tourelles (niveau visuel + anim tir)
+    // Apparence tourelles (niveau visuel + anim tir) + explosion si detruite.
     for (const el of serverElements) {
-      if (el.type === 'turret') this.updateTurretAppearance(el.id);
+      if (el.type !== 'turret') continue;
+      const st = elementStates.get(el.id);
+      const sp = this.elementSprites.get(el.id);
+      if (st && sp) {
+        if (st.hp <= 0 && !sp._exploded) this.explodeTurret(el.id);
+        else if (st.hp > 0 && sp._exploded) {
+          sp._exploded = false; sp.setVisible(true);
+          const b = this.elementHpBars.get(el.id); if (b) b.setVisible(true);
+        }
+      }
+      this.updateTurretAppearance(el.id);
     }
+  }
+
+  // Tourelle detruite : explosion (explosion.png) + barre de vie masquee + tourelle cachee.
+  explodeTurret(id) {
+    const sprite = this.elementSprites.get(id);
+    if (!sprite || sprite._exploded) return;
+    sprite._exploded = true;
+    const bar = this.elementHpBars && this.elementHpBars.get(id);
+    if (bar) bar.setVisible(false);
+    if (sprite._alarmIcon) sprite._alarmIcon.setVisible(false);
+    if (sprite._patrolTween) sprite._patrolTween.stop();
+    if (this.anims.exists('turret-explode')) {
+      const ex = this.add.sprite(sprite.x, sprite.y, 'turret-explosion', 0).setDepth(12).setScale(0.95);
+      ex.play('turret-explode');
+      ex.once('animationcomplete', () => ex.destroy());
+    }
+    sprite.setVisible(false);
   }
 
   updateTurretAppearance(id) {
@@ -1866,6 +1905,12 @@ class MainScene extends Phaser.Scene {
   // Explosion spectaculaire de la base : plusieurs bouffees etalees sur ~0.6s.
   playBaseExplosion() {
     if (!this.anims.exists('base-explode')) return;
+    // Masque la barre de vie de la base pendant/apres l'explosion.
+    if (this.elementHpBars) {
+      for (const el of serverElements) {
+        if (el.type === 'base') { const b = this.elementHpBars.get(el.id); if (b) b.setVisible(false); }
+      }
+    }
     const cx = BASE_X, cy = BASE_Y;
     const bursts = [
       { dx: 0, dy: 0, s: 0.42, d: 0 },

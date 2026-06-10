@@ -159,9 +159,32 @@ const actionMenu = document.getElementById('actionMenu');
 const actionMenuTitle = document.getElementById('actionMenuTitle');
 const actionMenuActions = document.getElementById('actionMenuActions');
 const actionMenuClose = document.getElementById('actionMenuClose');
-const actionMenuDeact = document.getElementById('actionMenuDeact');
 const actionMenuNote = document.getElementById('actionMenuNote');
 const actionMenuStats = document.getElementById('actionMenuStats');
+// Panneau "action en cours" (Amiral) + bouton Stopper
+const activeActionPanel = document.getElementById('activeAction');
+const activeActionName = document.getElementById('activeActionName');
+const deactivateBtn = document.getElementById('deactivateBtn');
+function renderActiveAction() {
+  if (!activeActionPanel) return;
+  if (!activeAction) { activeActionPanel.classList.add('hidden'); return; }
+  activeActionPanel.classList.remove('hidden');
+  const el = getElement(activeAction.element_id);
+  const actionDef = el && el.actions ? el.actions.find(a => a.id === activeAction.action_id) : null;
+  const cat = activeAction.category;
+  const label = actionDef ? actionDef.label : activeAction.action_id;
+  const target = el ? el.label : activeAction.element_id;
+  activeActionName.innerHTML = `<span class="cat-tag ${cat}">${cat}</span> <strong>${escapeHtml(label)}</strong> sur ${escapeHtml(target)}`;
+}
+if (deactivateBtn) deactivateBtn.addEventListener('click', () => deactivateCurrent());
+// Icone par action (commun avec le viewer)
+const ACTION_ICONS = {
+  reparation: '/assets/PNG/Ability21.png',
+  remplir:    '/assets/PNG/Ability10.png',
+  tir:        '/assets/PNG/Ability02.png',
+  visee:      '/assets/PNG/Ability14.png',
+  minage:     '/assets/PNG/Ability24.png'
+};
 
 function escapeHtml(s) {
   return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
@@ -209,15 +232,15 @@ function openActionMenu(elementId, anchor) {
   for (const a of el.actions) {
     const isActive = activeAction && activeAction.element_id === elementId && activeAction.action_id === a.id;
     const btn = document.createElement('button');
-    btn.innerHTML = `<span class="tag cat-tag ${a.category}">${a.category}</span> ${escapeHtml(a.label)}`;
+    btn.className = 'act-block ' + a.category;
+    const icon = ACTION_ICONS[a.id];
+    btn.innerHTML = `${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>`;
     if (isActive) btn.classList.add('active');
     btn.addEventListener('click', () => activateAction(elementId, a.id));
     actionMenuActions.appendChild(btn);
   }
-  const activeHere = activeAction && activeAction.element_id === elementId;
-  actionMenuDeact.classList.toggle('hidden', !activeHere);
   if (activeAction && activeAction.element_id !== elementId) {
-    actionMenuNote.textContent = 'Tu vas désactiver ton action en cours.';
+    actionMenuNote.textContent = 'Tu vas remplacer ton action en cours.';
     actionMenuNote.classList.remove('hidden');
   } else {
     actionMenuNote.classList.add('hidden');
@@ -250,11 +273,10 @@ function activateAction(elementId, actionId) {
 
 function deactivateCurrent() {
   if (!socket || !authenticated || !activeAction) return;
-  socket.emit('action:deactivate', null, () => closeActionMenu());
+  socket.emit('action:deactivate', null, () => { closeActionMenu(); });
 }
 
 if (actionMenuClose) actionMenuClose.addEventListener('click', closeActionMenu);
-if (actionMenuDeact) actionMenuDeact.addEventListener('click', deactivateCurrent);
 document.addEventListener('keydown', (e) => { if (e.key === 'Escape') closeActionMenu(); });
 document.addEventListener('mousedown', (e) => {
   if (!actionMenu || actionMenu.classList.contains('hidden')) return;
@@ -411,6 +433,7 @@ function wireSocketEvents() {
     elementStates = new Map((data.elementStates || []).map(s => [s.id, s]));
     factionResources = data.factionResources || factionResources;
     activeAction = data.activeAction || null;
+    renderActiveAction();
     amiralProgress = data.progress || amiralProgress;
     // Pseudo de l'Amiral sur le vaisseau (le sien). Stocke pour utilisation au demarrage de la scene
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
@@ -537,6 +560,7 @@ function wireSocketEvents() {
   socket.on('dashboard', (data) => renderDashboard(data));
   socket.on('action:state', (data) => {
     activeAction = data?.activeAction || null;
+    renderActiveAction();
     if (data?.progress) amiralProgress = data.progress;
     // Mise a jour du menu si ouvert sur l'element concerne
     if (actionMenuElementId && !actionMenu.classList.contains('hidden')) {
@@ -669,6 +693,8 @@ class MainScene extends Phaser.Scene {
     this.load.image('act-remplir', '/assets/PNG/Ability10.png');
     this.load.image('act-minage', '/assets/PNG/Ability24.png');
     this.load.image('bg-hud-icon', '/assets/PNG/Bg_Hud-Icon.png');
+    this.load.spritesheet('turret-explosion', '/assets/Explosions/PNG/explosion.png', { frameWidth: 140, frameHeight: 140 });
+    this.load.image('turret-alarm', '/assets/HUD/PNG/points_powerup_lifes_05_life_indicator_alarm.png');
   }
 
   create() {
@@ -900,10 +926,40 @@ class MainScene extends Phaser.Scene {
         frameRate: 18, repeat: 0
       });
     }
+    // Explosion de tourelle (spritesheet explosion.png, 9 frames)
+    if (this.textures.exists('turret-explosion') && !this.anims.exists('turret-explode')) {
+      this.anims.create({
+        key: 'turret-explode',
+        frames: this.anims.generateFrameNumbers('turret-explosion', { start: 0, end: 8 }),
+        frameRate: 20, repeat: 0
+      });
+    }
+  }
+
+  explodeTurret(id) {
+    const sprite = this.elementSprites.get(id);
+    if (!sprite || sprite._exploded) return;
+    sprite._exploded = true;
+    const bar = this.elementHpBars && this.elementHpBars.get(id);
+    if (bar) bar.setVisible(false);
+    if (sprite._alarmIcon) sprite._alarmIcon.setVisible(false);
+    if (sprite._patrolTween) sprite._patrolTween.stop();
+    if (this.anims.exists('turret-explode')) {
+      const ex = this.add.sprite(sprite.x, sprite.y, 'turret-explosion', 0).setDepth(12).setScale(0.95);
+      ex.play('turret-explode');
+      ex.once('animationcomplete', () => ex.destroy());
+    }
+    sprite.setVisible(false);
   }
 
   playBaseExplosion() {
     if (!this.anims.exists('base-explode')) return;
+    // Masque la barre de vie de la base.
+    if (this.elementHpBars) {
+      for (const el of serverElements) {
+        if (el.type === 'base') { const b = this.elementHpBars.get(el.id); if (b) b.setVisible(false); }
+      }
+    }
     const cx = BASE_X, cy = BASE_Y;
     const bursts = [
       { dx: 0, dy: 0, s: 0.42, d: 0 },
@@ -1096,7 +1152,17 @@ class MainScene extends Phaser.Scene {
       }
     }
     for (const el of serverElements) {
-      if (el.type === 'turret') this.updateTurretAppearance(el.id);
+      if (el.type !== 'turret') continue;
+      const st = elementStates.get(el.id);
+      const sp = this.elementSprites.get(el.id);
+      if (st && sp) {
+        if (st.hp <= 0 && !sp._exploded) this.explodeTurret(el.id);
+        else if (st.hp > 0 && sp._exploded) {
+          sp._exploded = false; sp.setVisible(true);
+          const b = this.elementHpBars.get(el.id); if (b) b.setVisible(true);
+        }
+      }
+      this.updateTurretAppearance(el.id);
     }
   }
 
@@ -1110,7 +1176,12 @@ class MainScene extends Phaser.Scene {
       const state = elementStates.get(el.id);
       if (!sprite || !state) continue;
       SharedScene.applyTurretPowerVisual(sprite, powered);
-      // Base hors tension : la tourelle est desactivee (la patrouille reprend naturellement).
+      // Icone d'alarme (a droite de la barre de vie) quand la tourelle est privee d'essence.
+      if (!sprite._alarmIcon && this.textures.exists('turret-alarm')) {
+        sprite._alarmIcon = this.add.image(sprite.x + 62, sprite.y - 70, 'turret-alarm').setDepth(12).setVisible(false);
+        sprite._alarmIcon.setScale(22 / (sprite._alarmIcon.height || 22));
+      }
+      if (sprite._alarmIcon) sprite._alarmIcon.setVisible(!powered && !sprite._exploded);
       // Base hors tension : la tourelle est desactivee et FIGE (on stoppe la patrouille).
       if (!powered) { sprite._targetingEnemy = false; if (sprite._patrolTween) sprite._patrolTween.stop(); continue; }
       // Tourelle = défense autonome : tire en permanence sur l'ennemi le plus proche.
