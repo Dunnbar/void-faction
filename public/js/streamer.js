@@ -229,7 +229,13 @@ function openActionMenu(elementId, anchor) {
   }
 
   actionMenuActions.innerHTML = '';
-  for (const a of el.actions) {
+  // Tourelle detruite : seule option = Reconstruire (meme mecanique que reparation).
+  const stMenu = elementStates.get(elementId);
+  const turretDead = el.type === 'turret' && stMenu && stMenu.dead;
+  const actionsToShow = turretDead
+    ? [{ id: 'reparation', label: 'Reconstruire', category: 'DEFENSIF' }]
+    : el.actions;
+  for (const a of actionsToShow) {
     const isActive = activeAction && activeAction.element_id === elementId && activeAction.action_id === a.id;
     const btn = document.createElement('button');
     btn.className = 'act-block ' + a.category;
@@ -936,20 +942,31 @@ class MainScene extends Phaser.Scene {
     }
   }
 
-  explodeTurret(id) {
+  enterTurretDead(id) {
     const sprite = this.elementSprites.get(id);
-    if (!sprite || sprite._exploded) return;
-    sprite._exploded = true;
+    if (!sprite || sprite._dead) return;
+    sprite._dead = true;
     const bar = this.elementHpBars && this.elementHpBars.get(id);
     if (bar) bar.setVisible(false);
     if (sprite._alarmIcon) sprite._alarmIcon.setVisible(false);
     if (sprite._patrolTween) sprite._patrolTween.stop();
+    if (sprite.anims && sprite.anims.isPlaying) sprite.anims.stop();
     if (this.anims.exists('turret-explode')) {
       const ex = this.add.sprite(sprite.x, sprite.y, 'turret-explosion', 0).setDepth(12).setScale(0.95);
       ex.play('turret-explode');
       ex.once('animationcomplete', () => ex.destroy());
     }
-    sprite.setVisible(false);
+    sprite.setAlpha(0.35); sprite.setTint(0x555555);
+  }
+  exitTurretDead(id) {
+    const sprite = this.elementSprites.get(id);
+    if (!sprite) return;
+    sprite._dead = false;
+    sprite.setAlpha(1); sprite.clearTint();
+    sprite._gunLevel = null; sprite._currentAnim = null;
+    const bar = this.elementHpBars && this.elementHpBars.get(id);
+    if (bar) bar.setVisible(true);
+    this.updateTurretAppearance(id);
   }
 
   playBaseExplosion() {
@@ -1089,8 +1106,9 @@ class MainScene extends Phaser.Scene {
         // la tourelle pivote vers cet angle (transition courte) puis y reste jusqu'au prochain tirage.
         const PATROL_AMP = Math.PI / 4;
         const pickNewPatrolTarget = () => {
-          // Tourelle desactivee (base hors tension) -> pas de patrouille (elle reste figee).
-          if (!sprite.active || sprite._targetingEnemy || !SharedScene.isBasePowered()) return;
+          // Tourelle desactivee (base hors tension) ou detruite -> pas de patrouille (figee).
+          const stt = elementStates.get(el.id);
+          if (!sprite.active || sprite._targetingEnemy || !SharedScene.isBasePowered() || (stt && stt.dead)) return;
           // Cible = angle voulu, ramene au PLUS COURT chemin depuis la rotation courante
           // (sinon, si baseRot depasse ±π, le tween fait un tour complet — bug tourelle SO).
           const wanted = Phaser.Math.Angle.Wrap(baseRot + Math.random() * PATROL_AMP);
@@ -1156,13 +1174,10 @@ class MainScene extends Phaser.Scene {
       const st = elementStates.get(el.id);
       const sp = this.elementSprites.get(el.id);
       if (st && sp) {
-        if (st.hp <= 0 && !sp._exploded) this.explodeTurret(el.id);
-        else if (st.hp > 0 && sp._exploded) {
-          sp._exploded = false; sp.setVisible(true);
-          const b = this.elementHpBars.get(el.id); if (b) b.setVisible(true);
-        }
+        if (st.dead && !sp._dead) this.enterTurretDead(el.id);
+        else if (!st.dead && sp._dead) this.exitTurretDead(el.id);
       }
-      this.updateTurretAppearance(el.id);
+      if (sp && !sp._dead) this.updateTurretAppearance(el.id);
     }
   }
 
@@ -1175,13 +1190,15 @@ class MainScene extends Phaser.Scene {
       const sprite = this.elementSprites.get(el.id);
       const state = elementStates.get(el.id);
       if (!sprite || !state) continue;
+      // Tourelle detruite : inactive (pas de tir, pas d'alarme).
+      if (state.dead) { if (sprite._alarmIcon) sprite._alarmIcon.setVisible(false); sprite._targetingEnemy = false; continue; }
       SharedScene.applyTurretPowerVisual(sprite, powered);
       // Icone d'alarme (a droite de la barre de vie) quand la tourelle est privee d'essence.
       if (!sprite._alarmIcon && this.textures.exists('turret-alarm')) {
         sprite._alarmIcon = this.add.image(sprite.x + 62, sprite.y - 70, 'turret-alarm').setDepth(12).setVisible(false);
         sprite._alarmIcon.setScale(22 / (sprite._alarmIcon.height || 22));
       }
-      if (sprite._alarmIcon) sprite._alarmIcon.setVisible(!powered && !sprite._exploded);
+      if (sprite._alarmIcon) sprite._alarmIcon.setVisible(!powered);
       // Base hors tension : la tourelle est desactivee et FIGE (on stoppe la patrouille).
       if (!powered) { sprite._targetingEnemy = false; if (sprite._patrolTween) sprite._patrolTween.stop(); continue; }
       // Tourelle = défense autonome : tire en permanence sur l'ennemi le plus proche.

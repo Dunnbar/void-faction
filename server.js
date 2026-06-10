@@ -163,7 +163,8 @@ function initStateFor(el) {
     return { hp: BASE_HP_MAX, hpMax: BASE_HP_MAX, essence: BASE_ESSENCE_MAX, essenceMax: BASE_ESSENCE_MAX, bornAt: Date.now() };
   }
   if (el.type === 'turret') {
-    return { hp: TURRET_HP_MAX, hpMax: TURRET_HP_MAX, puissance: 0, range: 0 };
+    // dead=true a 0 HP : seule la "reconstruction" est possible ; redevient active a 50% HP.
+    return { hp: TURRET_HP_MAX, hpMax: TURRET_HP_MAX, puissance: 0, range: 0, dead: false };
   }
   if (el.type === 'ship') {
     return { hp: SHIP_HP_MAX, hpMax: SHIP_HP_MAX, puissance: 0, range: 0 };
@@ -623,10 +624,17 @@ function publicElementState(rt, id) {
   }
   // Tourelle / Vaisseau : puissance et portee = somme des niveaux PUISSANCE des acteurs actifs.
   if (el && (el.type === 'turret' || el.type === 'ship')) {
+    // Tourelle : latch "morte" -> a 0 HP elle est detruite (seule la reconstruction est
+    // possible) ; elle redevient active des 50% HP.
+    if (el.type === 'turret') {
+      if (s.hp <= 0) s.dead = true;
+      else if (s.dead && s.hp >= s.hpMax * 0.5) s.dead = false;
+    }
+    const dead = el.type === 'turret' && s.dead;
     const out = {
       id, ...s,
-      puissance: sumContributionsOnAction(rt, id, 'tir', 'PUISSANCE'),
-      range:     sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE')
+      puissance: dead ? 0 : sumContributionsOnAction(rt, id, 'tir', 'PUISSANCE'),
+      range:     dead ? 0 : sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE')
     };
     // Le vaisseau a en plus une "capacite" (vitesse) boostee par les viewers (niveaux UTILITAIRE).
     if (el.type === 'ship') out.capacite = sumContributionsOnAction(rt, id, 'capacite', 'UTILITAIRE');
@@ -1099,6 +1107,13 @@ io.on('connection', (socket) => {
     if (!el) return respond({ ok: false, error: 'element inconnu' });
     const action = el.actions.find(a => a.id === actionId);
     if (!action) return respond({ ok: false, error: 'action inconnue' });
+    // Tourelle detruite : seule la reconstruction (reparation) est autorisee.
+    if (el.type === 'turret') {
+      const st = rt.elementStates.get(elementId);
+      if (st && st.dead && actionId !== 'reparation') {
+        return respond({ ok: false, error: 'tourelle détruite : reconstruction requise' });
+      }
+    }
     if (el.type === 'asteroid') {
       const st = rt.elementStates.get(elementId);
       const group = st && rt.asteroidGroups[st.subtype];
