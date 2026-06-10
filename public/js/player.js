@@ -1381,13 +1381,12 @@ class MainScene extends Phaser.Scene {
 
   // Cibles hostiles qu'un ennemi peut engager : asteroides vivants, tourelles, vaisseau du joueur.
   collectEnemyTargets() {
+    // Cibles ENGAGEABLES = defenseurs (tourelles + vaisseau). Les asteroides ne sont PAS des
+    // cibles : sinon ils detournaient les ennemis de la base (objectif par defaut, mode 'base').
     const targets = [];
     if (this.elementSprites) {
       for (const el of serverElements) {
-        if (el.type === 'asteroid') {
-          const s = this.elementSprites.get(el.id);
-          if (s && s.active && s.alpha > 0.5) targets.push({ kind: 'asteroid', sprite: s });
-        } else if (el.type === 'turret') {
+        if (el.type === 'turret') {
           const s = this.elementSprites.get(el.id);
           if (s && s.active && !s._dead) targets.push({ kind: 'turret', sprite: s });
         }
