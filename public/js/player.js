@@ -773,9 +773,17 @@ function openAuthModal() {
   authError.textContent = '';
   authModal.classList.remove('hidden');
   refreshAmiralSelect();
+  // Pre-remplit le dernier pseudo connu (cache local) — sans autocomplete navigateur.
+  const lastName = localStorage.getItem('voidfaction:username') || '';
+  const lp = document.getElementById('loginPseudo');
+  if (lp && lastName) lp.value = lastName;
   setTimeout(() => {
     const visible = signupForm.classList.contains('hidden') ? loginForm : signupForm;
-    visible.querySelector('input')?.focus();
+    // Focus le mot de passe si le pseudo est deja pre-rempli (login), sinon le 1er champ.
+    const target = (visible === loginForm && lp && lp.value)
+      ? loginForm.querySelector('input[type="password"]')
+      : visible.querySelector('input');
+    target?.focus();
   }, 50);
 }
 function closeAuthModal() {
@@ -868,13 +876,13 @@ async function submitAuth(endpoint, data) {
 loginForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const fd = new FormData(loginForm);
-  submitAuth('/api/login', { username: fd.get('username'), password: fd.get('password') });
+  submitAuth('/api/login', { username: fd.get('pseudo'), password: fd.get('password') });
 });
 signupForm.addEventListener('submit', (e) => {
   e.preventDefault();
   const fd = new FormData(signupForm);
   submitAuth('/api/signup', {
-    username: fd.get('username'),
+    username: fd.get('pseudo'),
     password: fd.get('password'),
     amiralName: fd.get('amiralName')
   });

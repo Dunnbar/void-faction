@@ -550,74 +550,64 @@
     #authModal.hidden { display: none; }
     .modal-box {
       position: relative;
-      width: 460px; min-height: 430px;
-      background: url('/assets/PNG/User%20interfaces/landing%20Screen/cover%20box%20.png') no-repeat center;
-      background-size: 100% 100%;
-      /* Le panneau turquoise occupe ~88% en haut ; la plaque d'ombre ~12% en bas.
-         Padding bas plus grand -> le contenu se centre dans la zone turquoise.
-         min-height (pas height fixe) : la boite grandit pour l'onglet Inscription. */
-      padding: 54px 70px 88px;
-      box-sizing: border-box;
-      display: flex; flex-direction: column; justify-content: center;
+      width: 360px; box-sizing: border-box;
+      background: rgba(0, 20, 40, 0.96);
+      border: 1px solid var(--c-frame); border-radius: 6px;
+      box-shadow: 0 0 28px rgba(74, 175, 255, 0.4), inset 0 0 24px rgba(74, 175, 255, 0.06);
+      padding: 26px 28px 22px;
+      display: flex; flex-direction: column;
+      font-family: 'Consolas', monospace;
     }
-    .modal-box h2 { margin: 0 0 4px 0; color: #2b2150; font-size: 17px; text-align: center; letter-spacing: 1px; }
-    .modal-box .subtitle { margin: 0 0 14px 0; font-size: 11px; color: #3a4a63; text-align: center; }
-    .tabs { display: flex; gap: 4px; margin-bottom: 14px; }
+    .modal-box h2 { margin: 0 0 4px 0; color: #cfe2f5; font-size: 18px; text-align: center; letter-spacing: 2px; font-weight: bold; text-shadow: 0 0 12px rgba(74,175,255,0.5); }
+    .modal-box .subtitle { margin: 0 0 16px 0; font-size: 11px; color: #8fb4d8; text-align: center; letter-spacing: 0.5px; }
+    .tabs { display: flex; gap: 6px; margin-bottom: 14px; }
     .tab {
-      flex: 1; background: rgba(43, 33, 80, 0.08); border: 0; color: #6b6a8a;
-      font-family: inherit; font-size: 12px; font-weight: bold; letter-spacing: 0.5px;
-      padding: 7px 6px; cursor: pointer; border-radius: 5px;
-      border-bottom: 2px solid transparent; transition: color 0.15s, border-color 0.15s;
+      flex: 1; background: rgba(255,255,255,0.04); border: 1px solid #2a4060; color: #8fb4d8;
+      font-family: inherit; font-size: 12px; font-weight: bold; letter-spacing: 1px;
+      padding: 8px 6px; cursor: pointer; border-radius: 4px; transition: color 0.15s, background 0.15s, border-color 0.15s;
     }
-    .tab:hover { color: #2b2150; }
-    .tab.active { color: #2b2150; border-bottom-color: #ff9d4d; }
-    .modal-box form { display: flex; flex-direction: column; gap: 9px; }
+    .tab:hover { color: #cfe2f5; border-color: #3a5d86; }
+    .tab.active { color: #04121f; background: var(--c-frame); border-color: var(--c-frame); }
+    .modal-box form { display: flex; flex-direction: column; gap: 10px; }
     .modal-box form.hidden { display: none; }
     .modal-box input,
     .modal-box select {
       width: 100%; box-sizing: border-box;
-      background: rgba(255, 255, 255, 0.92); color: #1e2438;
-      border: 2px solid rgba(43, 33, 80, 0.25); padding: 9px 12px;
-      font-family: 'Consolas', monospace; font-size: 13px; border-radius: 6px;
+      background: rgba(0, 0, 0, 0.4); color: #fff;
+      border: 1px solid #2a4060; padding: 10px 12px;
+      font-family: 'Consolas', monospace; font-size: 13px; border-radius: 4px;
       transition: border-color 0.15s, box-shadow 0.15s;
     }
-    .modal-box input::placeholder { color: #8a90a6; }
-    .modal-box select option { background: #fff; color: #1e2438; }
+    .modal-box input::placeholder { color: #5d7b9c; }
+    .modal-box select option { background: #0a1424; color: #cfe2f5; }
     .modal-box input:focus,
     .modal-box select:focus {
-      outline: none; border-color: #ff9d4d;
-      box-shadow: 0 0 0 3px rgba(255, 157, 77, 0.25);
+      outline: none; border-color: var(--c-frame);
+      box-shadow: 0 0 0 2px rgba(74, 175, 255, 0.25);
     }
     .modal-box .field-label {
-      font-size: 10px; color: #3a4a63; letter-spacing: 1px; text-transform: uppercase;
-      margin: 2px 0 -4px 2px;
+      font-size: 10px; color: #8fb4d8; letter-spacing: 1px; text-transform: uppercase;
+      margin: 4px 0 -4px 2px;
     }
-    /* Bouton image "start game btn" (cartoon) pour les submit */
     .modal-box button[type="submit"],
     .modal-box .img-btn {
-      align-self: center;
-      width: 200px; height: 100px; margin-top: 2px;
-      background: url('/assets/PNG/User%20interfaces/landing%20Screen/start%20game%20btn.png') no-repeat center;
-      background-size: contain;
-      border: 0; padding: 0 0 22px 0;
-      color: #5a3410; font-family: 'Consolas', monospace; font-weight: bold;
-      font-size: 13px; letter-spacing: 1px; text-transform: uppercase;
-      text-shadow: 0 1px 0 rgba(255, 220, 150, 0.6);
-      cursor: pointer; transition: transform 0.05s;
+      align-self: stretch; margin-top: 6px;
+      background: transparent; border: 1px solid var(--c-frame); color: var(--c-frame);
+      font-family: 'Consolas', monospace; font-weight: bold; font-size: 13px; letter-spacing: 1px;
+      padding: 10px; border-radius: 4px; cursor: pointer; transition: background 0.15s, color 0.15s;
     }
+    .modal-box button[type="submit"]:hover,
+    .modal-box .img-btn:hover { background: var(--c-frame); color: #04121f; }
     .modal-box button[type="submit"]:active,
-    .modal-box .img-btn:active {
-      background-image: url('/assets/PNG/User%20interfaces/landing%20Screen/start%20game%20btn%20pressed.png');
-      transform: translateY(2px);
-    }
-    .modal-box button[type="submit"]:disabled { filter: grayscale(0.7) opacity(0.6); cursor: not-allowed; }
-    #authError { color: #c0392b; font-size: 11px; min-height: 14px; margin: 6px 0 0 0; text-align: center; font-weight: bold; }
+    .modal-box .img-btn:active { transform: translateY(1px); }
+    .modal-box button[type="submit"]:disabled { opacity: 0.5; cursor: not-allowed; }
+    #authError { color: #ff8a8a; font-size: 11px; min-height: 14px; margin: 8px 0 0 0; text-align: center; font-weight: bold; }
     #authClose {
-      position: absolute; top: 22px; right: 30px; background: transparent;
-      border: 0; color: #2b2150; font-size: 20px; cursor: pointer; line-height: 1; opacity: 0.7;
-      transition: opacity 0.15s;
+      position: absolute; top: 12px; right: 14px; background: transparent;
+      border: 0; color: #8fb4d8; font-size: 20px; cursor: pointer; line-height: 1; opacity: 0.8;
+      transition: opacity 0.15s, color 0.15s;
     }
-    #authClose:hover { opacity: 1; }
+    #authClose:hover { opacity: 1; color: #fff; }
 
     /* Menu d'action (popup contextuel sur clic d'un élément) */
     #actionMenu {
@@ -854,12 +844,12 @@
         <button class="tab" data-tab="signup" type="button">Inscription</button>
       </div>
       <form id="loginForm" autocomplete="off">
-        <input name="username" placeholder="Pseudo" autocomplete="off" required />
-        <input name="password" type="password" placeholder="Mot de passe" autocomplete="current-password" required />
+        <input id="loginPseudo" name="pseudo" placeholder="Pseudo" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required />
+        <input name="password" type="password" placeholder="Mot de passe" autocomplete="off" required />
         <button type="submit">Se connecter</button>
       </form>
       <form id="signupForm" class="hidden" autocomplete="off">
-        <input name="username" placeholder="Pseudo (3-20 caractères)" autocomplete="off" required />
+        <input id="signupPseudo" name="pseudo" placeholder="Pseudo (3-20 caractères)" autocomplete="off" autocapitalize="off" autocorrect="off" spellcheck="false" required />
         <input name="password" type="password" placeholder="Mot de passe (6 min)" autocomplete="new-password" required />
         <label class="field-label">Amiral à rejoindre</label>
         <select name="amiralName" id="signupAmiralSelect" required>
