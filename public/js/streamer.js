@@ -1738,7 +1738,7 @@ class MainScene extends Phaser.Scene {
     }
     for (const enemy of wave.enemies) {
       const delay = warningRemaining + (enemy.spawnOffsetMs || 0);
-      this.time.delayedCall(delay, () => this.spawnEnemy(enemy));
+      this.time.delayedCall(delay, () => this.spawnEnemy(enemy, wave.id));
     }
   }
 
@@ -1763,7 +1763,7 @@ class MainScene extends Phaser.Scene {
     }
   }
 
-  spawnEnemy(e) {
+  spawnEnemy(e, waveId) {
     const level = 1;
     const boss = !!e.boss;
     const sprite = this.add.sprite(e.spawnX, e.spawnY, `enemy${level}-fr-000`)
@@ -1771,6 +1771,7 @@ class MainScene extends Phaser.Scene {
     sprite.play(`enemy${level}-thrust`);
     sprite._level = level;
     sprite._boss = boss;
+    sprite._waveId = waveId || null;            // vague d'origine (pour le comptage serveur)
     sprite._speedFactor = e.speedFactor || 1;  // boss plus lent
     // HP fourni par le serveur (croit avec les jours de survie de la base) ; 30 par defaut.
     sprite._hp = sprite._hpMax = (typeof e.hp === 'number' && e.hp > 0) ? e.hp : 30;
@@ -1821,8 +1822,9 @@ class MainScene extends Phaser.Scene {
     this.playEnemyExplosion(sprite.x, sprite.y, sprite._level || 1);
     this.enemies.delete(sprite);
     sprite.destroy();
-    // Autorite streameur : on signale la mort -> le serveur termine la vague quand alive=0.
-    if (socket) socket.emit('streamer:enemy_down');
+    // Autorite streameur : on signale la mort (avec l'ID de la vague d'origine) ->
+    // le serveur termine la vague quand alive=0, sans melanger les vagues.
+    if (socket) socket.emit('streamer:enemy_down', { waveId: sprite._waveId });
   }
 
   playEnemyExplosion(x, y, level) {

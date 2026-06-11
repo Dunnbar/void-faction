@@ -1345,10 +1345,13 @@ io.on('connection', (socket) => {
 
   // Ennemi detruit (autorite streameur). Quand tous les ennemis de la vague sont tues,
   // la vague est repoussee (fin par le combat, pas par un timer).
-  socket.on('streamer:enemy_down', () => {
+  socket.on('streamer:enemy_down', (data) => {
     if (!socket.data.amiralId) return;
     const rt = amiralsRuntime.get(socket.data.amiralId);
     if (!rt || !rt.currentWave) return;
+    // On ne compte que les ennemis de la vague EN COURS : un survivant d'une vague
+    // precedente qui meurt ne doit pas decrementer (et donc "repousser") la vague actuelle.
+    if (!data || data.waveId !== rt.currentWave.id) return;
     rt.currentWave.alive = Math.max(0, (rt.currentWave.alive || 0) - 1);
     if (rt.currentWave.alive <= 0 && !rt.baseDead) {
       logJournal(rt, 'wave_repelled', `Vague repoussée — tous les ennemis détruits`);
