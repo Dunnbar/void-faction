@@ -98,7 +98,7 @@
     .hint { position: relative; pointer-events: auto; cursor: help; }
     .hint-pop {
       position: absolute; top: calc(100% + 8px); left: 0; width: 230px;
-      padding: 8px 10px; text-align: left; letter-spacing: 0;
+      padding: 8px 10px; text-align: justify; text-align-last: left; letter-spacing: 0; hyphens: auto;
       background: rgba(0,20,40,0.97); border: 1px solid var(--c-frame); border-radius: 4px;
       box-shadow: 0 0 12px rgba(74,175,255,0.35);
       font-family: 'Consolas', monospace; font-weight: normal; font-size: 11px; line-height: 1.4; color: #cfe2f5;
@@ -107,6 +107,7 @@
     }
     .hint:hover .hint-pop, .hint:focus .hint-pop, .hint:focus-within .hint-pop { opacity: 1; transform: none; }
     .hint-pop strong { color: var(--c-frame); font-size: 12px; }
+    .hint-pop b { color: #fff; font-weight: 700; }  /* info clef du corps, mise en avant */
     .hint-pop .cat-tag { margin-right: 4px; }
     .hint-pop .tip-timer { color: #8fb4d8; }
     .resources-line { display: flex; gap: 12px; justify-content: space-between; }
@@ -725,18 +726,18 @@
   <div id="essenceBar" class="hint" tabindex="0">
     <div class="stat-label">ESSENCE <span id="statEssenceVal">0 / 0</span></div>
     <div class="stat-bar"><div id="statEssenceFill" class="stat-bar-fill"></div></div>
-    <span class="hint-pop"><strong>Essence</strong><br>Alimente la base et ses tourelles. Se vide lentement avec le temps. À sec, les tourelles s'arrêtent et la base devient vulnérable aux vagues. Rechargeable via l'action « Remplir » sur la base.</span>
+    <span class="hint-pop"><strong>Essence</strong><br><b>Alimente la base et ses tourelles.</b> Se vide lentement avec le temps. À sec, les tourelles s'arrêtent et la base devient vulnérable aux vagues. Rechargeable via l'action « Remplir » sur la base.</span>
   </div>
 
   <!-- Ressources (icones + nombres) + pastille action en cours, a droite -->
   <div id="resPanel">
     <span class="res-item mat hint" tabindex="0">
       <img class="ico-img" src="/assets/PNG/CrystalIcon.png" alt=""><strong id="statMateriaux">0</strong>
-      <span class="hint-pop"><strong>Minéraux</strong><br>Ressource récoltée en minant des astéroïdes. Sert à réparer les bâtiments.</span>
+      <span class="hint-pop"><strong>Minéraux</strong><br>Ressource récoltée en minant des astéroïdes. <b>Sert à réparer les bâtiments.</b></span>
     </span>
     <span class="res-item rad hint" tabindex="0">
       <img class="ico-img" src="/assets/PNG/BateryIcon2.png" alt=""><strong id="statRadius">0</strong>
-      <span class="hint-pop"><strong>Radius</strong><br>Ressource récoltée en minant des astéroïdes. Sert à remplir la base d'essence.</span>
+      <span class="hint-pop"><strong>Radius</strong><br>Ressource récoltée en minant des astéroïdes. <b>Sert à remplir la base d'essence.</b></span>
     </span>
     <span class="res-item action-chip idle hint" id="actionChip" tabindex="0">
       <span class="action-glyph" id="actionGlyph"><img id="actionIco" alt=""></span>
@@ -798,7 +799,7 @@
     <button class="pm-action" id="pmAuthAction" type="button">Connexion</button>
   </div>
 
-  <div id="baseClock" class="hidden hint"><span class="hint-pop"><strong>Jour de survie</strong><br>Nombre de jours que la base a tenu. Plus il monte, plus les vagues d'ennemis sont nombreuses et résistantes.</span></div>
+  <div id="baseClock" class="hidden hint"><span class="hint-pop"><strong>Jour de survie</strong><br>Nombre de jours que la base a tenu. <b>Plus il monte, plus les vagues d'ennemis sont nombreuses et résistantes.</b></span></div>
   <div id="waveBanner" class="hidden">
     <svg class="icon"><use href="#ic-pulse"/></svg>
     <span>VAGUE EN APPROCHE</span>
