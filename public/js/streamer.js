@@ -725,6 +725,7 @@ const ENEMY_SPEED_PX     = 40;   // px/s (aligne sur ENEMY_SPEED serveur)
 const ENEMY_DETECT_RANGE = 340;  // rayon de detection d'une cible a engager
 const ENEMY_ORBIT_R_MIN  = 90;
 const ENEMY_ORBIT_R_MAX  = 160;
+const ENEMY_MIN_BASE_DIST = 300; // distance mini au centre de la base (evite que les ennemis collent la base en visant une tourelle)
 const ENEMY_FIRE_MS      = 5000;
 const GUN_LEVELS = 10;
 const GUN_SCALE = 0.55;
@@ -1574,6 +1575,14 @@ class MainScene extends Phaser.Scene {
         }
         if (!sprite._lastFireAt) sprite._lastFireAt = now - Math.random() * ENEMY_FIRE_MS;
         this.updateEnemyEngage(sprite, cx, cy, orbitR, dtSec, now, mode, best);
+      }
+
+      // Clamp : aucun ennemi ne doit coller la base (meme en orbitant une tourelle proche).
+      const dbx = sprite.x - BASE_X, dby = sprite.y - BASE_Y;
+      const db = Math.hypot(dbx, dby);
+      if (db > 0 && db < ENEMY_MIN_BASE_DIST) {
+        sprite.x = BASE_X + (dbx / db) * ENEMY_MIN_BASE_DIST;
+        sprite.y = BASE_Y + (dby / db) * ENEMY_MIN_BASE_DIST;
       }
 
       if (sprite._hpBar) {
