@@ -219,7 +219,7 @@ function getElement(elementId) {
   return serverElements.find(e => e.id === elementId);
 }
 
-function openActionMenu(elementId, anchor) {
+function openActionMenu(elementId, anchor, keepPos) {
   if (!authenticated) return; // l'Amiral doit etre authentifie pour cliquer
   const el = getElement(elementId);
   if (!el) return;
@@ -287,6 +287,7 @@ function openActionMenu(elementId, anchor) {
   }
 
   actionMenu.classList.remove('hidden');
+  if (keepPos) return; // rafraichi sur place : on garde la position et la selection
   const rect = actionMenu.getBoundingClientRect();
   let x = (anchor?.clientX ?? window.innerWidth / 2) + 12;
   let y = (anchor?.clientY ?? window.innerHeight / 2) - 10;
@@ -308,7 +309,8 @@ function closeActionMenu() {
 function activateAction(elementId, actionId) {
   if (!socket || !authenticated) return;
   socket.emit('action:activate', { elementId, actionId }, (resp) => {
-    if (resp?.ok) closeActionMenu();
+    // On garde le menu ouvert (element selectionne, cercle de portee visible) ; refresh sur place.
+    if (resp?.ok) openActionMenu(elementId, null, true);
     else console.warn('[amiral] activation refusee:', resp?.error);
   });
 }

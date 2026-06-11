@@ -611,7 +611,7 @@ const ACTION_ICONS = {
 
 let actionMenuElementId = null;
 
-function openActionMenu(elementId, anchor) {
+function openActionMenu(elementId, anchor, keepPos) {
   if (baseDead) return; // base detruite : aucune action possible
   if (!authenticated) {
     pendingElementId = elementId;
@@ -676,6 +676,7 @@ function openActionMenu(elementId, anchor) {
 
   // Positionnement: près du point cliqué, en restant dans le viewport
   actionMenu.classList.remove('hidden');
+  if (keepPos) return; // rafraichi sur place : on ne bouge pas le menu (on garde la selection)
   const rect = actionMenu.getBoundingClientRect();
   let x = (anchor?.clientX ?? window.innerWidth / 2) + 12;
   let y = (anchor?.clientY ?? window.innerHeight / 2) - 10;
@@ -707,7 +708,9 @@ function activateAction(elementId, actionId) {
   if (!socket || !authenticated) return;
   socket.emit('action:activate', { elementId, actionId }, (resp) => {
     if (resp?.ok) {
-      closeActionMenu();
+      // On NE ferme PAS le menu : l'element reste selectionne (cercle de portee visible)
+      // pour voir la portee evoluer. On rafraichit sur place (surbrillance de l'action active).
+      openActionMenu(elementId, null, true);
     } else {
       // Feedback visible (ex. "amiral hors-ligne") au lieu d'un echec silencieux.
       const msg = resp?.error === 'amiral hors-ligne'
