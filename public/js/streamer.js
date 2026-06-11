@@ -252,6 +252,15 @@ function openActionMenu(elementId, anchor) {
     }
   }
 
+  // Cercle de portee si c'est une tourelle (comme la vue joueur).
+  {
+    const scene = game?.scene.getScene('main');
+    if (scene && scene.scene.isActive()) {
+      if (el.type === 'turret') scene.showRangeCircle(elementId);
+      else scene.hideRangeCircle();
+    }
+  }
+
   actionMenuActions.innerHTML = '';
   // Tourelle detruite : seule option = Reconstruire (meme mecanique que reparation).
   const stMenu = elementStates.get(elementId);
@@ -292,6 +301,8 @@ function openActionMenu(elementId, anchor) {
 function closeActionMenu() {
   actionMenu.classList.add('hidden');
   actionMenuElementId = null;
+  const scene = game?.scene.getScene('main');
+  if (scene && scene.scene.isActive()) scene.hideRangeCircle();
 }
 
 function activateAction(elementId, actionId) {
@@ -1359,6 +1370,58 @@ class MainScene extends Phaser.Scene {
       }
       if (sp && !sp._dead) this.updateTurretAppearance(el.id);
     }
+    // Cercle de portee affiche : on le redessine pour suivre l'evolution en direct.
+    if (this.rangeCircleId) this._drawRangeCircle();
+  }
+
+  // Cercle de portee de la tourelle selectionnee : grandit en direct quand la portee monte.
+  showRangeCircle(turretId) {
+    this.rangeCircleId = turretId;
+    this._lastRangePx = null;
+    this._drawRangeCircle();
+  }
+  _drawRangeCircle() {
+    const id = this.rangeCircleId;
+    if (!id) return;
+    const state = elementStates.get(id);
+    const sprite = this.elementSprites.get(id);
+    if (!state || !sprite) { this.hideRangeCircle(); return; }
+    const range = turretRangePx(state);
+    if (!this.rangeCircleGfx) this.rangeCircleGfx = this.add.graphics().setDepth(-30);
+    const g = this.rangeCircleGfx;
+    g.clear();
+    g.fillStyle(0xff4f6d, 0.08); g.fillCircle(sprite.x, sprite.y, range);
+    g.lineStyle(2, 0xff4f6d, 0.65); g.strokeCircle(sprite.x, sprite.y, range);
+    g.lineStyle(2, 0xff4f6d, 0.8);
+    for (let i = 0; i < 4; i++) {
+      const a = (i / 4) * Math.PI * 2;
+      g.beginPath();
+      g.moveTo(sprite.x + Math.cos(a) * (range - 8), sprite.y + Math.sin(a) * (range - 8));
+      g.lineTo(sprite.x + Math.cos(a) * (range + 8), sprite.y + Math.sin(a) * (range + 8));
+      g.strokePath();
+    }
+    if (!this.rangeCircleLabel) {
+      this.rangeCircleLabel = this.add.text(0, 0, '', {
+        fontFamily: 'Consolas, monospace', fontSize: '14px', fontStyle: 'bold',
+        color: '#ffb3c0', stroke: '#3a0a12', strokeThickness: 4
+      }).setOrigin(0.5).setDepth(-29);
+    }
+    this.rangeCircleLabel.setText(`PORTÉE ${state.range || 0}`);
+    this.rangeCircleLabel.setPosition(sprite.x, sprite.y - range - 14);
+    if (this._lastRangePx != null && range > this._lastRangePx + 0.5) {
+      this.rangeCircleLabel.setScale(1.4);
+      this.tweens.add({ targets: this.rangeCircleLabel, scale: 1, duration: 350, ease: 'Back.easeOut' });
+      const ring = this.add.graphics().setDepth(-30);
+      ring.lineStyle(3, 0xff8aa0, 0.9); ring.strokeCircle(sprite.x, sprite.y, range);
+      this.tweens.add({ targets: ring, alpha: 0, duration: 450, ease: 'Quad.easeOut', onComplete: () => ring.destroy() });
+    }
+    this._lastRangePx = range;
+  }
+  hideRangeCircle() {
+    this.rangeCircleId = null;
+    this._lastRangePx = null;
+    if (this.rangeCircleGfx) { this.rangeCircleGfx.destroy(); this.rangeCircleGfx = null; }
+    if (this.rangeCircleLabel) { this.rangeCircleLabel.destroy(); this.rangeCircleLabel = null; }
   }
 
   updateTurretTargeting() {
