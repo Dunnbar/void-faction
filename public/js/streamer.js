@@ -310,7 +310,7 @@ function activateAction(elementId, actionId) {
   if (!socket || !authenticated) return;
   socket.emit('action:activate', { elementId, actionId }, (resp) => {
     // On garde le menu ouvert (element selectionne, cercle de portee visible) ; refresh sur place.
-    if (resp?.ok) openActionMenu(elementId, null, true);
+    if (resp?.ok) { if (window.SFX) SFX.play(game?.scene.getScene('main'), 'action-select'); openActionMenu(elementId, null, true); }
     else console.warn('[amiral] activation refusee:', resp?.error);
   });
 }
@@ -563,6 +563,7 @@ function wireSocketEvents() {
     }
     if (scene && scene.scene.isActive() && data.subtype) {
       SharedScene.showGroupRespawnTimer(scene, data.subtype, data.respawnsAt);
+      if (window.SFX) SFX.play(scene, data.subtype === 'radius' ? 'asteroid-rad-depleted' : 'asteroid-mat-depleted');
     }
   });
   socket.on('asteroid:group_respawned', (data) => {
@@ -1144,6 +1145,7 @@ class MainScene extends Phaser.Scene {
     const sprite = this.elementSprites.get(id);
     if (!sprite) return;
     sprite._dead = false;
+    if (window.SFX) SFX.play(this, 'turret-reactivate'); // tourelle reactivee (>= 50% HP)
     sprite.setVisible(true); sprite.setAlpha(1); sprite.clearTint();
     sprite._gunLevel = null; sprite._currentAnim = null;
     const bar = this.elementHpBars && this.elementHpBars.get(id);

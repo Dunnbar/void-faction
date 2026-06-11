@@ -23,13 +23,20 @@
   // Reglages par son. src:'' => desactive tant que tu n'as pas choisi le fichier.
   // volume 0-1 | throttleMs : delai mini entre 2 lectures du meme son
   // maxVoices : nb max d'instances simultanees | pitch : variation aleatoire (+/-)
+  // src peut etre une chaine OU un tableau (variation : un echantillon tire au hasard).
+  const FX = '/assets/sounds/fx/';
   const MANIFEST = {
-    'shot-ship':   { src: '', volume: 0.50, throttleMs: 55,  maxVoices: 4, pitch: 0.08 },
-    'shot-turret': { src: '', volume: 0.45, throttleMs: 70,  maxVoices: 4, pitch: 0.08 },
-    'shot-enemy':  { src: '', volume: 0.40, throttleMs: 80,  maxVoices: 4, pitch: 0.10 },
-    'impact':      { src: '', volume: 0.50, throttleMs: 45,  maxVoices: 5, pitch: 0.12 },
-    'explosion':   { src: '', volume: 0.70, throttleMs: 120, maxVoices: 3, pitch: 0.10 },
+    'shot-ship':   { src: [FX + 'shot_ship_1.wav', FX + 'shot_ship_2.wav'], volume: 0.50, throttleMs: 55,  maxVoices: 4, pitch: 0.07 },
+    'shot-turret': { src: FX + 'shot_turret.wav',  volume: 0.45, throttleMs: 70,  maxVoices: 4, pitch: 0.08 },
+    'shot-enemy':  { src: [FX + 'shot_enemy_1.wav', FX + 'shot_enemy_2.wav'], volume: 0.40, throttleMs: 80,  maxVoices: 4, pitch: 0.09 },
+    'impact':      { src: '', volume: 0.50, throttleMs: 45,  maxVoices: 5, pitch: 0.12 }, // pas encore choisi
+    'explosion':   { src: '', volume: 0.70, throttleMs: 120, maxVoices: 3, pitch: 0.10 }, // pas encore choisi
     'ambience':    { src: '', volume: 0.60, loop: true },   // boucle de bataille (vue dezoomee)
+    // Evenements ponctuels (joues NON-spatiaux -> toujours audibles).
+    'turret-reactivate':     { src: FX + 'turret_reactivate.wav',     volume: 0.6,  throttleMs: 200, maxVoices: 2, pitch: 0.05 },
+    'action-select':         { src: FX + 'action_select.wav',         volume: 0.5,  throttleMs: 90,  maxVoices: 2, pitch: 0.05 },
+    'asteroid-mat-depleted': { src: FX + 'asteroid_mat_depleted.wav', volume: 0.55, throttleMs: 200, maxVoices: 2, pitch: 0.05 },
+    'asteroid-rad-depleted': { src: FX + 'asteroid_rad_depleted.wav', volume: 0.55, throttleMs: 200, maxVoices: 2, pitch: 0.05 },
   };
 
   // En-dessous de ce zoom camera, on est "dezoome" : on n'egrene plus chaque tir,
@@ -40,8 +47,16 @@
   const lastPlayAt = {};   // throttle par cle
   const activeCount = {};  // voix actives par cle
 
-  function loaded(scene, key) {
-    return !!(scene && scene.cache && scene.cache.audio && scene.cache.audio.exists(key));
+  // Cle(s) Phaser pour un son : une seule, ou key__0/1/... si plusieurs echantillons.
+  function variantKeys(key, cfg) {
+    const arr = Array.isArray(cfg.src) ? cfg.src : [cfg.src];
+    return arr.length > 1 ? arr.map((_, i) => `${key}__${i}`) : [key];
+  }
+  // Tire au hasard une variante CHARGEE (ou null si aucune).
+  function pickLoadedKey(scene, key, cfg) {
+    if (!scene.cache || !scene.cache.audio) return null;
+    const avail = variantKeys(key, cfg).filter(k => scene.cache.audio.exists(k));
+    return avail.length ? avail[Math.floor(Math.random() * avail.length)] : null;
   }
 
   // A appeler dans le preload() de chaque scene.
@@ -49,7 +64,9 @@
     if (!scene || !scene.load) return;
     for (const [key, cfg] of Object.entries(MANIFEST)) {
       if (!cfg.src) continue;                 // pas de fichier -> on saute (aucun 404)
-      try { scene.load.audio(key, cfg.src); } catch (e) {}
+      const arr = Array.isArray(cfg.src) ? cfg.src : [cfg.src];
+      const keys = variantKeys(key, cfg);
+      arr.forEach((src, i) => { if (src) { try { scene.load.audio(keys[i], src); } catch (e) {} } });
     }
     scene.load.on('loaderror', () => {});      // un fichier manquant ne bloque pas le chargement
   }
@@ -58,7 +75,9 @@
   function play(scene, key, x, y) {
     if (isMuted()) return;
     const cfg = MANIFEST[key];
-    if (!cfg || !cfg.src || !loaded(scene, key)) return;
+    if (!cfg || !cfg.src) return;
+    const playKey = pickLoadedKey(scene, key, cfg);
+    if (!playKey) return;
     const now = (scene.time && scene.time.now) || (typeof performance !== 'undefined' ? performance.now() : 0);
 
     // 1) throttle par type
@@ -79,10 +98,10 @@
     // 4) cap de voix simultanees
     if ((activeCount[key] || 0) >= (cfg.maxVoices || 4)) return;
 
-    // 5) lecture avec variation
+    // 5) lecture avec variation (echantillon + pitch + volume)
     try {
       const rate = 1 + (Math.random() * 2 - 1) * (cfg.pitch || 0);
-      const snd = scene.sound.add(key, { volume: vol * (0.9 + Math.random() * 0.2), rate });
+      const snd = scene.sound.add(playKey, { volume: vol * (0.9 + Math.random() * 0.2), rate });
       activeCount[key] = (activeCount[key] || 0) + 1;
       const done = () => { activeCount[key] = Math.max(0, (activeCount[key] || 1) - 1); try { snd.destroy(); } catch (e) {} };
       snd.once('complete', done);
