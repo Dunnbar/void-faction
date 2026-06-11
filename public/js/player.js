@@ -44,11 +44,11 @@ const ENEMY_ORBIT_R_MIN  = 90;
 const ENEMY_ORBIT_R_MAX  = 160;
 const ENEMY_MIN_BASE_DIST = 300; // distance mini au centre de la base (evite que les ennemis collent la base)
 const ENEMY_FIRE_MS      = 5000;
-// Tourelles : niveau visuel derive de la puissance (palier de 10)
-const GUN_LEVELS = 10;
+// Tourelles : niveau visuel = puissance (chaque +1 change d'asset), plafonne a 8 (Gun01..Gun08).
+const GUN_LEVELS = 8;
 const GUN_SCALE = 0.55;
 function turretGunLevel(puissance) {
-  return Math.min(GUN_LEVELS, Math.max(1, 1 + Math.floor((puissance || 0) / 10)));
+  return Math.min(GUN_LEVELS, Math.max(1, puissance | 0));
 }
 function turretRangePx(state) {
   // 280px de base + 10px par point de "range" — au range 0 on couvre déjà
@@ -982,15 +982,30 @@ function connectSocket() {
     if (scene && scene.scene.isActive()) scene.setShipState(data);
   });
 
-  // Tir manuel du vaisseau (relaye par le streameur) : on affiche le projectile.
-  socket.on('ship:fire', (data) => {
-    if (!data) return;
+  // ===== Combat serveur-autoritaire : le viewer ne fait qu'afficher =====
+  socket.on('combat:enemies', (list) => {
     const scene = game.scene.getScene('main');
-    if (!scene || !scene.scene.isActive() || typeof scene.spawnBullet !== 'function') return;
-    const state = elementStates.get('ship-1') || {};
-    const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
-    scene.spawnBullet(data.x, data.y, data.angle, 'bullet-ship', { scale: 0.7, speed: 900, hitEnemies: true, dmg });
-    if (window.SFX) SFX.play(scene, 'shot-ship', data.x, data.y);
+    if (scene && scene.scene.isActive()) SharedScene.reconcileEnemies(scene, list, (e) => scene.createEnemySprite(e));
+  });
+  socket.on('combat:tracer', (t) => {
+    const scene = game.scene.getScene('main');
+    if (!scene || !scene.scene.isActive() || !t) return;
+    SharedScene.drawTracer(scene, t.from, t.to, t.kind);
+    if (window.SFX) SFX.play(scene, t.kind === 'enemy' ? 'shot-enemy' : t.kind === 'ship' ? 'shot-ship' : 'shot-turret', t.from.x, t.from.y);
+    if (t.kind === 'turret' && t.turretId && scene.elementSprites) {
+      const sp = scene.elementSprites.get(t.turretId);
+      const st = elementStates.get(t.turretId);
+      if (sp && st && typeof scene.playTurretShoot === 'function') scene.playTurretShoot(sp, turretGunLevel(st.puissance));
+    }
+  });
+  socket.on('combat:enemy_down', (d) => {
+    const scene = game.scene.getScene('main');
+    if (scene && scene.scene.isActive() && d) SharedScene.removeEnemySprite(scene, d.id, true);
+  });
+  socket.on('wave:repelled', () => {
+    const scene = game.scene.getScene('main');
+    if (scene && scene.scene.isActive()) { SharedScene.clearAllEnemies(scene); if (typeof scene.hideWaveWarnIcon === 'function') scene.hideWaveWarnIcon(); }
+    try { showVictory(); } catch (e) {}
   });
 
   // Mise a jour des niveaux (gain d'XP a une vague)
@@ -1330,9 +1345,8 @@ class MainScene extends Phaser.Scene {
     // Cercle de "grande base" (rayon visuel autour du centre)
     this.drawBasePerimeter();
 
-    // Conteneur pour les ennemis
-    this.enemies = new Set();
-    this.bullets = [];
+    // Ennemis affiches (etat simule cote serveur, recu via 'combat:enemies')
+    this.enemyById = new Map();
     this.waveWarnIcon = null;
 
     // Zoom molette (vers le curseur), borne a la case courante.
@@ -1409,10 +1423,8 @@ class MainScene extends Phaser.Scene {
         this.shipFlame.setVisible(this.time.now < (this._shipMovingUntil || 0));
       }
     }
-    this.updateTurretTargeting();
-    this.updateEnemies(delta);
-    this.updateBullets(delta);
-    if (window.SFX) SFX.updateAmbience(this, this.enemies ? this.enemies.size : 0);
+    SharedScene.lerpEnemies(this); // interpolation des ennemis pousses par le serveur
+    if (window.SFX) SFX.updateAmbience(this, this.enemyById ? this.enemyById.size : 0);
     // Le viewer suit la case du streameur, toujours centree (comme le streameur sur la sienne).
     if (this.ship) SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
     if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship ? this.ship.x : null, this.ship ? this.ship.y : null);
@@ -1421,268 +1433,8 @@ class MainScene extends Phaser.Scene {
   }
 
   // Cibles hostiles qu'un ennemi peut engager : asteroides vivants, tourelles, vaisseau du joueur.
-  collectEnemyTargets() {
-    // Cibles ENGAGEABLES = defenseurs (tourelles + vaisseau). Les asteroides ne sont PAS des
-    // cibles : sinon ils detournaient les ennemis de la base (objectif par defaut, mode 'base').
-    const targets = [];
-    if (this.elementSprites) {
-      for (const el of serverElements) {
-        if (el.type === 'turret') {
-          const s = this.elementSprites.get(el.id);
-          if (s && s.active && !s._dead) targets.push({ kind: 'turret', sprite: s });
-        }
-      }
-    }
-    if (this.ship && this.ship.active) targets.push({ kind: 'ship', sprite: this.ship });
-    return targets;
-  }
-
-  updateEnemies(delta) {
-    if (!this.enemies) return;
-    const dtSec = (delta || 16) / 1000;
-    const now = this.time.now;
-    const targets = this.collectEnemyTargets();
-    for (const sprite of this.enemies) {
-      if (!sprite.active) continue;
-
-      // Priorite : tourelle vivante la plus proche (A N'IMPORTE QUELLE DISTANCE), puis la base.
-      // Le vaisseau n'est engage que de maniere opportuniste (tres proche et plus pres qu'une tourelle).
-      let best = null, bestTurretDist = Infinity;
-      for (const t of targets) {
-        if (t.kind !== 'turret') continue;
-        const d = Phaser.Math.Distance.Between(sprite.x, sprite.y, t.sprite.x, t.sprite.y);
-        if (d < bestTurretDist) { best = t; bestTurretDist = d; }
-      }
-      const shipT = targets.find(t => t.kind === 'ship');
-      if (shipT) {
-        const sd = Phaser.Math.Distance.Between(sprite.x, sprite.y, shipT.sprite.x, shipT.sprite.y);
-        if (sd < ENEMY_DETECT_RANGE && sd < bestTurretDist) best = shipT;
-      }
-
-      let mode, cx, cy, orbitR;
-      if (best) {
-        mode = best.kind;
-        cx = best.sprite.x; cy = best.sprite.y;
-        orbitR = sprite._orbitRadius;
-        // Nouvelle cible : on casse la trajectoire et on (re)part en approche
-        if (sprite._engageRef !== best.sprite) {
-          sprite._engageRef = best.sprite;
-          sprite._engaging = false;
-        }
-      } else {
-        // Aucune cible : on file vers la base centrale (orbite sans degats une fois arrive)
-        if (sprite._engageRef !== 'base') {
-          sprite._engageRef = 'base';
-          sprite._engaging = false;
-        }
-        mode = 'base';
-        cx = BASE_X; cy = BASE_Y;
-        orbitR = BASE_PERIMETER + sprite._orbitRadius;
-      }
-
-      const distToCenter = Phaser.Math.Distance.Between(sprite.x, sprite.y, cx, cy);
-      if (!sprite._engaging && distToCenter > orbitR + 6) {
-        // Phase d'approche : on fonce en ligne droite vers la cible
-        const dx = cx - sprite.x, dy = cy - sprite.y;
-        const dn = distToCenter || 1;
-        const step = ENEMY_SPEED_PX * (sprite._speedFactor || 1) * dtSec;
-        sprite.x += (dx / dn) * step;
-        sprite.y += (dy / dn) * step;
-        sprite.rotation = Math.atan2(dy, dx) + Math.PI / 2;
-      } else {
-        // Engagement : croisiere orbitale (avec variation) + passes d'attaque en ligne droite.
-        if (!sprite._engaging) {
-          sprite._engaging = true;
-          sprite._orbitAngle = Math.atan2(sprite.y - cy, sprite.x - cx);
-          sprite._phase = 'cruise';
-          if (sprite._wobblePhase == null) sprite._wobblePhase = Math.random() * Math.PI * 2;
-        }
-        if (!sprite._lastFireAt) sprite._lastFireAt = now - Math.random() * ENEMY_FIRE_MS;
-        this.updateEnemyEngage(sprite, cx, cy, orbitR, dtSec, now, mode, best);
-      }
-
-      // Clamp : aucun ennemi ne doit coller la base (meme en orbitant une tourelle proche).
-      const dbx = sprite.x - BASE_X, dby = sprite.y - BASE_Y;
-      const db = Math.hypot(dbx, dby);
-      if (db > 0 && db < ENEMY_MIN_BASE_DIST) {
-        sprite.x = BASE_X + (dbx / db) * ENEMY_MIN_BASE_DIST;
-        sprite.y = BASE_Y + (dby / db) * ENEMY_MIN_BASE_DIST;
-      }
-
-      if (sprite._hpBar) {
-        sprite._hpBar.x = sprite.x;
-        sprite._hpBar.y = sprite.y + (sprite._hpBarDy || -38);
-      }
-    }
-  }
-
-  // Cycle d'engagement : ORBITE (avec legere fluctuation) -> PLONGEE d'attaque (tir + virage)
-  // -> retour sur l'orbite. Plus de phase "exit" (recul) qui donnait des mouvements bizarres.
-  updateEnemyEngage(sprite, cx, cy, orbitR, dtSec, now, mode, best) {
-    const step = ENEMY_SPEED_PX * (sprite._speedFactor || 1) * dtSec;
-    const turn = 5 * dtSec;
-    const bearing = Math.atan2(sprite.y - cy, sprite.x - cx);
-    const distT = Math.hypot(sprite.x - cx, sprite.y - cy) || 1;
-    const dirAway = bearing + Math.PI / 2;
-    const dirToward = bearing + Math.PI + Math.PI / 2;
-    const moveFwd = (spd) => { const f = sprite.rotation - Math.PI / 2; sprite.x += Math.cos(f) * spd; sprite.y += Math.sin(f) * spd; };
-
-    if (sprite._phase === 'dive') {
-      // Plongee : fonce vers la cible, tire quand aligne, puis amorce le virage un poil plus tot.
-      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirToward, turn * 1.3);
-      moveFwd(step * 2.6);
-      if (!sprite._firedThisRun && Math.abs(Phaser.Math.Angle.Wrap(dirToward - sprite.rotation)) < 0.25) {
-        this.fireEnemyShot(sprite, cx, cy);
-        sprite._firedThisRun = true;
-        this.onEnemyFiredAt(mode, best);
-      }
-      if (distT <= orbitR * 0.6) sprite._phase = 'peel';
-      return;
-    }
-    if (sprite._phase === 'peel') {
-      // Virage marque vers l'exterieur, puis on rejoint l'orbite.
-      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirAway + sprite._peelSide * (Math.PI / 4), turn * 1.1);
-      moveFwd(step * 1.8);
-      if (distT >= orbitR) { sprite._phase = 'cruise'; sprite._lastFireAt = now; sprite._orbitAngle = bearing; }
-      return;
-    }
-    // cruise : orbite reguliere autour de la cible, avec une LEGERE fluctuation du rayon.
-    sprite._orbitAngle += sprite._orbitSpeed * dtSec;
-    const r = orbitR + Math.sin(now * 0.0011 + sprite._wobblePhase) * (orbitR * 0.14);
-    sprite.x = cx + Math.cos(sprite._orbitAngle) * r;
-    sprite.y = cy + Math.sin(sprite._orbitAngle) * r;
-    const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.PI / 2;
-    sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, tangent, turn);
-    if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) { sprite._phase = 'dive'; sprite._firedThisRun = false; sprite._peelSide = Math.random() < 0.5 ? 1 : -1; }
-  }
-  // Hook au tir d'un ennemi : cote viewer, rien a emettre (degats geres par le streameur).
-  onEnemyFiredAt(/* mode, best */) {}
-
-  updateTurretTargeting() {
-    if (!this.elementSprites || !this.enemies) return;
-    const now = Date.now();
-    const powered = SharedScene.isBasePowered();
-    for (const el of serverElements) {
-      if (el.type !== 'turret') continue;
-      const sprite = this.elementSprites.get(el.id);
-      const state = elementStates.get(el.id);
-      if (!sprite || !state) continue;
-      // Tourelle detruite : inactive (pas de tir ; apparence + coeur geres par enterTurretDead).
-      if (state.dead) { sprite._targetingEnemy = false; sprite._firing = false; continue; }
-      SharedScene.applyTurretPowerVisual(sprite, powered);
-      // Base hors tension : la tourelle est desactivee et FIGE (on stoppe la patrouille).
-      if (!powered) {
-        sprite._targetingEnemy = false; sprite._firing = false;
-        if (sprite._patrolTween) sprite._patrolTween.stop();
-        this.updateTurretAppearance(el.id);
-        continue;
-      }
-      // Tourelle autonome : tire sur l'ennemi le plus proche en portee.
-      const range = turretRangePx(state);
-      const target = this.findNearestEnemyInRange(sprite.x, sprite.y, range);
-      if (target) {
-        if (sprite._patrolTween) sprite._patrolTween.stop();
-        sprite._targetingEnemy = true;
-        sprite._firing = true; // -> anim de tir (updateTurretAppearance)
-        const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, target.x, target.y);
-        // Ciblage : rotation LIBRE 360° pour suivre l'ennemi (plus court chemin). Le clamp
-        // ±90° vers l'exterieur ne s'applique qu'au repos (patrouille), cf. pickNewPatrolTarget.
-        const desiredRot = a + Math.PI / 2;
-        sprite.rotation += Phaser.Math.Angle.Wrap(desiredRot - sprite.rotation);
-        if (!sprite._lastShotAt) sprite._lastShotAt = 0;
-        const fireDelay = Math.max(1000, 2000 - (state.puissance || 0) * 30);
-        if (now - sprite._lastShotAt >= fireDelay) {
-          const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
-          this.playTurretShoot(sprite, turretGunLevel(state.puissance)); // anim UNIQUEMENT au tir
-          this.fireTurretLaser(sprite, target);
-          if (window.SFX) SFX.play(this, 'shot-turret', sprite.x, sprite.y);
-          this.damageEnemy(target, dmg);
-          sprite._lastShotAt = now;
-        }
-      } else {
-        // Pas d'ennemi : la patrouille reprend au prochain tick du timer (max 5s)
-        sprite._targetingEnemy = false;
-        sprite._firing = false;
-      }
-      this.updateTurretAppearance(el.id); // idle entre les tirs (sans interrompre l'anim de tir)
-    }
-  }
-
-  // Tir tourelle : projectile bullet_blaster_big1 vers l'ennemi (tracer ; les degats
-  // sont appliques par updateTurretTargeting).
-  fireTurretLaser(turretSprite, enemySprite) {
-    const a = Phaser.Math.Angle.Between(turretSprite.x, turretSprite.y, enemySprite.x, enemySprite.y);
-    // dmg:0 -> les degats sont deja appliques par updateTurretTargeting ; ici le projectile
-    // disparait simplement au contact d'un ennemi (hitEnemies).
-    this.spawnBullet(turretSprite.x, turretSprite.y, a, 'bullet-turret', { scale: 0.6, speed: 820, hitEnemies: true, dmg: 0 });
-  }
-
-  // ===== Projectiles =====
-  spawnBullet(x, y, angle, texKey, opts) {
-    if (!this.bullets) this.bullets = [];
-    opts = opts || {};
-    if (!this.textures.exists(texKey)) return null;
-    const b = this.add.image(x, y, texKey).setDepth(9).setRotation(angle + Math.PI / 2).setScale(opts.scale || 0.7);
-    const speed = opts.speed || 700;
-    b._vx = Math.cos(angle) * speed; b._vy = Math.sin(angle) * speed;
-    b._life = opts.life || 1400;
-    b._hitEnemies = !!opts.hitEnemies; b._dmg = opts.dmg || 0;
-    b._hitDefenders = !!opts.hitDefenders;
-    this.bullets.push(b);
-    return b;
-  }
-  updateBullets(delta) {
-    if (!this.bullets || !this.bullets.length) return;
-    const dt = (delta || 16) / 1000;
-    for (let i = this.bullets.length - 1; i >= 0; i--) {
-      const b = this.bullets[i];
-      b.x += b._vx * dt; b.y += b._vy * dt; b._life -= (delta || 16);
-      let hit = false;
-      if (b._hitEnemies && this.enemies) {
-        for (const e of this.enemies) {
-          if (e.active && Phaser.Math.Distance.Between(b.x, b.y, e.x, e.y) < 28) {
-            if (b._dmg) this.damageEnemy(e, b._dmg);
-            this.impactFlash(b.x, b.y); hit = true; break;
-          }
-        }
-      } else if (b._hitDefenders) {
-        if (this.bulletHitsDefender(b.x, b.y)) { this.impactFlash(b.x, b.y); hit = true; }
-      }
-      if (hit || b._life <= 0) { b.destroy(); this.bullets.splice(i, 1); }
-    }
-  }
-  // Renvoie le sprite defenseur (tourelle/base/asteroide/vaisseau) touche par un tir, ou null.
-  bulletHitsDefender(bx, by) {
-    if (this.elementSprites) {
-      for (const el of serverElements) {
-        if (el.type !== 'turret' && el.type !== 'base' && el.type !== 'asteroid') continue;
-        const sp = this.elementSprites.get(el.id);
-        if (!sp || !sp.visible || sp.alpha < 0.5) continue;
-        const r = Math.max(sp.displayWidth, sp.displayHeight) * 0.4;
-        if (Phaser.Math.Distance.Between(bx, by, sp.x, sp.y) < r) return sp;
-      }
-    }
-    if (this.ship && this.ship.active) {
-      const r = Math.max(this.ship.displayWidth, this.ship.displayHeight) * 0.55;
-      if (Phaser.Math.Distance.Between(bx, by, this.ship.x, this.ship.y) < r) return this.ship;
-    }
-    return null;
-  }
-  // Signal visuel d'impact : eclat blanc qui s'agrandit et disparait.
-  impactFlash(x, y) {
-    if (window.SFX) SFX.play(this, 'impact', x, y);
-    const f = this.add.circle(x, y, 5, 0xffffff, 0.95).setDepth(10);
-    this.tweens.add({ targets: f, scale: 2.6, alpha: 0, duration: 200, ease: 'Quad.easeOut', onComplete: () => f.destroy() });
-  }
-
-  findNearestEnemyInRange(tx, ty, range) {
-    let best = null, bestDist = range;
-    for (const e of this.enemies) {
-      const d = Phaser.Math.Distance.Between(tx, ty, e.x, e.y);
-      if (d < bestDist) { best = e; bestDist = d; }
-    }
-    return best;
-  }
+  // Le combat (ennemis, tourelles, balles) est simule cote serveur. Le viewer ne fait
+  // qu'afficher : reconciliation via SharedScene.reconcileEnemies + tracers (combat:tracer).
 
   showRangeCircle(turretId) {
     this.rangeCircleId = turretId;
@@ -2161,9 +1913,6 @@ class MainScene extends Phaser.Scene {
 
   handleWaveIncoming(wave) {
     if (!wave) return;
-    // Suivi "vague repoussee" : on attend que TOUS les ennemis de la vague soient detruits.
-    if (!this._waveActive) { this._waveActive = true; this._waveExpected = 0; this._waveKilled = 0; }
-    this._waveExpected += (wave.enemies ? wave.enemies.length : 0);
     const now = Date.now();
     const warningRemaining = Math.max(0, wave.warningEndsAt - now);
     // UI bannière
@@ -2175,11 +1924,8 @@ class MainScene extends Phaser.Scene {
       playWaveSound(wave.type);
       this.time.delayedCall(warningRemaining, () => playWaveSound(wave.type));
     }
-    // Programmer le spawn des ennemis
-    for (const enemy of wave.enemies) {
-      const delay = warningRemaining + (enemy.spawnOffsetMs || 0);
-      this.time.delayedCall(delay, () => this.spawnEnemy(enemy));
-    }
+    // Indique la provenance des ennemis (les sprites sont ensuite pousses par le serveur).
+    this.showWaveWarnIcon(wave);
   }
 
   showWaveWarnIcon(wave) {
@@ -2205,69 +1951,23 @@ class MainScene extends Phaser.Scene {
     }
   }
 
-  spawnEnemy(e) {
+  // Fabrique d'un sprite ennemi (l'etat/mouvement vient du serveur, via SharedScene.reconcileEnemies).
+  createEnemySprite(e) {
     const level = 1;
     const boss = !!e.boss;
-    const sprite = this.add.sprite(e.spawnX, e.spawnY, `enemy${level}-fr-000`)
-      .setScale(ENEMY_SCALE * (e.scale || 1))
+    const sprite = this.add.sprite(e.x, e.y, `enemy${level}-fr-000`)
+      .setScale(ENEMY_SCALE * (boss ? 2.6 : 1))
       .setOrigin(0.5, 0.36)
       .setDepth(boss ? 9 : 8);
     sprite.play(`enemy${level}-thrust`);
     sprite._level = level;
     sprite._boss = boss;
-    sprite._speedFactor = e.speedFactor || 1;  // boss plus lent
-    // HP fourni par le serveur (croit avec les jours de survie de la base) ; 30 par defaut.
-    sprite._hp = sprite._hpMax = (typeof e.hp === 'number' && e.hp > 0) ? e.hp : 30;
-    sprite._orbitRadius = ENEMY_ORBIT_R_MIN + Math.random() * (ENEMY_ORBIT_R_MAX - ENEMY_ORBIT_R_MIN);
-    sprite._orbitSpeed = (0.20 + Math.random() * 0.20) * (Math.random() < 0.5 ? 1 : -1);
-    sprite._engageRef = null;
-    sprite._engaging = false;
-    // Oriente d'emblee vers la base (cap par defaut)
-    sprite.rotation = Math.atan2(BASE_Y - e.spawnY, BASE_X - e.spawnX) + Math.PI / 2;
     const barW = boss ? 64 : 40, barDy = boss ? -64 : -38;
     sprite._hpBarDy = barDy;
     sprite._hpBar = SharedScene.makeImageHpBar(this, sprite.x, sprite.y + barDy, barW,
       { fillTex: 'enemy-hp-fg', frameTex: 'enemy-hp-bg', tint: false, uniform: true, fillDy: -1 });
     sprite._hpBar.setDepth(boss ? 10 : 8);
-    this.enemies.add(sprite);
-  }
-
-  damageEnemy(sprite, dmg) {
-    if (!sprite.active) return;
-    sprite._hp = Math.max(0, sprite._hp - dmg);
-    // Refresh barre
-    if (sprite._hpBar) {
-      const ratio = sprite._hp / sprite._hpMax;
-      sprite._hpBar.fill.width = sprite._hpBar.maxWidth * ratio;
-      let color = 0x4fdb73;
-      if (ratio < 0.3) color = 0xff4f6d;
-      else if (ratio < 0.6) color = 0xffd24f;
-      sprite._hpBar.fill.fillColor = color;
-    }
-    if (sprite._hp <= 0) this.destroyEnemy(sprite);
-  }
-
-  fireEnemyShot(sprite, tx, ty) {
-    const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, tx, ty);
-    // hitDefenders : le tir disparait + fait un eclat blanc quand il touche un defenseur.
-    this.spawnBullet(sprite.x, sprite.y, a, 'bullet-enemy', { scale: 0.7, speed: 520, hitDefenders: true });
-    if (window.SFX) SFX.play(this, 'shot-enemy', sprite.x, sprite.y);
-  }
-
-  destroyEnemy(sprite) {
-    if (!sprite.active) return;
-    if (sprite._hpBar) sprite._hpBar.destroy();
-    this.playEnemyExplosion(sprite.x, sprite.y, sprite._level || 1);
-    this.enemies.delete(sprite);
-    sprite.destroy();
-    // Vague repoussee : tous les ennemis attendus ont ete detruits -> badge Victoire.
-    if (this._waveActive) {
-      this._waveKilled = (this._waveKilled || 0) + 1;
-      if (this._waveKilled >= this._waveExpected && this.enemies.size === 0) {
-        this._waveActive = false;
-        try { showVictory(); } catch (e) {}
-      }
-    }
+    return sprite;
   }
 
   playEnemyExplosion(x, y, level) {

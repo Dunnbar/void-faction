@@ -687,8 +687,8 @@ function publicElementState(rt, id) {
     const dead = el.type === 'turret' && s.dead;
     const out = {
       id, ...s,
-      puissance: dead ? 0 : sumContributionsOnAction(rt, id, 'tir', 'PUISSANCE'),
-      range:     dead ? 0 : sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE')
+      puissance: dead ? 0 : Math.min(8, sumContributionsOnAction(rt, id, 'tir', 'PUISSANCE')),
+      range:     dead ? 0 : Math.min(8, sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE'))
     };
     // Le vaisseau a en plus une "capacite" (vitesse) boostee par les viewers (niveaux UTILITAIRE).
     if (el.type === 'ship') out.capacite = sumContributionsOnAction(rt, id, 'capacite', 'UTILITAIRE');
@@ -1207,6 +1207,7 @@ io.on('connection', (socket) => {
     world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y, gameTz: GAME_TZ,
              mapMinI: MAP_MIN_I, mapMaxI: MAP_MAX_I, mapMinJ: MAP_MIN_J, mapMaxJ: MAP_MAX_J },
     currentWave: rtForInit && rtForInit.currentWave && rtForInit.currentWave.endsAt > Date.now() ? rtForInit.currentWave : null,
+    combatEnemies: rtForInit ? combatSnapshot(rtForInit.combat) : [],
     baseDead: rtForInit ? !!rtForInit.baseDead : false,
     buildTime: BUILD_TIME
   });
@@ -1314,50 +1315,15 @@ io.on('connection', (socket) => {
     }
   });
 
-  // Tir manuel du vaisseau (clic gauche du streameur) : on relaie aux viewers de la
-  // base pour qu'ils affichent le projectile (et l'appliquent a leur copie locale).
+  // Tir du vaisseau (touche Espace de l'Amiral) : le serveur fait autorite. Il resout la
+  // touche contre les ennemis serveur (cible verrouillee ou ray-cast) et diffuse le tracer.
   socket.on('ship:fire', (data) => {
     if (!socket.data.amiralId) return;
     const rt = amiralsRuntime.get(socket.data.amiralId);
     if (!rt) return;
     if (!data || typeof data.x !== 'number' || typeof data.y !== 'number' || typeof data.angle !== 'number') return;
-    socket.broadcast.to(amiralRoom(rt.id)).emit('ship:fire', { x: data.x, y: data.y, angle: data.angle });
-  });
-
-  // Tir ennemi atteignant la base : seul le client Amiral (streameur) fait autorite.
-  // Le serveur applique un degat fixe (le client ne dicte pas la valeur).
-  socket.on('streamer:base_hit', (data) => {
-    if (!socket.data.amiralId) return;
-    const rt = amiralsRuntime.get(socket.data.amiralId);
-    if (!rt) return;
-    const mult = data && data.boss ? BOSS_DMG_FACTOR : 1;
-    applyBaseDamage(rt, baseHitDmgForDay(daysAliveFor(rt)) * mult);
-  });
-
-  // Tir ennemi atteignant une tourelle (autorite streameur, comme la base).
-  socket.on('streamer:turret_hit', (data) => {
-    if (!socket.data.amiralId) return;
-    const rt = amiralsRuntime.get(socket.data.amiralId);
-    if (!rt) return;
-    const id = String(data?.id || '');
-    const mult = data && data.boss ? BOSS_DMG_FACTOR : 1;
-    if (id) applyTurretDamage(rt, id, baseHitDmgForDay(daysAliveFor(rt)) * mult);
-  });
-
-  // Ennemi detruit (autorite streameur). Quand tous les ennemis de la vague sont tues,
-  // la vague est repoussee (fin par le combat, pas par un timer).
-  socket.on('streamer:enemy_down', (data) => {
-    if (!socket.data.amiralId) return;
-    const rt = amiralsRuntime.get(socket.data.amiralId);
-    if (!rt || !rt.currentWave) return;
-    // On ne compte que les ennemis de la vague EN COURS : un survivant d'une vague
-    // precedente qui meurt ne doit pas decrementer (et donc "repousser") la vague actuelle.
-    if (!data || data.waveId !== rt.currentWave.id) return;
-    rt.currentWave.alive = Math.max(0, (rt.currentWave.alive || 0) - 1);
-    if (rt.currentWave.alive <= 0 && !rt.baseDead) {
-      logJournal(rt, 'wave_repelled', `Vague repoussée — tous les ennemis détruits`);
-      rt.currentWave = null;
-    }
+    if (!Number.isFinite(data.x) || !Number.isFinite(data.y) || !Number.isFinite(data.angle)) return;
+    resolveShipFire(rt, { x: data.x, y: data.y, angle: data.angle, targetId: data.targetId ? String(data.targetId) : null });
   });
 
   // "Recommencer" : seul l'Amiral relance sa base apres destruction (HP/essence/jour reinitialises).
@@ -1943,7 +1909,9 @@ function rollWaveFor(rt, force = false, type = null) {
         const fireAt = enemyArrivesAt + t * ENEMY_FIRE_INTERVAL_MS;
         const delay = Math.max(0, fireAt - Date.now());
         setTimeout(() => {
-          if (!rt.online) return;
+          // Attrition du gisement : seulement quand la base est REGARDEE (combat live).
+          // Quand personne ne regarde, c'est resolveWaveOffline qui ronge le gisement.
+          if (!roomIsWatched(rt.id)) return;
           applyAsteroidGroupDamage(rt, subtype, ASTEROID_ENEMY_DAMAGE_MS);
         }, delay);
       }
@@ -1998,18 +1966,19 @@ function resolveWaveOffline(rt, wave) {
   console.log(`[amiral ${rt.username}] vague hors-ligne SUBIE — base -${dmg} HP (${reason})`);
 }
 
-// Verifie le sort d'une vague SANS jamais imposer de deadline au combat en ligne.
-//  - Amiral hors-ligne : personne ne simule -> resolution server-side selon les defenses.
-//  - Amiral en ligne   : on ne touche a rien (la vague continue jusqu'a la mort des ennemis
-//    ou de la base) ; on re-verifie plus tard au cas ou l'Amiral se deconnecte en cours.
+// Verifie le sort d'une vague SANS jamais imposer de deadline au combat live.
+//  - Personne ne regarde : aucun client ne simule -> resolution server-side abstraite.
+//  - Base regardee (amiral OU viewer) : le combat live (combatTick) gere la vague jusqu'a
+//    la mort des ennemis ou de la base ; on re-verifie plus tard au cas ou tout le monde part.
 function scheduleWaveResolution(rt, waveId, waveSnapshot, delay) {
   setTimeout(() => {
     if (amiralsRuntime.get(rt.id) !== rt) return;
     if (!rt.currentWave || rt.currentWave.id !== waveId) return; // deja repoussee/remplacee
     if (rt.baseDead) { rt.currentWave = null; return; }
-    if (!rt.online) {
+    if (!roomIsWatched(rt.id)) {
       resolveWaveOffline(rt, waveSnapshot);
       rt.currentWave = null;
+      rt.combat = null;
     } else {
       scheduleWaveResolution(rt, waveId, waveSnapshot, 60000); // re-check dans 60s
     }
@@ -2127,6 +2096,278 @@ setInterval(() => {
     }
   }
 }, 1000);
+
+// ============================================================================
+// COMBAT SERVEUR-AUTORITAIRE
+// Le serveur simule les ennemis (deplacement + IA + tir), le tir des tourelles
+// et resout le tir du vaisseau, a ~10 Hz, UNIQUEMENT pour les runtimes dont la
+// room est "regardee" (>=1 client : amiral ou viewer). Les clients ne sont que
+// des afficheurs (snapshot 'combat:enemies' + 'combat:tracer'/'combat:enemy_down').
+// Quand personne ne regarde, on retombe sur resolveWaveOffline (resolution abstraite).
+// ============================================================================
+const COMBAT_TICK_MS         = 100;  // ~10 Hz
+const COMBAT_DETECT_RANGE    = 340;  // rayon de detection d'une cible a engager (vaisseau)
+const COMBAT_ORBIT_MIN       = 90;
+const COMBAT_ORBIT_MAX       = 160;
+const COMBAT_MIN_BASE_DIST   = 300;  // distance mini au centre de la base
+const COMBAT_ENEMY_FIRE_MS   = 5000; // delai entre 2 passes d'attaque d'un ennemi
+const TURRET_PUISSANCE_CAP   = 8;    // niveaux/assets de tourelle (Gun01..Gun08)
+const TURRET_RANGE_CAP       = 8;
+
+// Une room est "regardee" si au moins un socket y est present (amiral OU viewer).
+function roomIsWatched(amiralId) {
+  const r = io.sockets.adapter.rooms.get(amiralRoom(amiralId));
+  return !!r && r.size > 0;
+}
+function turretRangePxServer(range) { return 280 + (range || 0) * 10; }
+function angleWrap(a) { return Math.atan2(Math.sin(a), Math.cos(a)); }
+function angleRotateTo(cur, target, step) {
+  const diff = angleWrap(target - cur);
+  if (Math.abs(diff) <= step) return target;
+  return cur + Math.sign(diff) * step;
+}
+
+// Construit l'etat de combat ephemere a partir de la vague courante.
+function buildCombatForWave(rt) {
+  const wave = rt.currentWave;
+  if (!wave) return null;
+  const enemies = new Map();
+  for (const e of wave.enemies) {
+    const hp = (typeof e.hp === 'number' && e.hp > 0) ? e.hp : 30;
+    enemies.set(e.id, {
+      id: e.id, boss: !!e.boss, hp, hpMax: hp,
+      scale: e.scale || 1, speedFactor: e.speedFactor || 1,
+      x: e.spawnX, y: e.spawnY,
+      rotation: Math.atan2(BASE_Y - e.spawnY, BASE_X - e.spawnX) + Math.PI / 2,
+      spawnAt: wave.spawnAt + (e.spawnOffsetMs || 0), spawned: false,
+      orbitRadius: COMBAT_ORBIT_MIN + Math.random() * (COMBAT_ORBIT_MAX - COMBAT_ORBIT_MIN),
+      orbitSpeed: (0.20 + Math.random() * 0.20) * (Math.random() < 0.5 ? 1 : -1),
+      orbitAngle: 0, wobblePhase: Math.random() * Math.PI * 2,
+      engageRef: null, engaging: false, phase: 'cruise', lastFireAt: 0, firedThisRun: false, peelSide: 1
+    });
+  }
+  return { waveId: wave.id, enemies, lastTickAt: Date.now(), turretLastShot: {} };
+}
+
+// Snapshot serialisable des ennemis spawnes (pour init + diffusion).
+function combatSnapshot(combat) {
+  const out = [];
+  if (!combat) return out;
+  for (const en of combat.enemies.values()) {
+    if (!en.spawned) continue;
+    out.push({ id: en.id, x: Math.round(en.x), y: Math.round(en.y), rotation: +en.rotation.toFixed(3),
+               hp: en.hp, hpMax: en.hpMax, boss: en.boss, phase: en.phase });
+  }
+  return out;
+}
+
+// Defenseurs engageables (tourelles vivantes + vaisseau). Les asteroides ne sont PAS des cibles.
+function combatDefenders(rt) {
+  const list = [];
+  for (const el of rt.elements) {
+    if (el.type !== 'turret') continue;
+    const s = rt.elementStates.get(el.id);
+    if (s && s.hp > 0 && !s.dead) list.push({ kind: 'turret', id: el.id, x: el.x, y: el.y });
+  }
+  list.push({ kind: 'ship', x: rt.ship.x, y: rt.ship.y });
+  return list;
+}
+
+function killEnemyServer(rt, combat, en) {
+  if (!combat.enemies.has(en.id)) return;
+  combat.enemies.delete(en.id);
+  io.to(amiralRoom(rt.id)).emit('combat:enemy_down', { id: en.id, x: Math.round(en.x), y: Math.round(en.y), boss: en.boss });
+  if (rt.currentWave) {
+    rt.currentWave.alive = Math.max(0, (rt.currentWave.alive || 0) - 1);
+    if (rt.currentWave.alive <= 0 && !rt.baseDead) {
+      logJournal(rt, 'wave_repelled', `Vague repoussée — tous les ennemis détruits`);
+      const wid = rt.currentWave.id;
+      rt.currentWave = null;
+      rt.combat = null;
+      io.to(amiralRoom(rt.id)).emit('wave:repelled', { waveId: wid });
+    }
+  }
+}
+function damageEnemyServer(rt, combat, en, dmg) {
+  en.hp = Math.max(0, en.hp - dmg);
+  if (en.hp <= 0) killEnemyServer(rt, combat, en);
+}
+
+// Tir ennemi (hitscan) : applique les degats a la base/tourelle + diffuse un tracer visuel.
+function enemyFireServer(rt, en, mode, targetId, cx, cy, day) {
+  const dmg = baseHitDmgForDay(day) * (en.boss ? BOSS_DMG_FACTOR : 1);
+  io.to(amiralRoom(rt.id)).emit('combat:tracer', {
+    from: { x: Math.round(en.x), y: Math.round(en.y) }, to: { x: Math.round(cx), y: Math.round(cy) },
+    kind: 'enemy', boss: en.boss
+  });
+  if (mode === 'base') applyBaseDamage(rt, dmg);
+  else if (mode === 'turret' && targetId) applyTurretDamage(rt, targetId, dmg);
+  // mode 'ship' : pas de degats au vaisseau (parite avec le comportement client d'origine)
+}
+
+// Cycle d'engagement d'un ennemi : orbite -> plongee (tir) -> degagement -> orbite.
+function tickEnemyEngage(rt, combat, en, cx, cy, orbitR, dt, now, mode, targetId, day) {
+  const step = ENEMY_SPEED * (en.speedFactor || 1) * dt;
+  const turn = 5 * dt;
+  const bearing = Math.atan2(en.y - cy, en.x - cx);
+  const distT = Math.hypot(en.x - cx, en.y - cy) || 1;
+  const dirAway = bearing + Math.PI / 2;
+  const dirToward = bearing + Math.PI + Math.PI / 2;
+  const moveFwd = (spd) => { const f = en.rotation - Math.PI / 2; en.x += Math.cos(f) * spd; en.y += Math.sin(f) * spd; };
+
+  if (en.phase === 'dive') {
+    en.rotation = angleRotateTo(en.rotation, dirToward, turn * 1.3);
+    moveFwd(step * 2.6);
+    if (!en.firedThisRun && Math.abs(angleWrap(dirToward - en.rotation)) < 0.25) {
+      enemyFireServer(rt, en, mode, targetId, cx, cy, day);
+      en.firedThisRun = true;
+    }
+    if (distT <= orbitR * 0.6) en.phase = 'peel';
+    return;
+  }
+  if (en.phase === 'peel') {
+    en.rotation = angleRotateTo(en.rotation, dirAway + en.peelSide * (Math.PI / 4), turn * 1.1);
+    moveFwd(step * 1.8);
+    if (distT >= orbitR) { en.phase = 'cruise'; en.lastFireAt = now; en.orbitAngle = bearing; }
+    return;
+  }
+  // cruise : orbite reguliere avec legere fluctuation du rayon
+  en.orbitAngle += en.orbitSpeed * dt;
+  const r = orbitR + Math.sin(now * 0.0011 + en.wobblePhase) * (orbitR * 0.14);
+  en.x = cx + Math.cos(en.orbitAngle) * r;
+  en.y = cy + Math.sin(en.orbitAngle) * r;
+  const tangent = en.orbitAngle + (en.orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.PI / 2;
+  en.rotation = angleRotateTo(en.rotation, tangent, turn);
+  if (now - en.lastFireAt >= COMBAT_ENEMY_FIRE_MS) { en.phase = 'dive'; en.firedThisRun = false; en.peelSide = Math.random() < 0.5 ? 1 : -1; }
+}
+
+// Deplacement + selection de cible d'un ennemi (priorite tourelle proche > vaisseau proche > base).
+function tickEnemyServer(rt, combat, en, defenders, dt, now, day) {
+  let best = null, bestTurretDist = Infinity;
+  for (const t of defenders) {
+    if (t.kind !== 'turret') continue;
+    const d = Math.hypot(en.x - t.x, en.y - t.y);
+    if (d < bestTurretDist) { best = t; bestTurretDist = d; }
+  }
+  const shipT = defenders.find(t => t.kind === 'ship');
+  if (shipT) {
+    const sd = Math.hypot(en.x - shipT.x, en.y - shipT.y);
+    if (sd < COMBAT_DETECT_RANGE && sd < bestTurretDist) best = shipT;
+  }
+  let mode, cx, cy, orbitR, targetId = null;
+  if (best) {
+    mode = best.kind; cx = best.x; cy = best.y; orbitR = en.orbitRadius;
+    targetId = best.id || null;
+    const ref = best.kind === 'turret' ? best.id : 'ship';
+    if (en.engageRef !== ref) { en.engageRef = ref; en.engaging = false; }
+  } else {
+    if (en.engageRef !== 'base') { en.engageRef = 'base'; en.engaging = false; }
+    mode = 'base'; cx = BASE_X; cy = BASE_Y; orbitR = BASE_PERIMETER + en.orbitRadius;
+  }
+  const distToCenter = Math.hypot(en.x - cx, en.y - cy);
+  if (!en.engaging && distToCenter > orbitR + 6) {
+    const dx = cx - en.x, dy = cy - en.y, dn = distToCenter || 1;
+    const stp = ENEMY_SPEED * (en.speedFactor || 1) * dt;
+    en.x += (dx / dn) * stp; en.y += (dy / dn) * stp;
+    en.rotation = Math.atan2(dy, dx) + Math.PI / 2;
+  } else {
+    if (!en.engaging) { en.engaging = true; en.orbitAngle = Math.atan2(en.y - cy, en.x - cx); en.phase = 'cruise'; }
+    if (!en.lastFireAt) en.lastFireAt = now - Math.random() * COMBAT_ENEMY_FIRE_MS;
+    tickEnemyEngage(rt, combat, en, cx, cy, orbitR, dt, now, mode, targetId, day);
+  }
+  // Clamp : aucun ennemi ne colle la base
+  const dbx = en.x - BASE_X, dby = en.y - BASE_Y, db = Math.hypot(dbx, dby);
+  if (db > 0 && db < COMBAT_MIN_BASE_DIST) {
+    en.x = BASE_X + (dbx / db) * COMBAT_MIN_BASE_DIST;
+    en.y = BASE_Y + (dby / db) * COMBAT_MIN_BASE_DIST;
+  }
+}
+
+// Tir des tourelles (hitscan) : ennemi le plus proche en portee, cadence selon puissance.
+function tickTurretsServer(rt, combat, now) {
+  const baseEl = rt.elements.find(e => e.type === 'base');
+  const baseState = baseEl && rt.elementStates.get(baseEl.id);
+  if (!baseState || (baseState.essence || 0) <= 0) return; // base hors tension -> tourelles inactives
+  for (const el of rt.elements) {
+    if (el.type !== 'turret') continue;
+    const s = rt.elementStates.get(el.id);
+    if (!s || s.dead || s.hp <= 0) continue;
+    const puissance = Math.min(TURRET_PUISSANCE_CAP, sumContributionsOnAction(rt, el.id, 'tir', 'PUISSANCE'));
+    const range     = Math.min(TURRET_RANGE_CAP, sumContributionsOnAction(rt, el.id, 'visee', 'PUISSANCE'));
+    const rangePx = turretRangePxServer(range);
+    let best = null, bestD = rangePx;
+    for (const en of combat.enemies.values()) {
+      if (!en.spawned) continue;
+      const d = Math.hypot(el.x - en.x, el.y - en.y);
+      if (d < bestD) { best = en; bestD = d; }
+    }
+    if (!best) continue;
+    const fireDelay = Math.max(1000, 2000 - puissance * 30);
+    if (now - (combat.turretLastShot[el.id] || 0) < fireDelay) continue;
+    combat.turretLastShot[el.id] = now;
+    const dmg = 5 + Math.floor(puissance * 0.5);
+    io.to(amiralRoom(rt.id)).emit('combat:tracer', { from: { x: el.x, y: el.y }, to: { x: Math.round(best.x), y: Math.round(best.y) }, kind: 'turret', turretId: el.id });
+    damageEnemyServer(rt, combat, best, dmg);
+    if (!rt.combat) return; // la vague vient de se terminer
+  }
+}
+
+// Resout le tir du vaisseau (cible verrouillee ou ray-cast) + diffuse le tracer a toute la room.
+function resolveShipFire(rt, data) {
+  const combat = rt.combat;
+  let tx = data.x + Math.cos(data.angle) * 900;
+  let ty = data.y + Math.sin(data.angle) * 900;
+  let hit = null;
+  if (combat) {
+    if (data.targetId && combat.enemies.has(data.targetId)) {
+      hit = combat.enemies.get(data.targetId);
+    } else {
+      let bestProj = Infinity;
+      for (const en of combat.enemies.values()) {
+        if (!en.spawned) continue;
+        const rx = en.x - data.x, ry = en.y - data.y;
+        const proj = rx * Math.cos(data.angle) + ry * Math.sin(data.angle);
+        if (proj < 0 || proj > 900) continue;
+        const perp = Math.abs(-Math.sin(data.angle) * rx + Math.cos(data.angle) * ry);
+        if (perp <= 28 && proj < bestProj) { bestProj = proj; hit = en; }
+      }
+    }
+  }
+  if (hit) { tx = Math.round(hit.x); ty = Math.round(hit.y); }
+  io.to(amiralRoom(rt.id)).emit('combat:tracer', { from: { x: Math.round(data.x), y: Math.round(data.y) }, to: { x: Math.round(tx), y: Math.round(ty) }, kind: 'ship' });
+  if (hit && combat) {
+    const puissance = Math.min(TURRET_PUISSANCE_CAP, sumContributionsOnAction(rt, 'ship-1', 'tir', 'PUISSANCE'));
+    damageEnemyServer(rt, combat, hit, 5 + Math.floor(puissance * 0.5));
+  }
+}
+
+function combatTick() {
+  const now = Date.now();
+  for (const rt of amiralsRuntime.values()) {
+    if (rt.id === 0) continue;                       // pas de combat live pour la demo
+    if (rt.baseDead || !rt.currentWave || !roomIsWatched(rt.id)) { rt.combat = null; continue; }
+    if (!rt.combat || rt.combat.waveId !== rt.currentWave.id) rt.combat = buildCombatForWave(rt);
+    const combat = rt.combat;
+    let dt = (now - combat.lastTickAt) / 1000;
+    combat.lastTickAt = now;
+    if (dt <= 0) dt = COMBAT_TICK_MS / 1000;
+    if (dt > 0.25) dt = 0.25;
+    const day = daysAliveFor(rt);
+    // Apparition des ennemis dus
+    for (const en of combat.enemies.values()) if (!en.spawned && now >= en.spawnAt) en.spawned = true;
+    // Deplacement + IA + tir ennemi
+    const defenders = combatDefenders(rt);
+    for (const en of combat.enemies.values()) { if (en.spawned) tickEnemyServer(rt, combat, en, defenders, dt, now, day); }
+    // Tir des tourelles (peut terminer la vague -> rt.combat devient null)
+    if (rt.combat) tickTurretsServer(rt, combat, now);
+    // Diffusion du snapshot (seulement s'il y a des ennemis a l'ecran)
+    if (rt.combat) {
+      const snap = combatSnapshot(combat);
+      if (snap.length) io.to(amiralRoom(rt.id)).emit('combat:enemies', snap);
+    }
+  }
+}
+setInterval(combatTick, COMBAT_TICK_MS);
 
 server.listen(PORT, () => {
   console.log(`VoidFaction écoute sur le port ${PORT}`);

@@ -546,7 +546,88 @@
     if (hpBar) hpBar.setVisible(true);
   }
 
+  // ===== Combat serveur-autoritaire : rendu des ennemis + traceurs =====
+  // Les ennemis sont simules cote serveur ; les clients ne font qu'afficher le snapshot.
+
+  function updateEnemyHpBar(sp) {
+    const bar = sp._hpBar;
+    if (!bar || sp._hpMax == null || !bar.fill || bar.maxWidth == null) return;
+    const ratio = Math.max(0, Math.min(1, sp._hp / sp._hpMax));
+    bar.fill.width = bar.maxWidth * ratio;
+    let color = 0x4fdb73;
+    if (ratio < 0.3) color = 0xff4f6d; else if (ratio < 0.6) color = 0xffd24f;
+    bar.fill.fillColor = color;
+  }
+
+  function removeEnemySprite(scene, id, explode) {
+    if (!scene.enemyById) return;
+    const sp = scene.enemyById.get(id);
+    if (!sp) return;
+    scene.enemyById.delete(id);
+    if (explode && typeof scene.playEnemyExplosion === 'function') scene.playEnemyExplosion(sp.x, sp.y, sp._level || 1);
+    if (sp._hpBar) { try { sp._hpBar.destroy(); } catch (e) {} }
+    if (scene.lockedEnemy === sp && typeof scene.clearLock === 'function') scene.clearLock();
+    try { sp.destroy(); } catch (e) {}
+  }
+
+  // Reconcilie la liste d'ennemis recue (snapshot serveur) avec les sprites locaux.
+  // createFn(e) cree et renvoie le sprite (texture/scale/barre de vie/interactivite propres au client).
+  function reconcileEnemies(scene, list, createFn) {
+    if (!scene.enemyById) scene.enemyById = new Map();
+    const seen = new Set();
+    for (const e of (list || [])) {
+      seen.add(e.id);
+      let sp = scene.enemyById.get(e.id);
+      if (!sp || !sp.active) {
+        sp = createFn(e);
+        if (!sp) continue;
+        sp._enemyId = e.id;
+        sp.x = e.x; sp.y = e.y; sp.rotation = e.rotation;
+        scene.enemyById.set(e.id, sp);
+      }
+      sp._tx = e.x; sp._ty = e.y; sp._trot = e.rotation;   // cibles d'interpolation
+      sp._hp = e.hp; sp._hpMax = e.hpMax; sp._boss = e.boss;
+      updateEnemyHpBar(sp);
+    }
+    // Filet de securite : retire les ennemis absents du snapshot (la mort passe normalement par combat:enemy_down).
+    for (const id of [...scene.enemyById.keys()]) if (!seen.has(id)) removeEnemySprite(scene, id, false);
+  }
+
+  // Interpolation douce vers la derniere position serveur (a appeler chaque frame de rendu).
+  function lerpEnemies(scene, factor) {
+    if (!scene.enemyById) return;
+    const f = factor || 0.3;
+    for (const sp of scene.enemyById.values()) {
+      if (!sp.active) continue;
+      if (sp._tx != null) { sp.x += (sp._tx - sp.x) * f; sp.y += (sp._ty - sp.y) * f; }
+      if (sp._trot != null) sp.rotation = Phaser.Math.Angle.RotateTo(sp.rotation, sp._trot, 0.3);
+      if (sp._hpBar) { sp._hpBar.x = sp.x; sp._hpBar.y = sp.y + (sp._hpBarDy || -38); }
+    }
+  }
+
+  function clearAllEnemies(scene) {
+    if (!scene.enemyById) return;
+    for (const id of [...scene.enemyById.keys()]) removeEnemySprite(scene, id, false);
+  }
+
+  // Traceur de tir : ligne lumineuse ephemere + eclat a l'arrivee. kind: 'turret'|'enemy'|'ship'.
+  function drawTracer(scene, from, to, kind) {
+    if (!from || !to) return;
+    const col = kind === 'enemy' ? 0xff5a5a : kind === 'ship' ? 0x7fd0ff : 0xffd24f;
+    const g = scene.add.graphics().setDepth(9);
+    g.lineStyle(kind === 'ship' ? 2.5 : 1.5, col, 0.9);
+    g.beginPath(); g.moveTo(from.x, from.y); g.lineTo(to.x, to.y); g.strokePath();
+    scene.tweens.add({ targets: g, alpha: 0, duration: 180, ease: 'Quad.easeOut', onComplete: () => g.destroy() });
+    const flash = scene.add.circle(to.x, to.y, 4, 0xffffff, 0.9).setDepth(10);
+    scene.tweens.add({ targets: flash, scale: 2.2, alpha: 0, duration: 200, ease: 'Quad.easeOut', onComplete: () => flash.destroy() });
+  }
+
   window.SharedScene = {
+    reconcileEnemies,
+    lerpEnemies,
+    removeEnemySprite,
+    clearAllEnemies,
+    drawTracer,
     showGroupRespawnTimer,
     clearGroupRespawnTimer,
     clearAllGroupRespawnTimers,
