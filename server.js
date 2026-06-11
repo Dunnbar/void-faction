@@ -85,18 +85,18 @@ const CATEGORY_TO_COLUMN = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILI
 // ============ Templates d'éléments (instanciés par Amiral) ============
 
 const TURRET_ACTIONS = [
-  { id: 'tir',        label: 'Améliorer Tir',    category: 'PUISSANCE' },
-  { id: 'visee',      label: 'Améliorer Portée', category: 'PUISSANCE' },
-  { id: 'reparation', label: 'Réparation',       category: 'DEFENSIF'  }
+  { id: 'tir',        label: 'Tir',        category: 'PUISSANCE', effect: '+1 permanent' },
+  { id: 'visee',      label: 'Portée',     category: 'PUISSANCE', effect: '+1 permanent' },
+  { id: 'reparation', label: 'Réparation', category: 'DEFENSIF',  effect: '+1 PV toutes les 10 s' }
 ];
 const BASE_ACTIONS = [
-  { id: 'reparation', label: 'Réparation', category: 'DEFENSIF'   },
-  { id: 'remplir',    label: 'Remplir',    category: 'UTILITAIRE' }
+  { id: 'reparation', label: 'Réparation', category: 'DEFENSIF',   effect: '+1 PV toutes les 10 s' },
+  { id: 'remplir',    label: 'Remplir',    category: 'UTILITAIRE', effect: '+1 énergie toutes les 10 s' }
 ];
-const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE' }];
+const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE', effect: '+1 ressource toutes les 10 s' }];
 const SHIP_ACTIONS = [
-  { id: 'tir',      label: 'Améliorer Tir',    category: 'PUISSANCE'  },
-  { id: 'visee',    label: 'Améliorer Portée', category: 'PUISSANCE'  }
+  { id: 'tir',      label: 'Tir',    category: 'PUISSANCE', effect: '+1 permanent' },
+  { id: 'visee',    label: 'Portée', category: 'PUISSANCE', effect: '+1 permanent' }
   // Capacite (vitesse boostee par les viewers) retiree pour l'instant : non utilisee.
 ];
 const SHIP_HP_MAX = 100;

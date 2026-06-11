@@ -653,14 +653,15 @@ function openActionMenu(elementId, anchor) {
   const stMenu = elementStates.get(elementId);
   const turretDead = el.type === 'turret' && stMenu && stMenu.dead;
   const actionsToShow = turretDead
-    ? [{ id: 'reparation', label: 'Reconstruire', category: 'DEFENSIF', icon: '/assets/PNG/Ability25.png' }]
+    ? [{ id: 'reparation', label: 'Reconstruire', category: 'DEFENSIF', icon: '/assets/PNG/Ability25.png', effect: '+1 PV toutes les 10 s' }]
     : el.actions;
   for (const a of actionsToShow) {
     const isActive = activeAction && activeAction.element_id === elementId && activeAction.action_id === a.id;
     const btn = document.createElement('button');
     btn.className = 'act-block ' + a.category;
     const icon = a.icon || ACTION_ICONS[a.id];
-    btn.innerHTML = `${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>`;
+    const sub = a.effect ? `<span class="act-sub">${escapeHtml(a.effect)}</span>` : '';
+    btn.innerHTML = `${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>${sub}`;
     if (isActive) btn.classList.add('active');
     btn.addEventListener('click', () => activateAction(elementId, a.id));
     actionMenuActions.appendChild(btn);
@@ -1671,36 +1672,60 @@ class MainScene extends Phaser.Scene {
   }
 
   showRangeCircle(turretId) {
-    this.hideRangeCircle();
-    const state = elementStates.get(turretId);
-    const sprite = this.elementSprites.get(turretId);
-    if (!state || !sprite) return;
+    this.rangeCircleId = turretId;
+    this._lastRangePx = null;
+    this._drawRangeCircle();
+  }
+
+  // Dessine/met a jour le cercle de portee de la tourelle suivie. Appele aussi a chaque
+  // maj d'etat (applyAllElementStates) -> le cercle GRANDIT en direct quand la portee monte.
+  _drawRangeCircle() {
+    const id = this.rangeCircleId;
+    if (!id) return;
+    const state = elementStates.get(id);
+    const sprite = this.elementSprites.get(id);
+    if (!state || !sprite) { this.hideRangeCircle(); return; }
     const range = turretRangePx(state);
-    const g = this.add.graphics().setDepth(-30);
-    g.fillStyle(0xff4f6d, 0.08);
-    g.fillCircle(sprite.x, sprite.y, range);
-    g.lineStyle(2, 0xff4f6d, 0.65);
-    g.strokeCircle(sprite.x, sprite.y, range);
-    // Petits ticks à cardinaux
+
+    if (!this.rangeCircleGfx) this.rangeCircleGfx = this.add.graphics().setDepth(-30);
+    const g = this.rangeCircleGfx;
+    g.clear();
+    g.fillStyle(0xff4f6d, 0.08); g.fillCircle(sprite.x, sprite.y, range);
+    g.lineStyle(2, 0xff4f6d, 0.65); g.strokeCircle(sprite.x, sprite.y, range);
     g.lineStyle(2, 0xff4f6d, 0.8);
     for (let i = 0; i < 4; i++) {
       const a = (i / 4) * Math.PI * 2;
-      const x1 = sprite.x + Math.cos(a) * (range - 8);
-      const y1 = sprite.y + Math.sin(a) * (range - 8);
-      const x2 = sprite.x + Math.cos(a) * (range + 8);
-      const y2 = sprite.y + Math.sin(a) * (range + 8);
       g.beginPath();
-      g.moveTo(x1, y1); g.lineTo(x2, y2);
+      g.moveTo(sprite.x + Math.cos(a) * (range - 8), sprite.y + Math.sin(a) * (range - 8));
+      g.lineTo(sprite.x + Math.cos(a) * (range + 8), sprite.y + Math.sin(a) * (range + 8));
       g.strokePath();
     }
-    this.rangeCircleGfx = g;
+    // Label de portee, en haut du cercle.
+    if (!this.rangeCircleLabel) {
+      this.rangeCircleLabel = this.add.text(0, 0, '', {
+        fontFamily: 'Consolas, monospace', fontSize: '14px', fontStyle: 'bold',
+        color: '#ffb3c0', stroke: '#3a0a12', strokeThickness: 4
+      }).setOrigin(0.5).setDepth(-29);
+    }
+    this.rangeCircleLabel.setText(`PORTÉE ${state.range || 0}`);
+    this.rangeCircleLabel.setPosition(sprite.x, sprite.y - range - 14);
+
+    // Pulse quand la portee vient d'augmenter (rendre l'evolution bien visible).
+    if (this._lastRangePx != null && range > this._lastRangePx + 0.5) {
+      this.rangeCircleLabel.setScale(1.4);
+      this.tweens.add({ targets: this.rangeCircleLabel, scale: 1, duration: 350, ease: 'Back.easeOut' });
+      const ring = this.add.graphics().setDepth(-30);
+      ring.lineStyle(3, 0xff8aa0, 0.9); ring.strokeCircle(sprite.x, sprite.y, range);
+      this.tweens.add({ targets: ring, alpha: 0, duration: 450, ease: 'Quad.easeOut', onComplete: () => ring.destroy() });
+    }
+    this._lastRangePx = range;
   }
 
   hideRangeCircle() {
-    if (this.rangeCircleGfx) {
-      this.rangeCircleGfx.destroy();
-      this.rangeCircleGfx = null;
-    }
+    this.rangeCircleId = null;
+    this._lastRangePx = null;
+    if (this.rangeCircleGfx) { this.rangeCircleGfx.destroy(); this.rangeCircleGfx = null; }
+    if (this.rangeCircleLabel) { this.rangeCircleLabel.destroy(); this.rangeCircleLabel = null; }
   }
 
   applyFitZoom() {
@@ -1942,6 +1967,8 @@ class MainScene extends Phaser.Scene {
       }
       if (sp && !sp._dead) this.updateTurretAppearance(el.id);
     }
+    // Cercle de portee affiche : on le redessine pour suivre l'evolution en direct.
+    if (this.rangeCircleId) this._drawRangeCircle();
   }
 
   // Tourelle detruite : explosion, plus d'asset (tourelle masquee) ; un coeur d'alarme

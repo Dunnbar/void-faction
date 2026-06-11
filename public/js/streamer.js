@@ -257,14 +257,15 @@ function openActionMenu(elementId, anchor) {
   const stMenu = elementStates.get(elementId);
   const turretDead = el.type === 'turret' && stMenu && stMenu.dead;
   const actionsToShow = turretDead
-    ? [{ id: 'reparation', label: 'Reconstruire', category: 'DEFENSIF', icon: '/assets/PNG/Ability25.png' }]
+    ? [{ id: 'reparation', label: 'Reconstruire', category: 'DEFENSIF', icon: '/assets/PNG/Ability25.png', effect: '+1 PV toutes les 10 s' }]
     : el.actions;
   for (const a of actionsToShow) {
     const isActive = activeAction && activeAction.element_id === elementId && activeAction.action_id === a.id;
     const btn = document.createElement('button');
     btn.className = 'act-block ' + a.category;
     const icon = a.icon || ACTION_ICONS[a.id];
-    btn.innerHTML = `${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>`;
+    const sub = a.effect ? `<span class="act-sub">${escapeHtml(a.effect)}</span>` : '';
+    btn.innerHTML = `${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>${sub}`;
     if (isActive) btn.classList.add('active');
     btn.addEventListener('click', () => activateAction(elementId, a.id));
     actionMenuActions.appendChild(btn);
