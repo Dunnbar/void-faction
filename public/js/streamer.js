@@ -71,6 +71,13 @@ function hideLoader() {
 }
 setTimeout(hideLoader, 12000); // filet de securite
 
+// Vrai si le focus est dans un champ de saisie (chat, login...) : on n'interprete alors
+// pas la barre d'espace comme un tir.
+function isTypingInField() {
+  const el = document.activeElement;
+  return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable);
+}
+
 function setActiveTab(which) {
   loginError.textContent = '';
   const isLogin = which === 'login';
@@ -857,7 +864,9 @@ class MainScene extends Phaser.Scene {
     // Verrouillage de cible (clic sur un ennemi) : le vaisseau le vise, tir a Espace.
     this.lockedEnemy = null;
     this.lockReticle = null;
-    this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE);
+    // enableCapture=false : Phaser ne fait PAS preventDefault sur Espace -> on peut taper
+    // des espaces dans le chat (le tir reste gere via isDown, cf. update + garde de saisie).
+    this.keySpace = this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE, false);
     { const _lb = document.getElementById('lockBtn'); if (_lb) _lb.onclick = () => this.clearLock(); }
 
     // Thruster particle texture
@@ -1964,7 +1973,7 @@ class MainScene extends Phaser.Scene {
     // Reticule de verrouillage suit la cible ; tir a Espace (maintenu = tir continu cadence).
     if (this.lockedEnemy && this.lockedEnemy.active) {
       if (this.lockReticle) { this.lockReticle.x = this.lockedEnemy.x; this.lockReticle.y = this.lockedEnemy.y; }
-      if (this.keySpace && this.keySpace.isDown) this.tryFireLocked();
+      if (this.keySpace && this.keySpace.isDown && !isTypingInField()) this.tryFireLocked();
     }
 
     // Borne le vaisseau a la grille de cases (memes bornes que le serveur).
