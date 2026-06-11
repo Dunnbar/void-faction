@@ -979,6 +979,7 @@ function connectSocket() {
     const state = elementStates.get('ship-1') || {};
     const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
     scene.spawnBullet(data.x, data.y, data.angle, 'bullet-ship', { scale: 0.7, speed: 900, hitEnemies: true, dmg });
+    if (window.SFX) SFX.play(scene, 'shot-ship', data.x, data.y);
   });
 
   // Mise a jour des niveaux (gain d'XP a une vague)
@@ -1179,6 +1180,7 @@ class MainScene extends Phaser.Scene {
 
   preload() {
     this.load.on('progress', setLoaderProgress);
+    if (window.SFX) SFX.preload(this);
     this.load.image('ship', SHIP_ASSET);
     this.load.image('mothership-base', '/assets/Spaceships/PNG/enemy_mothership.png');
     this.load.spritesheet('shield', '/assets/Weapons/PNG/shield_frames.png', { frameWidth: 280, frameHeight: 280 });
@@ -1396,6 +1398,7 @@ class MainScene extends Phaser.Scene {
     this.updateTurretTargeting();
     this.updateEnemies(delta);
     this.updateBullets(delta);
+    if (window.SFX) SFX.updateAmbience(this, this.enemies ? this.enemies.size : 0);
     // Le viewer suit la case du streameur, toujours centree (comme le streameur sur la sienne).
     if (this.ship) SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
     if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship ? this.ship.x : null, this.ship ? this.ship.y : null);
@@ -1578,6 +1581,7 @@ class MainScene extends Phaser.Scene {
           const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
           this.playTurretShoot(sprite, turretGunLevel(state.puissance)); // anim UNIQUEMENT au tir
           this.fireTurretLaser(sprite, target);
+          if (window.SFX) SFX.play(this, 'shot-turret', sprite.x, sprite.y);
           this.damageEnemy(target, dmg);
           sprite._lastShotAt = now;
         }
@@ -1652,6 +1656,7 @@ class MainScene extends Phaser.Scene {
   }
   // Signal visuel d'impact : eclat blanc qui s'agrandit et disparait.
   impactFlash(x, y) {
+    if (window.SFX) SFX.play(this, 'impact', x, y);
     const f = this.add.circle(x, y, 5, 0xffffff, 0.95).setDepth(10);
     this.tweens.add({ targets: f, scale: 2.6, alpha: 0, duration: 200, ease: 'Quad.easeOut', onComplete: () => f.destroy() });
   }
@@ -2205,6 +2210,7 @@ class MainScene extends Phaser.Scene {
     const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, tx, ty);
     // hitDefenders : le tir disparait + fait un eclat blanc quand il touche un defenseur.
     this.spawnBullet(sprite.x, sprite.y, a, 'bullet-enemy', { scale: 0.7, speed: 520, hitDefenders: true });
+    if (window.SFX) SFX.play(this, 'shot-enemy', sprite.x, sprite.y);
   }
 
   destroyEnemy(sprite) {
@@ -2224,6 +2230,7 @@ class MainScene extends Phaser.Scene {
   }
 
   playEnemyExplosion(x, y, level) {
+    if (window.SFX) SFX.play(this, 'explosion', x, y);
     const lvl = 1;
     const ex = this.add.sprite(x, y, `enemy${lvl}-ex-000`).setScale(ENEMY_SCALE * 2.2).setDepth(9);
     ex.play(`enemy${lvl}-explode`);

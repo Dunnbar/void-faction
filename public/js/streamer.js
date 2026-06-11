@@ -780,6 +780,7 @@ class MainScene extends Phaser.Scene {
 
   preload() {
     this.load.on('progress', setLoaderProgress);
+    if (window.SFX) SFX.preload(this);
     this.load.image('ship', SHIP_ASSET);
     this.load.image('mothership-base', '/assets/Spaceships/PNG/enemy_mothership.png');
     this.load.spritesheet('shield', '/assets/Weapons/PNG/shield_frames.png', { frameWidth: 280, frameHeight: 280 });
@@ -1398,6 +1399,7 @@ class MainScene extends Phaser.Scene {
           const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
           this.playTurretShoot(sprite, turretGunLevel(state.puissance)); // anim UNIQUEMENT au tir
           this.fireTurretLaser(sprite, target);
+          if (window.SFX) SFX.play(this, 'shot-turret', sprite.x, sprite.y);
           this.damageEnemy(target, dmg);
           sprite._lastShotAt = now;
         }
@@ -1449,6 +1451,7 @@ class MainScene extends Phaser.Scene {
     return null;
   }
   impactFlash(x, y) {
+    if (window.SFX) SFX.play(this, 'impact', x, y);
     const f = this.add.circle(x, y, 5, 0xffffff, 0.95).setDepth(10);
     this.tweens.add({ targets: f, scale: 2.6, alpha: 0, duration: 200, ease: 'Quad.easeOut', onComplete: () => f.destroy() });
   }
@@ -1480,6 +1483,7 @@ class MainScene extends Phaser.Scene {
     const state = elementStates.get('ship-1') || {};
     const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
     this.spawnBullet(this.ship.x, this.ship.y, a, 'bullet-ship', { scale: 0.7, speed: 900, hitEnemies: true, dmg });
+    if (window.SFX) SFX.play(this, 'shot-ship', this.ship.x, this.ship.y);
     if (typeof socket !== 'undefined' && socket) socket.emit('ship:fire', { x: this.ship.x, y: this.ship.y, angle: a });
   }
   updateBullets(delta) {
@@ -1831,6 +1835,7 @@ class MainScene extends Phaser.Scene {
     const a = Phaser.Math.Angle.Between(sprite.x, sprite.y, tx, ty);
     // hitDefenders : le tir disparait + fait un eclat blanc quand il touche un defenseur.
     this.spawnBullet(sprite.x, sprite.y, a, 'bullet-enemy', { scale: 0.7, speed: 520, hitDefenders: true });
+    if (window.SFX) SFX.play(this, 'shot-enemy', sprite.x, sprite.y);
   }
 
   destroyEnemy(sprite) {
@@ -1846,6 +1851,7 @@ class MainScene extends Phaser.Scene {
   }
 
   playEnemyExplosion(x, y, level) {
+    if (window.SFX) SFX.play(this, 'explosion', x, y);
     const lvl = 1;
     const ex = this.add.sprite(x, y, `enemy${lvl}-ex-000`).setScale(ENEMY_SCALE * 2.2).setDepth(9);
     ex.play(`enemy${lvl}-explode`);
@@ -1901,6 +1907,7 @@ class MainScene extends Phaser.Scene {
     this.updateTurretTargeting();
     this.updateEnemies(delta);
     this.updateBullets(delta);
+    if (window.SFX) SFX.updateAmbience(this, this.enemies ? this.enemies.size : 0);
     if (!this.ship) return;
     if (this.shipLabel) {
       this.shipLabel.x = this.ship.x;
