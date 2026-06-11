@@ -26,8 +26,8 @@ function startBaseClock() {
   if (baseClockInterval) return;
   baseClockInterval = setInterval(tick, 1000);
 }
-const ZOOM_FACTOR_MIN = 0.25;  // dezoom large : jusqu'a ~4x plus large que la case (nebuleuse autour)
-const ZOOM_FACTOR_MAX = 2.5;
+const ZOOM_FACTOR_MIN = 0.2;   // dezoom large : jusqu'a ~5x plus large que la case (nebuleuse autour)
+const ZOOM_FACTOR_MAX = 2.0;
 
 let amiralToken = localStorage.getItem('voidfaction:amiralToken') || null;
 let socket = null;
@@ -2037,6 +2037,7 @@ class MainScene extends Phaser.Scene {
       this.ship.setAcceleration(0, 0);
     }
     this.thrust.emitting = moving;
+    if (this.shipFlame) this.shipFlame.setVisible(moving); // flamme reacteur masquee a l'arret
 
     // Cible verrouillee disparue -> on retire le verrouillage.
     if (this.lockedEnemy && !this.lockedEnemy.active) this.clearLock();

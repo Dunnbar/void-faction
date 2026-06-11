@@ -26,8 +26,8 @@ function startBaseClock() {
   if (baseClockInterval) return;
   baseClockInterval = setInterval(tick, 1000);
 }
-const ZOOM_FACTOR_MIN = 0.5;   // dezoom large : jusqu'a ~2x plus large que la case (nebuleuse autour)
-const ZOOM_FACTOR_MAX = 2.5;
+const ZOOM_FACTOR_MIN = 0.4;   // dezoom large : jusqu'a ~2.5x plus large que la case (nebuleuse autour)
+const ZOOM_FACTOR_MAX = 2.0;
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
@@ -445,7 +445,8 @@ function renderActiveAction() {
     if (icon) { actionIco.src = icon; actionIco.style.display = ''; }
     else actionIco.style.display = 'none';
   }
-  if (actionTip) actionTip.textContent = label;   // hover = nom seul
+  // hover = nom + rappel de la regle de duree (1 h max, stoppable a tout moment)
+  if (actionTip) actionTip.innerHTML = `<strong>${escapeHtml(label)}</strong><br>Valable <b>1 h</b> max — peut être stoppée à tout moment.`;
   refreshActiveActionTimer();
 }
 
@@ -1398,13 +1399,14 @@ class MainScene extends Phaser.Scene {
         this.shipHpBar.x = this.ship.x;
         this.shipHpBar.y = this.ship.y - 40;
       }
-      // Sync flamme de reacteur a l'arriere du vaisseau
+      // Sync flamme de reacteur a l'arriere du vaisseau (masquee a l'arret)
       if (this.shipFlame) {
         const rearAngle = this.ship.rotation + Math.PI / 2;
         const offset = 18;
         this.shipFlame.x = this.ship.x + Math.cos(rearAngle) * offset;
         this.shipFlame.y = this.ship.y + Math.sin(rearAngle) * offset;
         this.shipFlame.rotation = rearAngle - Math.PI / 2;
+        this.shipFlame.setVisible(this.time.now < (this._shipMovingUntil || 0));
       }
     }
     this.updateTurretTargeting();
@@ -2375,9 +2377,12 @@ class MainScene extends Phaser.Scene {
 
   setShipState(s) {
     if (!this.ship || !s) return;
+    // Detecte le mouvement (delta de position) pour n'afficher la flamme que quand le vaisseau bouge.
+    const moved = Math.hypot(s.x - this.ship.x, s.y - this.ship.y) > 0.5;
     this.ship.x = s.x;
     this.ship.y = s.y;
     this.ship.rotation = s.rotation;
+    if (moved) this._shipMovingUntil = this.time.now + 250; // courte remanence entre 2 updates reseau
   }
 
   flashElementPlus(elementId, n, category) {
