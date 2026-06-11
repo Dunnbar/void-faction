@@ -637,7 +637,7 @@ function chatMsgHtml(m) {
   const modable = !!m.userId;                  // seuls les messages de viewers (avec userId) sont moderables
   const cls = 'cm-author' + (isAmiral ? ' amiral' : '') + (modable ? ' mod' : '');
   const attr = modable ? ` data-uid="${m.userId}" data-uname="${escapeHtml(m.username || '')}"` : '';
-  const lvl = (m.level && !isAmiral) ? `<span class="cm-lvl">Niv ${m.level}</span>` : '';
+  const lvl = (m.level && !isAmiral) ? `<span class="cm-lvl lvl${m.level}">Niv ${m.level}</span>` : '';
   const name = (isAmiral ? '👑 ' : '') + escapeHtml(m.username || '?');
   return `<div class="chat-msg">${lvl}<span class="${cls}"${attr}>${name}</span>`
        + `<span class="cm-text">${escapeHtml(m.message || '')}</span>`

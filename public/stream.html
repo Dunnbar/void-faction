@@ -123,13 +123,17 @@
     #chat .chat-head { padding: 6px 10px; font-size: 10px; letter-spacing: 1.5px; color: #8fb4d8; border-bottom: 1px solid rgba(74, 175, 255, 0.25); }
     .chat-list { max-height: 34vh; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding: 6px 10px; }
     .chat-list:empty::after { content: "Aucun message."; color: #5d7b9c; font-style: italic; }
-    .chat-msg { line-height: 1.35; word-break: break-word; }
+    .chat-msg { line-height: 1.45; }
     .chat-msg .cm-lvl { display: inline-block; margin-right: 5px; padding: 0 5px; border-radius: 8px; font-size: 10px; font-weight: bold; color: #04121f; background: #6fc0ff; vertical-align: 1px; }
-    .chat-msg .cm-author { color: #7fd0ff; font-weight: bold; margin-right: 5px; }
+    .chat-msg .cm-lvl.lvl1 { background: #cd7f32; color: #1c0f00; }  /* bronze */
+    .chat-msg .cm-lvl.lvl2 { background: #cdd3da; color: #04121f; }  /* argent */
+    .chat-msg .cm-lvl.lvl3 { background: #ffd54a; color: #04121f; }  /* or */
+    .chat-msg .cm-author { color: #7fd0ff; font-weight: bold; margin-right: 5px; white-space: nowrap; }
     .chat-msg .cm-author.me { color: #ffd9a0; }
     .chat-msg .cm-author.amiral { color: #ffcf3d; text-shadow: 0 0 6px rgba(255, 200, 60, 0.5); }
     .chat-msg .cm-author.mod { cursor: pointer; text-decoration: underline dotted; }
-    .chat-msg .cm-time { color: #5d7b9c; font-size: 10px; margin-left: 5px; }
+    .chat-msg .cm-text { word-break: break-word; overflow-wrap: anywhere; }
+    .chat-msg .cm-time { color: #5d7b9c; font-size: 10px; margin-left: 5px; white-space: nowrap; }
     .chat-form { display: flex; gap: 6px; padding: 8px 10px; border-top: 1px solid rgba(74, 175, 255, 0.2); }
     .chat-form input { flex: 1; background: rgba(0,0,0,0.4); border: 1px solid #2a4060; border-radius: 3px; color: #fff; font-family: inherit; font-size: 12px; padding: 5px 8px; }
     .chat-form input:focus { outline: none; border-color: #4af; }

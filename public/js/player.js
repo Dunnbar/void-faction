@@ -529,7 +529,7 @@ function togglePanel(which) {
 function chatMsgHtml(m) {
   const isAmiral = !m.userId;                 // l'Amiral poste sans user_id
   const mine = !isAmiral && authenticated && username && m.username === username;
-  const lvl = (m.level && !isAmiral) ? `<span class="cm-lvl">Niv ${m.level}</span>` : '';
+  const lvl = (m.level && !isAmiral) ? `<span class="cm-lvl lvl${m.level}">Niv ${m.level}</span>` : '';
   const cls = 'cm-author' + (isAmiral ? ' amiral' : mine ? ' me' : '');
   const name = (isAmiral ? '👑 ' : '') + escapeHtml(m.username || '?');
   return `<div class="chat-msg">${lvl}<span class="${cls}">${name}</span>`
