@@ -1171,9 +1171,7 @@ class MainScene extends Phaser.Scene {
     // Fond principal qui couvre le viewport (suit la camera)
     this.bgLayer01 = this.add.image(w / 2, h / 2, 'bg-01')
       .setOrigin(0.5).setScrollFactor(0).setDepth(-100);
-    // Petite planete parallax dans le monde
-    this.bgLayer03 = this.add.image(2200, 1200, 'bg-03')
-      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.4);
+    // (Planete parallax retiree : elle faisait tache sur le fond.)
     this.updateParallaxBackground();
   }
 

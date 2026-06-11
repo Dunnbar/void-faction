@@ -1772,10 +1772,7 @@ class MainScene extends Phaser.Scene {
     const bg01 = this.add.image(w / 2, h / 2, 'bg-01')
       .setOrigin(0.5).setScrollFactor(0).setDepth(-100);
     this.bgLayer01 = bg01;
-    // Calque 03 : petite planète parallax dans le monde
-    const bg03 = this.add.image(2200, 1200, 'bg-03')
-      .setOrigin(0.5).setScrollFactor(0.35).setDepth(-80).setScale(0.4);
-    this.bgLayer03 = bg03;
+    // (Planète parallax retirée : elle faisait tache sur le fond.)
     this.updateParallaxBackground();
   }
 
