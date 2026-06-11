@@ -1541,13 +1541,16 @@ class MainScene extends Phaser.Scene {
     if (this.lockReticle) this.lockReticle.setVisible(false);
     const btn = document.getElementById('lockBtn'); if (btn) btn.classList.add('hidden');
   }
-  // Tir sur la cible verrouillee (touche Espace), cadence limitee. Diffuse aux viewers.
-  tryFireLocked() {
-    if (!this.ship || !this.ship.active || !this.lockedEnemy || !this.lockedEnemy.active) return;
+  // Tir a Espace, cadence limitee. Vers la cible verrouillee si presente (qui oriente alors
+  // le vaisseau), sinon tout droit dans l'axe du vaisseau. Diffuse aux viewers.
+  tryFire() {
+    if (!this.ship || !this.ship.active) return;
     const now = this.time.now;
     if (this.ship._lastShotAt && now - this.ship._lastShotAt < 200) return;
     this.ship._lastShotAt = now;
-    const a = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.lockedEnemy.x, this.lockedEnemy.y);
+    const a = (this.lockedEnemy && this.lockedEnemy.active)
+      ? Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.lockedEnemy.x, this.lockedEnemy.y)
+      : this.ship.rotation - SHIP_SPRITE_OFFSET; // axe avant du vaisseau
     const state = elementStates.get('ship-1') || {};
     const dmg = 5 + Math.floor((state.puissance || 0) * 0.5);
     this.spawnBullet(this.ship.x, this.ship.y, a, 'bullet-ship', { scale: 0.7, speed: 900, hitEnemies: true, dmg });
@@ -2036,20 +2039,16 @@ class MainScene extends Phaser.Scene {
 
     // Cible verrouillee disparue -> on retire le verrouillage.
     if (this.lockedEnemy && !this.lockedEnemy.active) this.clearLock();
-    // Orientation : vers la cible verrouillee si active, sinon vers le curseur.
-    {
-      let aimX, aimY;
-      if (this.lockedEnemy && this.lockedEnemy.active) { aimX = this.lockedEnemy.x; aimY = this.lockedEnemy.y; }
-      else { const p = this.input.activePointer; aimX = p.worldX; aimY = p.worldY; }
-      const targetRot = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, aimX, aimY) + SHIP_SPRITE_OFFSET;
+    // Orientation : uniquement vers la cible verrouillee (plus de suivi souris : ne rendait pas bien).
+    // Sans cible, le vaisseau garde son cap actuel.
+    if (this.lockedEnemy && this.lockedEnemy.active) {
+      const targetRot = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.lockedEnemy.x, this.lockedEnemy.y) + SHIP_SPRITE_OFFSET;
       const maxStep = 9 * ((delta || 16) / 1000);
       this.ship.rotation = Phaser.Math.Angle.RotateTo(this.ship.rotation, targetRot, maxStep);
-    }
-    // Reticule de verrouillage suit la cible ; tir a Espace (maintenu = tir continu cadence).
-    if (this.lockedEnemy && this.lockedEnemy.active) {
       if (this.lockReticle) { this.lockReticle.x = this.lockedEnemy.x; this.lockReticle.y = this.lockedEnemy.y; }
-      if (this.keySpace && this.keySpace.isDown && !isTypingInField()) this.tryFireLocked();
     }
+    // Tir a Espace (maintenu = tir continu cadence) : vers la cible si verrouillee, sinon tout droit.
+    if (this.keySpace && this.keySpace.isDown && !isTypingInField()) this.tryFire();
 
     // Borne le vaisseau a la grille de cases (memes bornes que le serveur).
     // Max exclusif (-1) pour que la case du bord droit/bas reste dans la grille.

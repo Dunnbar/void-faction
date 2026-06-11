@@ -25,10 +25,13 @@
   // maxVoices : nb max d'instances simultanees | pitch : variation aleatoire (+/-)
   // src peut etre une chaine OU un tableau (variation : un echantillon tire au hasard).
   const FX = '/assets/sounds/fx/';
+  // Laser du vaisseau du streameur : 6 echantillons "Classic Laser Gun A" tires au hasard.
+  const LASER = '/assets/sounds/Sci Fi Weapons/Weapons/Classic Laser Gun A/LASRGun_Classic Laser Gun A Fire_';
+  const SHIP_LASERS = ['01', '02', '03', '04', '05', '06'].map(n => LASER + n + '.wav');
   const MANIFEST = {
-    'shot-ship':   { src: [FX + 'shot_ship_1.wav', FX + 'shot_ship_2.wav'], volume: 0.50, throttleMs: 55,  maxVoices: 4, pitch: 0.07 },
-    'shot-turret': { src: FX + 'shot_turret.wav',  volume: 0.45, throttleMs: 70,  maxVoices: 4, pitch: 0.08 },
-    'shot-enemy':  { src: [FX + 'shot_enemy_1.wav', FX + 'shot_enemy_2.wav'], volume: 0.40, throttleMs: 80,  maxVoices: 4, pitch: 0.09 },
+    'shot-ship':   { src: SHIP_LASERS, volume: 0.50, throttleMs: 55,  maxVoices: 4, pitch: 0.07 },
+    'shot-turret': { src: '', volume: 0.45, throttleMs: 70,  maxVoices: 4, pitch: 0.08 }, // coupe
+    'shot-enemy':  { src: '', volume: 0.40, throttleMs: 80,  maxVoices: 4, pitch: 0.09 }, // coupe
     'impact':      { src: '', volume: 0.50, throttleMs: 45,  maxVoices: 5, pitch: 0.12 }, // pas encore choisi
     'explosion':   { src: '', volume: 0.70, throttleMs: 120, maxVoices: 3, pitch: 0.10 }, // pas encore choisi
     'ambience':    { src: '', volume: 0.60, loop: true },   // boucle de bataille (vue dezoomee)
