@@ -102,7 +102,7 @@
     #lockBtn.hidden { display: none; }
 
     /* ===== Chat de la base (streameur) ===== */
-    #hudButtons { position: fixed; bottom: 12px; left: 12px; z-index: 24; display: flex; gap: 8px; }
+    #hudButtons { position: fixed; bottom: 12px; right: 12px; z-index: 24; display: flex; gap: 8px; }
     .hud-btn {
       width: 52px; height: 52px; padding: 0; position: relative;
       background: rgba(0, 20, 40, 0.92); border: 1px solid #2f5d86; border-radius: 6px;
@@ -115,7 +115,7 @@
     .hud-btn .badge { position: absolute; top: -5px; right: -5px; min-width: 16px; height: 16px; padding: 0 4px; border-radius: 8px; background: #ff4f6d; color: #fff; font-size: 10px; line-height: 16px; text-align: center; display: none; font-family: 'Consolas', monospace; }
     .hud-btn.has-unread .badge { display: block; }
     #chat {
-      position: fixed; bottom: 76px; left: 12px; z-index: 24; width: 320px;
+      position: fixed; bottom: 76px; right: 12px; z-index: 24; width: 320px;
       background: rgba(0, 20, 40, 0.92); border: 1px solid #2f5d86; border-radius: 4px;
       box-shadow: 0 0 12px rgba(74, 175, 255, 0.3); font-size: 12px; display: flex; flex-direction: column; overflow: hidden;
     }
@@ -200,7 +200,7 @@
     #profileMenu .pm-logout:hover { background: #f55; color: #000; }
     /* Commandant */
     #captainAlert {
-      position: fixed; bottom: 14px; right: 14px; z-index: 28;
+      position: fixed; bottom: 14px; left: 14px; z-index: 28;
       display: flex; align-items: flex-end; gap: 10px; pointer-events: none;
       animation: captainSlideIn 0.4s ease-out;
     }
