@@ -527,9 +527,12 @@ function togglePanel(which) {
 
 // ---- Chat communautaire ----
 function chatMsgHtml(m) {
-  const mine = authenticated && username && m.username === username;
-  const lvl = m.level ? `<span class="cm-lvl">Niv ${m.level}</span>` : '';
-  return `<div class="chat-msg">${lvl}<span class="cm-author${mine ? ' me' : ''}">${escapeHtml(m.username || '?')}</span>`
+  const isAmiral = !m.userId;                 // l'Amiral poste sans user_id
+  const mine = !isAmiral && authenticated && username && m.username === username;
+  const lvl = (m.level && !isAmiral) ? `<span class="cm-lvl">Niv ${m.level}</span>` : '';
+  const cls = 'cm-author' + (isAmiral ? ' amiral' : mine ? ' me' : '');
+  const name = (isAmiral ? '👑 ' : '') + escapeHtml(m.username || '?');
+  return `<div class="chat-msg">${lvl}<span class="${cls}">${name}</span>`
        + `<span class="cm-text">${escapeHtml(m.message || '')}</span>`
        + `<span class="cm-time">${formatClock(m.at)}</span></div>`;
 }

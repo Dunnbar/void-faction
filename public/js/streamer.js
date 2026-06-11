@@ -633,12 +633,13 @@ function setChatBadge(n) {
 }
 function chatClock(at) { const d = new Date(at); const p = n => String(n).padStart(2, '0'); return `${p(d.getHours())}:${p(d.getMinutes())}`; }
 function chatMsgHtml(m) {
-  const mine = !m.userId && m.username === amiralDisplayName;
-  const modable = !!m.userId;  // seuls les messages de viewers (avec userId) sont moderables
-  const cls = 'cm-author' + (mine ? ' me' : '') + (modable ? ' mod' : '');
+  const isAmiral = !m.userId;                  // l'Amiral (dont le streameur lui-meme) poste sans user_id
+  const modable = !!m.userId;                  // seuls les messages de viewers (avec userId) sont moderables
+  const cls = 'cm-author' + (isAmiral ? ' amiral' : '') + (modable ? ' mod' : '');
   const attr = modable ? ` data-uid="${m.userId}" data-uname="${escapeHtml(m.username || '')}"` : '';
-  const lvl = m.level ? `<span class="cm-lvl">Niv ${m.level}</span>` : '';
-  return `<div class="chat-msg">${lvl}<span class="${cls}"${attr}>${escapeHtml(m.username || '?')}</span>`
+  const lvl = (m.level && !isAmiral) ? `<span class="cm-lvl">Niv ${m.level}</span>` : '';
+  const name = (isAmiral ? '👑 ' : '') + escapeHtml(m.username || '?');
+  return `<div class="chat-msg">${lvl}<span class="${cls}"${attr}>${name}</span>`
        + `<span class="cm-text">${escapeHtml(m.message || '')}</span>`
        + `<span class="cm-time">${chatClock(m.at)}</span></div>`;
 }
