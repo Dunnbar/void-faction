@@ -740,7 +740,8 @@ function playWaveSound(type) {
   if (localStorage.getItem('voidfaction:muted') === '1') return;
   const base = _waveAudio[type] || _waveAudio.normale;
   if (!base) return;
-  try { const a = base.cloneNode(); a.volume = 0.6; a.play().catch(() => {}); } catch (e) {}
+  const vol = 0.6 * (window.SFX ? SFX.getVol('announce') : 1); // canal Annonces
+  try { const a = base.cloneNode(); a.volume = vol; a.play().catch(() => {}); } catch (e) {}
 }
 
 // IA ennemie : cap sur la base par defaut, engagement des cibles croisees dans la range.

@@ -85,7 +85,7 @@ const CATEGORY_TO_COLUMN = { PUISSANCE: 'puissance', DEFENSIF: 'defensif', UTILI
 // ============ Templates d'éléments (instanciés par Amiral) ============
 
 const TURRET_ACTIONS = [
-  { id: 'tir',        label: 'Tir',        category: 'PUISSANCE', effect: '+1 par contributeur' },
+  { id: 'tir',        label: 'Puissance',  category: 'PUISSANCE', effect: '+1 par contributeur' },
   { id: 'visee',      label: 'Portée',     category: 'PUISSANCE', effect: '+1 par contributeur' },
   { id: 'reparation', label: 'Réparation', category: 'DEFENSIF',  effect: '+1 PV toutes les 10 s' }
 ];
@@ -1201,6 +1201,7 @@ io.on('connection', (socket) => {
     actionTickMs: ACTION_TICK_MS,
     progress: userProgress,
     levels: userLevelsObj,
+    xp: socket.data.userId ? userXp(socket.data.userId) : { PUISSANCE: 0, DEFENSIF: 0, UTILITAIRE: 0 },
     levelXp: LEVEL_XP,
     activeElements: rtForInit ? activeElementStatesForAmiral(rtForInit.id) : [],
     world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y, gameTz: GAME_TZ,
@@ -1578,6 +1579,12 @@ function userLevels(uid) {
 function userLevelForCategory(uid, category) {
   return userLevels(uid)[category] || 1;
 }
+// XP brute d'un joueur par categorie (pour les barres de progression cote client).
+function userXp(uid) {
+  stmtEnsureProgress.run(uid);
+  const r = stmtGetXp.get(uid) || {};
+  return { PUISSANCE: r.xp_puissance || 0, DEFENSIF: r.xp_defensif || 0, UTILITAIRE: r.xp_utilitaire || 0 };
+}
 // Niveau "global" d'un joueur (le plus haut des 3 categories) : affiche dans le chat.
 function userDisplayLevel(uid) {
   const l = userLevels(uid);
@@ -1630,7 +1637,8 @@ function awardWaveXp(rt) {
     const levelBefore = userLevels(r.user_id)[r.category] || 1;
     incrementXp(r.user_id, r.category, 1);
     const levels = userLevels(r.user_id);
-    for (const s of sockets) s.emit('levels', { levels });
+    const xp = userXp(r.user_id);
+    for (const s of sockets) s.emit('levels', { levels, xp });
     const levelAfter = levels[r.category] || 1;
     if (levelAfter > levelBefore) {
       const uname = [...sockets][0]?.data?.username || 'Un viewer';

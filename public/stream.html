@@ -184,6 +184,34 @@
       box-shadow: 0 0 12px rgba(255, 136, 68, 0.3);
     }
     #profileBtn:hover { background: rgba(255, 136, 68, 0.18); }
+    /* Bouton + menu de reglages du son (a gauche du bouton profil) */
+    #soundBtn {
+      position: fixed; top: 12px; right: 120px; z-index: 31;
+      background: rgba(0, 20, 40, 0.92); border: 1px solid #3aa; color: #8fe;
+      border-radius: 6px; padding: 8px 12px; font-size: 15px; line-height: 1; cursor: pointer;
+      box-shadow: 0 0 12px rgba(40, 200, 160, 0.25);
+    }
+    #soundBtn:hover { background: rgba(40, 200, 160, 0.15); }
+    #soundBtn.sound-off { border-color: #c55; color: #f99; box-shadow: none; opacity: 0.85; }
+    #soundMenu {
+      position: fixed; top: 52px; right: 12px; z-index: 32; width: 250px;
+      background: rgba(0, 12, 24, 0.97); border: 1px solid #2a3b52; border-radius: 8px;
+      padding: 14px 16px; font-family: 'Consolas', monospace; color: #cdd9e6;
+      box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+    }
+    #soundMenu.hidden { display: none; }
+    #soundMenu .sm-title { font-size: 11px; letter-spacing: 2px; text-transform: uppercase; color: #7f97ad; margin-bottom: 10px; }
+    #soundMenu .sm-mute { display: flex; align-items: center; gap: 8px; font-size: 12px; color: #9fb3c8; margin-bottom: 12px; cursor: pointer; }
+    #soundMenu .sm-mute input { accent-color: #4aafff; cursor: pointer; }
+    #soundMenu .sm-row { display: flex; align-items: center; gap: 8px; margin: 9px 0; }
+    #soundMenu .sm-lbl { flex: 0 0 76px; font-size: 12px; color: #cdd9e6; }
+    #soundMenu .sm-slider { flex: 1; accent-color: #4aafff; cursor: pointer; }
+    #soundMenu .sm-test {
+      flex: 0 0 auto; width: 24px; height: 24px; padding: 0; border: 1px solid #2a3b52; border-radius: 6px;
+      background: #182636; color: #8ac0ff; cursor: pointer; font-size: 11px; line-height: 1;
+    }
+    #soundMenu .sm-test:hover { background: #21364d; color: #fff; }
+    #soundMenu .sm-test:active { transform: translateY(1px); }
     #profileMenu {
       position: fixed; top: 52px; right: 12px; z-index: 31; width: 270px;
       background: rgba(0, 12, 24, 0.97); border: 1px solid #f84; border-radius: 8px;
@@ -429,6 +457,14 @@
 
       <p id="loginError"></p>
     </div>
+  </div>
+  <button id="soundBtn" class="sound-on" type="button" title="Réglages du son">🔊</button>
+  <div id="soundMenu" class="hidden">
+    <div class="sm-title">Réglages du son</div>
+    <label class="sm-mute"><input type="checkbox" id="soundMute"> Couper tout le son</label>
+    <div class="sm-row"><span class="sm-lbl">Musique</span><input type="range" id="volMusic" class="sm-slider" min="0" max="100"><button class="sm-test" data-ch="music" type="button" title="Tester">▶</button></div>
+    <div class="sm-row"><span class="sm-lbl">Annonces</span><input type="range" id="volAnnonce" class="sm-slider" min="0" max="100"><button class="sm-test" data-ch="announce" type="button" title="Tester">▶</button></div>
+    <div class="sm-row"><span class="sm-lbl">Effets (FX)</span><input type="range" id="volFx" class="sm-slider" min="0" max="100"><button class="sm-test" data-ch="fx" type="button" title="Tester">▶</button></div>
   </div>
   <button id="profileBtn" class="hidden" type="button" title="Profil">⚙ <span id="profileBtnName">AMIRAL</span></button>
   <div id="profileMenu" class="hidden">

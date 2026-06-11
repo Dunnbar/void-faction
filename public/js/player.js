@@ -105,6 +105,8 @@ let activeAction = null; // { element_id, action_id, category, started_at, last_
 let progress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
 let previousProgress = null;
 let levels = { PUISSANCE: 1, DEFENSIF: 1, UTILITAIRE: 1 }; // niveaux viewer par categorie (1-3)
+let xp = { PUISSANCE: 0, DEFENSIF: 0, UTILITAIRE: 0 };      // XP brute par categorie (pour les barres)
+let levelXp = [5, 15];                                       // seuils niv2 / niv3 (fournis par le serveur)
 let baseDead = false; // base detruite : aucune action possible en attendant la relance de l'Amiral
 let actionDurationMs = ACTION_MAX_DURATION_MS_DEFAULT;
 let history = [];
@@ -168,28 +170,10 @@ const chatLocked = document.getElementById('chatLocked');
 let journalUnread = 0;
 let chatUnread = 0;
 
-// ============ Toggle son (visuel + flag global, pas encore branche sur des audio) ============
+// ============ Son ============
+// Le flag global de mute + le menu de reglages (musique / annonces / fx) sont gères
+// par sfx.js (SFX.initSoundMenu), partage entre la page joueur et la page streameur.
 window.gameSoundMuted = localStorage.getItem('voidfaction:muted') === '1';
-function applySoundButtonState() {
-  if (!soundBtn) return;
-  if (window.gameSoundMuted) {
-    soundBtn.classList.remove('sound-on');
-    soundBtn.classList.add('sound-off');
-    soundBtn.title = 'Activer le son';
-  } else {
-    soundBtn.classList.remove('sound-off');
-    soundBtn.classList.add('sound-on');
-    soundBtn.title = 'Couper le son';
-  }
-}
-applySoundButtonState();
-if (soundBtn) {
-  soundBtn.addEventListener('click', () => {
-    window.gameSoundMuted = !window.gameSoundMuted;
-    localStorage.setItem('voidfaction:muted', window.gameSoundMuted ? '1' : '0');
-    applySoundButtonState();
-  });
-}
 
 // ============ Sons de vagues (annonce + debut), par type ============
 const WAVE_SOUNDS = {
@@ -203,7 +187,8 @@ function playWaveSound(type) {
   if (window.gameSoundMuted) return;
   const base = _waveAudio[type] || _waveAudio.normale;
   if (!base) return;
-  try { const a = base.cloneNode(); a.volume = 0.6; a.play().catch(() => {}); } catch (e) {}
+  const vol = 0.6 * (window.SFX ? SFX.getVol('announce') : 1); // canal Annonces
+  try { const a = base.cloneNode(); a.volume = vol; a.play().catch(() => {}); } catch (e) {}
 }
 const actionChip = document.getElementById('actionChip');   // pastille "action en cours" (barre de ressources)
 const actionGlyph = document.getElementById('actionGlyph');  // cercle teinte par categorie
@@ -392,14 +377,24 @@ function renderBars() {
 }
 
 function renderLevels() {
-  const map = { PUISSANCE: 'lvlPuissance', DEFENSIF: 'lvlDefensif', UTILITAIRE: 'lvlUtilitaire' };
-  for (const cat in map) {
-    const el = document.getElementById(map[cat]);
-    if (!el) continue;
+  const suffix = { PUISSANCE: 'Puissance', DEFENSIF: 'Defensif', UTILITAIRE: 'Utilitaire' };
+  const [t2, t3] = levelXp; // seuils niveau 2 / niveau 3
+  for (const cat in suffix) {
     const lvl = Math.max(1, Math.min(3, levels[cat] || 1));
-    // Badge etoile correspondant au niveau (Lvl1Star / Lvl2Star / Lvl3Star)
-    el.src = `/assets/PNG/Lvl${lvl}Star.png`;
-    el.alt = `niv. ${lvl}`;
+    const x = (xp && xp[cat]) || 0;
+    const lvlEl = document.getElementById('xpLvl' + suffix[cat]);
+    const fillEl = document.getElementById('xpFill' + suffix[cat]);
+    if (lvlEl) lvlEl.textContent = lvl >= 3 ? 'Niv. 3 · MAX' : `Niv. ${lvl}`;
+    if (fillEl) {
+      // Progression vers le palier suivant (barre pleine au niveau max).
+      let pct = 100;
+      if (lvl < 3) {
+        const lo = lvl === 1 ? 0 : t2;
+        const hi = lvl === 1 ? t2 : t3;
+        pct = hi > lo ? ((x - lo) / (hi - lo)) * 100 : 0;
+      }
+      fillEl.style.width = `${Math.max(0, Math.min(100, pct))}%`;
+    }
   }
 }
 
@@ -924,6 +919,8 @@ function connectSocket() {
     progress = data.progress || { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
     previousProgress = { ...progress };
     if (data.levels) levels = data.levels;
+    if (data.xp) xp = data.xp;
+    if (Array.isArray(data.levelXp)) levelXp = data.levelXp;
     renderLevels();
     baseDead = !!data.baseDead;
     document.getElementById('baseDeadOverlay')?.classList.toggle('hidden', !baseDead);
@@ -1000,6 +997,7 @@ function connectSocket() {
     if (data && data.levels) {
       const before = { ...levels };
       levels = data.levels;
+      if (data.xp) xp = data.xp;
       renderLevels();
       // Petit feedback : montre quel niveau a augmente.
       for (const cat of ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE']) {

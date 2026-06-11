@@ -20,6 +20,98 @@
     try { return localStorage.getItem(MUTE_KEY) === '1'; } catch (e) { return false; }
   }
 
+  // ===== Mix son : 3 canaux (musique / annonces / fx) + mute maitre, persistes =====
+  // Les volumes 0-1 sont memorises en localStorage et partages entre la page joueur
+  // et la page streameur (les deux chargent sfx.js).
+  const VOL_KEYS    = { music: 'voidfaction:vol:music', announce: 'voidfaction:vol:announce', fx: 'voidfaction:vol:fx' };
+  const DEFAULT_VOL = { music: 0.35, announce: 0.7, fx: 0.8 };
+  function clamp01(v) { v = parseFloat(v); return isNaN(v) ? 0 : Math.max(0, Math.min(1, v)); }
+  function getVol(ch) {
+    try { const v = localStorage.getItem(VOL_KEYS[ch]); return v == null ? DEFAULT_VOL[ch] : clamp01(v); }
+    catch (e) { return DEFAULT_VOL[ch]; }
+  }
+  function setVol(ch, v) {
+    v = clamp01(v);
+    try { localStorage.setItem(VOL_KEYS[ch], String(v)); } catch (e) {}
+    if (ch === 'music') applyMusicVolume();
+  }
+  function setMuted(m) {
+    m = !!m;
+    try { localStorage.setItem(MUTE_KEY, m ? '1' : '0'); } catch (e) {}
+    if (typeof window !== 'undefined') window.gameSoundMuted = m;
+    applyMusicVolume();
+  }
+
+  // Musique de fond : boucle d'ambiance, demarree au 1er geste utilisateur (autoplay bloque sinon).
+  const MUSIC_SRC = '/assets/sounds/Sci Fi Weapons/Bonus Dystopia Ambience and Drone/AMBIENCE_SPACECRAFT_INTERIOR_LOOP.wav';
+  let musicEl = null;
+  function ensureMusicEl() {
+    if (musicEl || typeof Audio === 'undefined') return musicEl;
+    try { musicEl = new Audio(MUSIC_SRC); musicEl.loop = true; musicEl.preload = 'auto'; musicEl.volume = isMuted() ? 0 : getVol('music'); } catch (e) {}
+    return musicEl;
+  }
+  function applyMusicVolume() { if (musicEl) musicEl.volume = isMuted() ? 0 : getVol('music'); }
+  function startMusic() {
+    const el = ensureMusicEl();
+    if (!el) return;
+    applyMusicVolume();
+    if (el.paused) el.play().catch(() => {}); // re-tente au prochain geste si refuse
+  }
+
+  // Echantillons de test (joues directement, hors moteur Phaser, pour marcher sur les 2 pages).
+  const FX_TEST_SRC       = '/assets/sounds/Sci Fi Weapons/Weapons/Classic Laser Gun A/LASRGun_Classic Laser Gun A Fire_01.wav';
+  const ANNOUNCE_TEST_SRC = '/assets/sounds/vague_normale.mp3';
+  function testChannel(ch) {
+    if (isMuted()) return;
+    if (ch === 'music') { startMusic(); return; }
+    const src = ch === 'fx' ? FX_TEST_SRC : ANNOUNCE_TEST_SRC;
+    try { const a = new Audio(src); a.volume = getVol(ch); a.play().catch(() => {}); } catch (e) {}
+  }
+
+  // Cable le menu de reglages son (memes IDs sur index.html et stream.html).
+  function initSoundMenu() {
+    if (typeof document === 'undefined') return;
+    const btn  = document.getElementById('soundBtn');
+    const menu = document.getElementById('soundMenu');
+    const sliders = { music: document.getElementById('volMusic'), announce: document.getElementById('volAnnonce'), fx: document.getElementById('volFx') };
+    const muteCb = document.getElementById('soundMute');
+    function updateBtnIcon() {
+      if (!btn) return;
+      const m = isMuted();
+      btn.classList.toggle('sound-off', m);
+      btn.classList.toggle('sound-on', !m);
+      btn.title = m ? 'Son coupé — ouvrir les réglages' : 'Réglages du son';
+    }
+    for (const ch of Object.keys(sliders)) {
+      const s = sliders[ch];
+      if (!s) continue;
+      s.value = Math.round(getVol(ch) * 100);
+      s.addEventListener('input', () => setVol(ch, s.value / 100));
+    }
+    if (muteCb) {
+      muteCb.checked = isMuted();
+      muteCb.addEventListener('change', () => { setMuted(muteCb.checked); updateBtnIcon(); });
+    }
+    if (menu) menu.querySelectorAll('.sm-test').forEach(b =>
+      b.addEventListener('click', (e) => { e.stopPropagation(); testChannel(b.getAttribute('data-ch')); }));
+    updateBtnIcon();
+    if (btn && menu) {
+      btn.addEventListener('click', (e) => { e.stopPropagation(); menu.classList.toggle('hidden'); });
+      document.addEventListener('mousedown', (e) => {
+        if (menu.classList.contains('hidden')) return;
+        if (!menu.contains(e.target) && e.target !== btn) menu.classList.add('hidden');
+      }, true);
+    }
+    // Demarre la musique au tout 1er geste utilisateur (clic ou touche).
+    const kick = () => { startMusic(); window.removeEventListener('pointerdown', kick); window.removeEventListener('keydown', kick); };
+    window.addEventListener('pointerdown', kick);
+    window.addEventListener('keydown', kick);
+  }
+  if (typeof document !== 'undefined') {
+    if (document.readyState !== 'loading') initSoundMenu();
+    else document.addEventListener('DOMContentLoaded', initSoundMenu);
+  }
+
   // Reglages par son. src:'' => desactive tant que tu n'as pas choisi le fichier.
   // volume 0-1 | throttleMs : delai mini entre 2 lectures du meme son
   // maxVoices : nb max d'instances simultanees | pitch : variation aleatoire (+/-)
@@ -87,7 +179,7 @@
     if (lastPlayAt[key] && now - lastPlayAt[key] < cfg.throttleMs) return;
 
     // 2) cull hors-ecran + 3) bascule dezoom
-    let vol = cfg.volume;
+    let vol = cfg.volume * getVol('fx'); // canal FX (reglage utilisateur)
     const cam = scene.cameras && scene.cameras.main;
     if (cam && typeof x === 'number' && cam.worldView) {
       const v = cam.worldView, m = 80;
@@ -136,5 +228,5 @@
     ambienceSnd.setVolume(cur + (target - cur) * 0.05); // fondu doux
   }
 
-  window.SFX = { preload, play, updateAmbience, MANIFEST };
+  window.SFX = { preload, play, updateAmbience, MANIFEST, getVol, setVol, setMuted, isMuted, startMusic, testChannel, initSoundMenu };
 })();
