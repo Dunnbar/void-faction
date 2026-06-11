@@ -40,7 +40,7 @@ function levelFromXp(xp) { return (xp >= LEVEL_XP[1]) ? 3 : (xp >= LEVEL_XP[0]) 
 const WAVE_CHECK_INTERVAL_MS = 60 * 1000;
 const WAVE_PROBABILITY = 0.35;
 const WAVE_WARNING_MS = 40 * 60 * 1000;  // 40 min de preavis avant l'arrivee des ennemis
-const COMBAT_WINDOW_MS = 15 * 60 * 1000; // duree max d'un combat avant que les survivants "percent" (fallback)
+const COMBAT_WINDOW_MS = 15 * 60 * 1000; // delai avant la 1re verif de resolution (hors-ligne) ; PAS de deadline en ligne
 const ENEMY_SPEED = 40;
 const ENEMY_MIN = 3;
 const ENEMY_MAX = 6;
@@ -1837,7 +1837,9 @@ function buildEnemyGroup(target, baseAngle, size, hp, now, idPrefix) {
 }
 
 function rollWaveFor(rt, force = false, type = null) {
-  if (rt.currentWave && rt.currentWave.endsAt > Date.now()) return;
+  // Une vague encore active (fenetre en cours OU ennemis vivants) bloque une nouvelle vague :
+  // pas de chevauchement, et on ne remplace pas une vague non resolue (sans deadline).
+  if (rt.currentWave && (rt.currentWave.endsAt > Date.now() || (rt.currentWave.alive || 0) > 0)) return;
   if (!force && Math.random() > WAVE_PROBABILITY) return;
   if (!type) type = pickNonHardType();
 
@@ -1904,27 +1906,17 @@ function rollWaveFor(rt, force = false, type = null) {
       : `Vague de ${enemies.length} ennemis détectée`;
   logJournal(rt, 'wave', journalMsg);
 
-  // Echeance de combat (fallback). Normalement la vague se termine AVANT, par le combat :
+  // PAS de deadline cote combat. La vague se termine UNIQUEMENT par :
   //  - tous les ennemis tues (streamer:enemy_down) -> repoussee + currentWave efface ;
   //  - base detruite -> baseDead.
-  // Si a l'echeance la vague n'est NI repoussee NI la base detruite :
-  //  - Amiral HORS-LIGNE  -> resolution server-side selon les defenses (resolveWaveOffline) ;
-  //  - Amiral EN LIGNE     -> les survivants "percent" les defenses et infligent des degats
-  //    (plus de repoussee gratuite : ignorer une vague a desormais des consequences).
+  // Les ennemis attaquent les tourelles en priorite, puis la base, jusqu'a leur mort.
+  // Seul cas de resolution server-side : l'Amiral est HORS-LIGNE (personne ne simule le
+  // combat) -> on tranche selon les defenses (resolveWaveOffline). On re-verifie
+  // periodiquement (sans jamais "percer" une vague en ligne).
   const waveId = rt.currentWave.id;
   const waveSnapshot = rt.currentWave;
-  const fallbackDelay = Math.max(0, rt.currentWave.endsAt - Date.now());
-  setTimeout(() => {
-    if (amiralsRuntime.get(rt.id) !== rt) return;
-    if (!rt.currentWave || rt.currentWave.id !== waveId) return; // deja resolue (tuee) ou remplacee
-    if (rt.baseDead) { rt.currentWave = null; return; }
-    if (!rt.online) {
-      resolveWaveOffline(rt, waveSnapshot);
-    } else {
-      breakthroughWave(rt, rt.currentWave.alive || 0);
-    }
-    rt.currentWave = null;
-  }, fallbackDelay);
+  const firstCheck = Math.max(0, rt.currentWave.endsAt - Date.now());
+  scheduleWaveResolution(rt, waveId, waveSnapshot, firstCheck);
 
   // XP de vague : a l'arrivee des ennemis, +1 XP aux joueurs presents+actifs (cf. awardWaveXp).
   const xpDelay = Math.max(0, spawnAt - Date.now());
@@ -1998,20 +1990,22 @@ function resolveWaveOffline(rt, wave) {
   console.log(`[amiral ${rt.username}] vague hors-ligne SUBIE — base -${dmg} HP (${reason})`);
 }
 
-// Survivants d'une vague EN LIGNE non terminee a l'echeance : ils "percent" les defenses
-// et infligent des degats (tourelles + base). Remplace l'ancienne "repoussee gratuite".
-function breakthroughWave(rt, survivors) {
-  if (survivors <= 0) { logJournal(rt, 'wave_repelled', `Vague repoussée — la base a tenu`); return; }
-  const day = daysAliveFor(rt);
-  const aliveTurrets = rt.elements
-    .filter(e => e.type === 'turret')
-    .filter(t => { const s = rt.elementStates.get(t.id); return s && s.hp > 0 && !s.dead; });
-  const turretDmg = survivors * baseHitDmgForDay(day);
-  for (const t of aliveTurrets) applyTurretDamage(rt, t.id, turretDmg);
-  const dmg = survivors * OFFLINE_BASE_HITS_PER_ENEMY * baseHitDmgForDay(day);
-  logJournal(rt, 'wave', `${survivors} ennemi(s) ont percé les défenses — base touchée -${dmg} HP`);
-  applyBaseDamage(rt, dmg);
-  console.log(`[amiral ${rt.username}] breakthrough : ${survivors} survivant(s) -> base -${dmg} HP`);
+// Verifie le sort d'une vague SANS jamais imposer de deadline au combat en ligne.
+//  - Amiral hors-ligne : personne ne simule -> resolution server-side selon les defenses.
+//  - Amiral en ligne   : on ne touche a rien (la vague continue jusqu'a la mort des ennemis
+//    ou de la base) ; on re-verifie plus tard au cas ou l'Amiral se deconnecte en cours.
+function scheduleWaveResolution(rt, waveId, waveSnapshot, delay) {
+  setTimeout(() => {
+    if (amiralsRuntime.get(rt.id) !== rt) return;
+    if (!rt.currentWave || rt.currentWave.id !== waveId) return; // deja repoussee/remplacee
+    if (rt.baseDead) { rt.currentWave = null; return; }
+    if (!rt.online) {
+      resolveWaveOffline(rt, waveSnapshot);
+      rt.currentWave = null;
+    } else {
+      scheduleWaveResolution(rt, waveId, waveSnapshot, 60000); // re-check dans 60s
+    }
+  }, delay);
 }
 
 // ============ Planning des vagues : horaires fixes (TZ Europe/Paris par defaut) ============

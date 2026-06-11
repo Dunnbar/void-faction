@@ -1520,11 +1520,18 @@ class MainScene extends Phaser.Scene {
     for (const sprite of this.enemies) {
       if (!sprite.active) continue;
 
-      // Cible hostile la plus proche dans la range de detection
-      let best = null, bestDist = ENEMY_DETECT_RANGE;
+      // Priorite : tourelle vivante la plus proche (A N'IMPORTE QUELLE DISTANCE), puis la base.
+      // Le vaisseau n'est engage que de maniere opportuniste (tres proche et plus pres qu'une tourelle).
+      let best = null, bestTurretDist = Infinity;
       for (const t of targets) {
+        if (t.kind !== 'turret') continue;
         const d = Phaser.Math.Distance.Between(sprite.x, sprite.y, t.sprite.x, t.sprite.y);
-        if (d < bestDist) { best = t; bestDist = d; }
+        if (d < bestTurretDist) { best = t; bestTurretDist = d; }
+      }
+      const shipT = targets.find(t => t.kind === 'ship');
+      if (shipT) {
+        const sd = Phaser.Math.Distance.Between(sprite.x, sprite.y, shipT.sprite.x, shipT.sprite.y);
+        if (sd < ENEMY_DETECT_RANGE && sd < bestTurretDist) best = shipT;
       }
 
       let mode, cx, cy, orbitR;
