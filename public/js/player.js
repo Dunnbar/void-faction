@@ -1496,56 +1496,44 @@ class MainScene extends Phaser.Scene {
     }
   }
 
-  // Machine d'etats d'attaque d'un ennemi engage autour de sa cible (cx,cy) :
-  // cruise (orbite ondulante) -> pullback (recul) -> strafe (passe droite + tir) -> return.
+  // Cycle d'engagement : ORBITE (avec legere fluctuation) -> PLONGEE d'attaque (tir + virage)
+  // -> retour sur l'orbite. Plus de phase "exit" (recul) qui donnait des mouvements bizarres.
   updateEnemyEngage(sprite, cx, cy, orbitR, dtSec, now, mode, best) {
     const step = ENEMY_SPEED_PX * (sprite._speedFactor || 1) * dtSec;
     const turn = 5 * dtSec;
-    const bearing = Math.atan2(sprite.y - cy, sprite.x - cx);            // direction "vers l'exterieur"
+    const bearing = Math.atan2(sprite.y - cy, sprite.x - cx);
     const distT = Math.hypot(sprite.x - cx, sprite.y - cy) || 1;
-    const dirAway = bearing + Math.PI / 2;                                // rotation nez vers l'exterieur
-    const dirToward = bearing + Math.PI + Math.PI / 2;                    // rotation nez vers la cible
-    // Le vaisseau AVANCE toujours dans la direction de son nez (rotation - PI/2).
+    const dirAway = bearing + Math.PI / 2;
+    const dirToward = bearing + Math.PI + Math.PI / 2;
     const moveFwd = (spd) => { const f = sprite.rotation - Math.PI / 2; sprite.x += Math.cos(f) * spd; sprite.y += Math.sin(f) * spd; };
 
-    if (sprite._phase === 'exit') {
-      // Sort de sa trajectoire en s'eloignant : glisse vers l'exterieur (virage doux, pas de marche arriere).
-      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirAway, turn * 0.6);
-      moveFwd(step * 1.6);
-      if (distT >= orbitR + 130) { sprite._phase = 'dive'; sprite._firedThisRun = false; sprite._peelSide = Math.random() < 0.5 ? 1 : -1; }
-      return;
-    }
     if (sprite._phase === 'dive') {
-      // Demi-tour FLUIDE pour plonger sur la cible, puis tir une fois aligne.
+      // Plongee : fonce vers la cible, tire quand aligne, puis amorce le virage un poil plus tot.
       sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirToward, turn * 1.3);
       moveFwd(step * 2.6);
-      if (!sprite._firedThisRun && Math.abs(Phaser.Math.Angle.Wrap(dirToward - sprite.rotation)) < 0.2) {
+      if (!sprite._firedThisRun && Math.abs(Phaser.Math.Angle.Wrap(dirToward - sprite.rotation)) < 0.25) {
         this.fireEnemyShot(sprite, cx, cy);
         sprite._firedThisRun = true;
         this.onEnemyFiredAt(mode, best);
       }
-      if (distT <= Math.max(orbitR - 110, orbitR * 0.5)) sprite._phase = 'peel';
+      if (distT <= orbitR * 0.6) sprite._phase = 'peel';
       return;
     }
     if (sprite._phase === 'peel') {
-      // Apres le tir : bifurque a gauche ou a droite en s'eloignant (pas de demi-tour).
-      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirAway + sprite._peelSide * (Math.PI / 4), turn);
+      // Virage marque vers l'exterieur, puis on rejoint l'orbite.
+      sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, dirAway + sprite._peelSide * (Math.PI / 4), turn * 1.1);
       moveFwd(step * 1.8);
-      if (distT >= orbitR) {
-        sprite._phase = 'cruise';
-        sprite._lastFireAt = now;
-        sprite._orbitAngle = bearing;
-      }
+      if (distT >= orbitR) { sprite._phase = 'cruise'; sprite._lastFireAt = now; sprite._orbitAngle = bearing; }
       return;
     }
-    // cruise : orbite (rayon ondulant) ; le nez suit la tangente = sens du deplacement.
+    // cruise : orbite reguliere autour de la cible, avec une LEGERE fluctuation du rayon.
     sprite._orbitAngle += sprite._orbitSpeed * dtSec;
-    const r = orbitR + Math.sin(now * 0.0011 + sprite._wobblePhase) * (orbitR * 0.18);
+    const r = orbitR + Math.sin(now * 0.0011 + sprite._wobblePhase) * (orbitR * 0.14);
     sprite.x = cx + Math.cos(sprite._orbitAngle) * r;
     sprite.y = cy + Math.sin(sprite._orbitAngle) * r;
     const tangent = sprite._orbitAngle + (sprite._orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.PI / 2;
     sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, tangent, turn);
-    if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) sprite._phase = 'exit';
+    if (now - sprite._lastFireAt >= ENEMY_FIRE_MS) { sprite._phase = 'dive'; sprite._firedThisRun = false; sprite._peelSide = Math.random() < 0.5 ? 1 : -1; }
   }
   // Hook au tir d'un ennemi : cote viewer, rien a emettre (degats geres par le streameur).
   onEnemyFiredAt(/* mode, best */) {}
