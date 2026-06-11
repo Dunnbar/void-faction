@@ -61,19 +61,26 @@
     .line strong { color: #f84; }
     .hidden { display: none !important; }
     /* HUD stats : barre d'essence + materiaux/radius */
-    #statsPanel {
-      position: fixed; top: 78px; left: 14px; z-index: 30; width: 230px;
-      background: rgba(0, 12, 24, 0.82); border: 1px solid #2a4060; border-radius: 6px;
-      padding: 8px 12px; font-family: 'Consolas', monospace; pointer-events: none;
-      display: flex; flex-direction: column; gap: 7px;
+    /* HUD haut identique au viewer : barre d'essence + minerais/radius (avec hover) */
+    #essenceBar {
+      position: fixed; top: 16px; left: 150px; z-index: 30; width: 230px;
+      display: flex; flex-direction: column; gap: 4px; pointer-events: auto;
+      font-family: 'Consolas', monospace;
     }
-    #statsPanel .stat-label { font-size: 10px; letter-spacing: 1.5px; color: #8fb4d8; margin-bottom: 3px; }
-    #statsPanel .stat-label span { color: #fff; font-variant-numeric: tabular-nums; float: right; }
-    #statsPanel .stat-bar { height: 9px; background: rgba(0,0,0,0.5); border: 1px solid #2a4060; border-radius: 5px; overflow: hidden; }
-    #statsPanel .stat-bar-fill { height: 100%; width: 0%; background: #3da5ff; box-shadow: 0 0 8px rgba(61,165,255,0.6); transition: width 0.4s, background 0.3s; }
-    #statsPanel .stat-res { display: flex; justify-content: space-between; font-size: 11px; }
-    #statsPanel .stat-mat { color: #d4b487; } #statsPanel .stat-mat strong { color: #ffd9a0; }
-    #statsPanel .stat-rad { color: #66e1c5; } #statsPanel .stat-rad strong { color: #9ff0db; }
+    #essenceBar.hidden { display: none; }
+    #essenceBar .stat-label { font-size: 10px; letter-spacing: 1.5px; color: #8fb4d8; }
+    #essenceBar .stat-label span { color: #fff; font-variant-numeric: tabular-nums; float: right; }
+    #essenceBar .stat-bar { height: 10px; background: rgba(0,0,0,0.5); border: 1px solid #2a4060; border-radius: 5px; overflow: hidden; }
+    #essenceBar .stat-bar-fill { height: 100%; width: 0%; background: #3da5ff; box-shadow: 0 0 8px rgba(61,165,255,0.6); transition: width 0.4s, background 0.3s; }
+    #resPanel {
+      position: fixed; top: 18px; left: 392px; z-index: 30;
+      display: flex; flex-direction: row; align-items: center; gap: 16px;
+      pointer-events: none; font-family: 'Consolas', monospace; font-weight: bold;
+    }
+    #resPanel .res-item { display: inline-flex; align-items: center; gap: 5px; font-size: 16px; font-variant-numeric: tabular-nums; }
+    #resPanel .res-item .ico-img { height: 22px; }
+    #resPanel .res-item.mat strong { color: #ffd9a0; }
+    #resPanel .res-item.rad strong { color: #9ff0db; }
     /* Action en cours (Amiral) + bouton Stopper l'action */
     #activeAction {
       position: fixed; top: 168px; left: 14px; z-index: 30; width: 230px;
@@ -440,15 +447,22 @@
     </div>
   </div>
   <div id="baseClock" class="hidden hint"><span class="hint-pop"><strong>Jour de survie</strong><br>Nombre de jours que la base a tenu. <b>Plus il monte, plus les vagues d'ennemis sont nombreuses et résistantes.</b></span></div>
-  <div id="statsPanel">
-    <div class="stat-essence">
-      <div class="stat-label">ESSENCE <span id="statEssenceVal">0 / 0</span></div>
-      <div class="stat-bar"><div id="statEssenceFill" class="stat-bar-fill"></div></div>
-    </div>
-    <div class="stat-res">
-      <span class="stat-mat">⛏ Matériaux <strong id="statMateriaux">0</strong></span>
-      <span class="stat-rad">✦ Radius <strong id="statRadius">0</strong></span>
-    </div>
+  <!-- Barre d'essence (sans cadre), a droite de l'horloge du jour -->
+  <div id="essenceBar" class="hint" tabindex="0">
+    <div class="stat-label">ESSENCE <span id="statEssenceVal">0 / 0</span></div>
+    <div class="stat-bar"><div id="statEssenceFill" class="stat-bar-fill"></div></div>
+    <span class="hint-pop"><strong>Essence</strong><br><b>Alimente la base et ses tourelles.</b> Se vide lentement avec le temps. À sec, les tourelles s'arrêtent et la base devient vulnérable aux vagues. Rechargeable via l'action « Remplir » sur la base.</span>
+  </div>
+  <!-- Ressources (icones + nombres) avec infobulle -->
+  <div id="resPanel">
+    <span class="res-item mat hint" tabindex="0">
+      <img class="ico-img" src="/assets/PNG/CrystalIcon.png" alt=""><strong id="statMateriaux">0</strong>
+      <span class="hint-pop"><strong>Minéraux</strong><br>Ressource récoltée en minant des astéroïdes. <b>Sert à réparer les bâtiments.</b></span>
+    </span>
+    <span class="res-item rad hint" tabindex="0">
+      <img class="ico-img" src="/assets/PNG/BateryIcon2.png" alt=""><strong id="statRadius">0</strong>
+      <span class="hint-pop"><strong>Radius</strong><br>Ressource récoltée en minant des astéroïdes. <b>Sert à remplir la base d'essence.</b></span>
+    </span>
   </div>
   <!-- Action en cours de l'Amiral : libelle + "Stopper l'action" (commun avec le viewer) -->
   <div id="activeAction" class="hidden">
