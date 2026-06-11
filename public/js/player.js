@@ -111,6 +111,23 @@ let journal = [];
 let chat = [];
 let pendingWave = null; // vague active recue a l'init, appliquee des que la scene est prete
 let socket = null;
+
+// ============ Ecran de chargement ============
+const loadingOverlay = document.getElementById('loadingOverlay');
+const ldBarFill = document.getElementById('ldBarFill');
+let _loaderHidden = false;
+function setLoaderProgress(p) { if (ldBarFill) ldBarFill.style.width = Math.round((p || 0) * 100) + '%'; }
+function hideLoader() {
+  if (_loaderHidden) return;
+  _loaderHidden = true;
+  if (ldBarFill) ldBarFill.style.width = '100%';
+  if (loadingOverlay) {
+    loadingOverlay.classList.add('hidden');
+    setTimeout(() => { loadingOverlay.style.display = 'none'; }, 600);
+  }
+}
+// Filet de securite : ne jamais rester bloque sur le loader.
+setTimeout(hideLoader, 12000);
 let authenticated = false;
 let knownBuildTime = null;
 let amiralDisplayName = 'AMIRAL';  // pseudo affiche sous le vaisseau (rempli par init)
@@ -1157,6 +1174,7 @@ class MainScene extends Phaser.Scene {
   constructor() { super('main'); }
 
   preload() {
+    this.load.on('progress', setLoaderProgress);
     this.load.image('ship', SHIP_ASSET);
     this.load.image('mothership-base', '/assets/Spaceships/PNG/enemy_mothership.png');
     this.load.spritesheet('shield', '/assets/Weapons/PNG/shield_frames.png', { frameWidth: 280, frameHeight: 280 });
@@ -1347,6 +1365,8 @@ class MainScene extends Phaser.Scene {
     }
     // Vague deja en cours a la connexion : on l'affiche maintenant que la scene est prete.
     if (pendingWave) { this.handleWaveIncoming(pendingWave); triggerCaptainForWave(pendingWave); pendingWave = null; }
+    // Scene prete -> on retire l'ecran de chargement.
+    hideLoader();
   }
 
   update(time, delta) {

@@ -55,6 +55,22 @@ document.querySelectorAll('.pwd-toggle').forEach((btn) => {
   });
 });
 
+// ============ Ecran de chargement ============
+const loadingOverlay = document.getElementById('loadingOverlay');
+const ldBarFill = document.getElementById('ldBarFill');
+let _loaderHidden = false;
+function setLoaderProgress(p) { if (ldBarFill) ldBarFill.style.width = Math.round((p || 0) * 100) + '%'; }
+function hideLoader() {
+  if (_loaderHidden) return;
+  _loaderHidden = true;
+  if (ldBarFill) ldBarFill.style.width = '100%';
+  if (loadingOverlay) {
+    loadingOverlay.classList.add('hidden');
+    setTimeout(() => { loadingOverlay.style.display = 'none'; }, 600);
+  }
+}
+setTimeout(hideLoader, 12000); // filet de securite
+
 function setActiveTab(which) {
   loginError.textContent = '';
   const isLogin = which === 'login';
@@ -75,6 +91,7 @@ function showLoginUI() {
   loginEl.classList.remove('hidden');
   profileBtn.classList.add('hidden');
   profileMenu.classList.add('hidden');
+  hideLoader(); // pas de jeu a charger tant qu'on n'est pas connecte -> on revele le login
 }
 function hideLoginUI() {
   loginEl.classList.add('hidden');
@@ -753,6 +770,7 @@ class MainScene extends Phaser.Scene {
   constructor() { super('main'); }
 
   preload() {
+    this.load.on('progress', setLoaderProgress);
     this.load.image('ship', SHIP_ASSET);
     this.load.image('mothership-base', '/assets/Spaceships/PNG/enemy_mothership.png');
     this.load.spritesheet('shield', '/assets/Weapons/PNG/shield_frames.png', { frameWidth: 280, frameHeight: 280 });
@@ -975,6 +993,8 @@ class MainScene extends Phaser.Scene {
       this.handleWaveIncoming(pendingWave);
       pendingWave = null;
     }
+    // Scene prete -> on retire l'ecran de chargement.
+    hideLoader();
   }
 
   createTurretTexture() {

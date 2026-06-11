@@ -6,6 +6,20 @@
   <title>VoidFaction — Cockpit Amiral</title>
   <style>
     html, body { width: 100%; height: 100%; }
+    /* Ecran de chargement (visible par defaut, masque quand la scene est prete ou au login) */
+    #loadingOverlay {
+      position: fixed; inset: 0; z-index: 500; display: flex; align-items: center; justify-content: center;
+      background: radial-gradient(circle at 50% 38%, #0a1830, #04060a 72%);
+      transition: opacity 0.5s ease;
+    }
+    #loadingOverlay.hidden { opacity: 0; pointer-events: none; }
+    .ld-box { display: flex; flex-direction: column; align-items: center; gap: 14px; }
+    .ld-spinner { width: 54px; height: 54px; border-radius: 50%; border: 3px solid rgba(74,175,255,0.18); border-top-color: #4af; animation: ldSpin 0.9s linear infinite; }
+    @keyframes ldSpin { to { transform: rotate(360deg); } }
+    .ld-title { font-family: 'Consolas', monospace; letter-spacing: 5px; font-size: 22px; font-weight: bold; color: #cfe2f5; text-shadow: 0 0 14px rgba(74,175,255,0.6); }
+    .ld-sub { font-family: 'Consolas', monospace; font-size: 12px; letter-spacing: 2px; color: #8fb4d8; }
+    .ld-bar { width: 220px; height: 6px; background: rgba(0,0,0,0.5); border: 1px solid #2a4060; border-radius: 4px; overflow: hidden; }
+    .ld-bar-fill { height: 100%; width: 0%; background: #3da5ff; box-shadow: 0 0 8px rgba(61,165,255,0.6); transition: width 0.2s ease; }
     body { margin: 0; background: #04060a; font-family: 'Consolas', monospace; color: #fff; overflow: hidden; }
     canvas { display: block; }
     #login {
@@ -337,6 +351,16 @@
   </style>
 </head>
 <body>
+  <!-- Ecran de chargement (masque par JS) -->
+  <div id="loadingOverlay">
+    <div class="ld-box">
+      <div class="ld-spinner"></div>
+      <div class="ld-title">VOIDFACTION</div>
+      <div class="ld-sub">Chargement…</div>
+      <div class="ld-bar"><div class="ld-bar-fill" id="ldBarFill"></div></div>
+    </div>
+  </div>
+
   <div id="login">
     <div id="loginBox" style="background:#0a1424;border:1px solid #4af;padding:24px 28px;border-radius:6px;box-shadow:0 0 32px rgba(74,175,255,0.4);min-width:300px;">
       <h2 style="margin:0 0 8px 0;color:#4af;font-size:16px;">&gt; ACCÈS AMIRAL</h2>
