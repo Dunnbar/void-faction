@@ -393,7 +393,14 @@
       content.className = 'bc-content';
       domEl.prepend(content);
     }
-    content.innerHTML = `<span class="day">JOUR ${day}</span><span class="time">${clock.formatted}</span>`;
+    // Numero de version (date de build du serveur) affiche sous l'heure.
+    let verLine = '';
+    const bt = (typeof window !== 'undefined') ? window.gameBuildTime : null;
+    if (bt) {
+      const d = new Date(bt), p = (n) => String(n).padStart(2, '0');
+      verLine = `<span class="ver">v${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}.${p(d.getHours())}${p(d.getMinutes())}</span>`;
+    }
+    content.innerHTML = `<span class="day">JOUR ${day}</span><span class="time">${clock.formatted}</span>${verLine}`;
     domEl.classList.toggle('night', clock.isNight);
     domEl.classList.toggle('day-mode', !clock.isNight);
   }

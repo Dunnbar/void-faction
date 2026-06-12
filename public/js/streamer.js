@@ -471,6 +471,7 @@ function wireSocketEvents() {
         return;
       }
       knownBuildTime = data.buildTime;
+      window.gameBuildTime = data.buildTime; // numero de version affiche sous l'horloge
       const d = new Date(data.buildTime);
       console.log(`%c[VoidFaction Amiral] dernière MAJ : ${d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })}`,
         'color:#ff8044; font-weight:bold');
