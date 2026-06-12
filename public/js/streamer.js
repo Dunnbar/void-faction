@@ -816,11 +816,10 @@ const ENEMY_ORBIT_R_MIN  = 90;
 const ENEMY_ORBIT_R_MAX  = 160;
 const ENEMY_MIN_BASE_DIST = 300; // distance mini au centre de la base (evite que les ennemis collent la base en visant une tourelle)
 const ENEMY_FIRE_MS      = 5000;
-const GUN_LEVELS = 8; // niveau visuel = puissance (chaque +1 change d'asset), plafonne a 8 (Gun01..Gun08)
+const GUN_LEVELS = 10; // niveau visuel = puissance (Gun01..Gun10) ; puissance va de 1 a 10
 const GUN_SCALE = 0.55;
 function turretGunLevel(puissance) {
-  // Gun01 par defaut, +1 asset par point de puissance (chaque +1 change le sprite), plafonne a Gun08.
-  return Math.min(GUN_LEVELS, 1 + Math.max(0, puissance | 0));
+  return Math.min(GUN_LEVELS, Math.max(1, puissance | 0));
 }
 function turretRangePx(state) {
   return 280 + (state?.range || 0) * 10;
@@ -1582,7 +1581,9 @@ class MainScene extends Phaser.Scene {
       const sprite = this.elementSprites.get(el.id);
       const state = elementStates.get(el.id);
       if (!sprite || !state) continue;
-      if (state.dead || !powered) { sprite._targetingEnemy = false; continue; }
+      if (state.dead) { sprite._targetingEnemy = false; continue; }
+      SharedScene.applyTurretPowerVisual(sprite, powered); // grise la tourelle hors tension (plus d'essence)
+      if (!powered) { sprite._targetingEnemy = false; continue; }
       let best = null, bestD = turretRangePx(state);
       if (this.enemyById) {
         for (const e of this.enemyById.values()) {
