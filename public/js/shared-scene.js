@@ -195,6 +195,9 @@
   // Cree/maj les labels de compteurs d'actions et le halo de l'element actif de l'utilisateur.
   // Cle de texture par action (icones Ability prechargees par chaque scene).
   const ACTION_ICON_KEY = { tir: 'act-tir', visee: 'act-visee', reparation: 'act-reparation', remplir: 'act-remplir', minage: 'act-minage' };
+  // Categorie par action -> couleur du badge compteur (rouge attaque / bleu defense / jaune utilitaire).
+  const ACTION_CAT = { tir: 'PUISSANCE', visee: 'PUISSANCE', capacite: 'UTILITAIRE', reparation: 'DEFENSIF', remplir: 'UTILITAIRE', minage: 'UTILITAIRE' };
+  const CAT_COLOR = { PUISSANCE: 0xff4f6d, DEFENSIF: 0x4fa3ff, UTILITAIRE: 0xffd24f };
 
   // Construit le groupe d'icones d'actions d'un element : une icone par action active,
   // avec un badge Bg_Hud-Icon en bas a droite indiquant le nombre de joueurs actifs.
@@ -210,10 +213,13 @@
       if (key && scene.textures.exists(key)) {
         container.add(scene.add.image(x, 0, key).setDisplaySize(ICON, ICON));
       }
-      // Badge compteur en bas a droite de l'icone
+      // Badge compteur en bas a droite de l'icone, teinte selon le TYPE de l'action.
       const bx = x + ICON * 0.45, by = ICON * 0.45;
+      const catColor = CAT_COLOR[ACTION_CAT[act]] || 0xffffff;
       if (scene.textures.exists('bg-hud-icon')) {
-        container.add(scene.add.image(bx, by, 'bg-hud-icon').setDisplaySize(17, 17));
+        container.add(scene.add.image(bx, by, 'bg-hud-icon').setDisplaySize(17, 17).setTint(catColor));
+      } else {
+        container.add(scene.add.circle(bx, by, 9, catColor, 0.95).setStrokeStyle(1.5, 0x000000, 0.6));
       }
       container.add(scene.add.text(bx, by, String(n), {
         fontFamily: 'Consolas, monospace', fontSize: '12px', fontStyle: 'bold',
@@ -642,14 +648,21 @@
       duration: 1500, ease: 'Cubic.easeOut', onComplete: () => txt.destroy() });
   }
 
-  // Rotation lente de la base (ambiance) ; s'arrete quand elle n'a plus d'essence.
+  // Rotation lente de la base (ambiance). Tween base sur le TEMPS (pas sur le delta image) :
+  // evite la "vibration" que donnaient les increments par frame quand le framerate fluctue.
+  // S'arrete (pause) quand la base n'a plus d'essence.
   function spinBase(scene, delta) {
     const id = scene.baseElementId || 'base-1';
     const sp = scene.elementSprites && scene.elementSprites.get(id);
     if (!sp) return;
-    const states = getStates();
-    const st = states && states.get(id);
-    if (st && (st.essence || 0) > 0) sp.rotation += 0.00025 * (delta || 16);
+    if (!sp._spinTween) {
+      sp._spinTween = scene.tweens.add({ targets: sp, rotation: '+=' + (Math.PI * 2), duration: 48000, repeat: -1, ease: 'Linear' });
+      sp._spinPaused = false;
+    }
+    const st = getStates() && getStates().get(id);
+    const powered = !!(st && (st.essence || 0) > 0);
+    if (powered && sp._spinPaused) { sp._spinTween.resume(); sp._spinPaused = false; }
+    else if (!powered && !sp._spinPaused) { sp._spinTween.pause(); sp._spinPaused = true; }
   }
 
   // ===== Indicateur de vague : "!" colle au bord de l'ecran, pointe vers l'origine de la vague =====
@@ -668,10 +681,15 @@
   function updateWaveEdgeIndicator(scene) {
     const o = scene._waveOrigin;
     if (!scene._waveEdge) {
+      // Logo "warning" : triangle jaune borde de noir avec un "!".
       const c = scene.add.container(0, 0).setScrollFactor(0).setDepth(40).setVisible(false);
-      const bg = scene.add.circle(0, 0, 16, 0xff3b3b, 0.92).setStrokeStyle(2, 0xffffff, 0.9);
-      const txt = scene.add.text(0, 0, '!', { fontFamily: 'Consolas, monospace', fontSize: '22px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
-      c.add([bg, txt]);
+      const R = 19;
+      const g = scene.add.graphics();
+      g.fillStyle(0xffcc00, 0.95); g.lineStyle(3, 0x101010, 0.95);
+      g.beginPath(); g.moveTo(0, -R); g.lineTo(R * 0.92, R * 0.72); g.lineTo(-R * 0.92, R * 0.72); g.closePath();
+      g.fillPath(); g.strokePath();
+      const txt = scene.add.text(0, R * 0.12, '!', { fontFamily: 'Consolas, monospace', fontSize: '19px', color: '#101010', fontStyle: 'bold' }).setOrigin(0.5);
+      c.add([g, txt]);
       scene.tweens.add({ targets: c, scaleX: { from: 1, to: 1.18 }, scaleY: { from: 1, to: 1.18 }, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
       scene._waveEdge = c;
     }

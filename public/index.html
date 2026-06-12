@@ -424,6 +424,13 @@
 
     /* Barres d'XP par secteur (Attaque / Défense / Utilitaire) dans le menu profil */
     .pm-xp { display: flex; flex-direction: column; gap: 9px; margin: 6px 0 2px; }
+    /* Panneau XP toujours visible sous le bouton profil (haut-droite) */
+    #xpPanel {
+      position: fixed; top: 150px; right: 16px; z-index: 19; width: 150px; margin: 0;
+      background: rgba(8, 16, 28, 0.72); border: 1px solid #2a3b52; border-radius: 8px;
+      padding: 8px 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
+    }
+    #xpPanel.hidden { display: none; }
     .xpbar .xp-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
     .xpbar .xp-name { font-size: 12px; font-weight: 600; letter-spacing: 0.4px; }
     .xpbar .xp-lvl { font-size: 10px; color: #9fb3c8; font-variant-numeric: tabular-nums; }
@@ -882,24 +889,24 @@
   <button id="authBtn" class="auth-image-btn" type="button" title="Profil">
     <span class="auth-label" id="authBtnLabel">Connexion</span>
   </button>
+  <!-- Barres d'XP TOUJOURS visibles, sous le bouton profil -->
+  <div id="xpPanel" class="pm-xp">
+    <div class="xpbar PUISSANCE">
+      <div class="xp-head"><span class="xp-name">Attaque</span><span class="xp-lvl" id="xpLvlPuissance">Niv. 1</span></div>
+      <div class="xp-track"><div class="xp-fill" id="xpFillPuissance"></div></div>
+    </div>
+    <div class="xpbar DEFENSIF">
+      <div class="xp-head"><span class="xp-name">Défense</span><span class="xp-lvl" id="xpLvlDefensif">Niv. 1</span></div>
+      <div class="xp-track"><div class="xp-fill" id="xpFillDefensif"></div></div>
+    </div>
+    <div class="xpbar UTILITAIRE">
+      <div class="xp-head"><span class="xp-name">Utilitaire</span><span class="xp-lvl" id="xpLvlUtilitaire">Niv. 1</span></div>
+      <div class="xp-track"><div class="xp-fill" id="xpFillUtilitaire"></div></div>
+    </div>
+  </div>
   <div id="profileMenu" class="hidden">
     <div class="pm-name" id="userLine"><span id="userLabel">Visiteur</span></div>
-    <div class="pm-title">Mon XP</div>
-    <div class="pm-xp" id="pmLevels">
-      <div class="xpbar PUISSANCE">
-        <div class="xp-head"><span class="xp-name">Attaque</span><span class="xp-lvl" id="xpLvlPuissance">Niv. 1</span></div>
-        <div class="xp-track"><div class="xp-fill" id="xpFillPuissance"></div></div>
-      </div>
-      <div class="xpbar DEFENSIF">
-        <div class="xp-head"><span class="xp-name">Défense</span><span class="xp-lvl" id="xpLvlDefensif">Niv. 1</span></div>
-        <div class="xp-track"><div class="xp-fill" id="xpFillDefensif"></div></div>
-      </div>
-      <div class="xpbar UTILITAIRE">
-        <div class="xp-head"><span class="xp-name">Utilitaire</span><span class="xp-lvl" id="xpLvlUtilitaire">Niv. 1</span></div>
-        <div class="xp-track"><div class="xp-fill" id="xpFillUtilitaire"></div></div>
-      </div>
-    </div>
-    <div class="pm-levels-hint" id="pmLevelsHint">Gagne de l'XP en participant aux vagues (max niv. 3).</div>
+    <div class="pm-levels-hint" id="pmLevelsHint">Gagne de l'XP en agissant : Attaque en combat, Défense/Utilitaire avec le temps.</div>
     <button class="pm-action" id="pmAuthAction" type="button">Connexion</button>
   </div>
 

@@ -27,7 +27,7 @@ function startBaseClock() {
   baseClockInterval = setInterval(tick, 1000);
 }
 const ZOOM_FACTOR_MIN = 0.4;   // plage de zoom resserree (double-clic pour zoomer sur un element)
-const ZOOM_FACTOR_MAX = 1.6;
+const ZOOM_FACTOR_MAX = 1.3;
 
 let amiralToken = localStorage.getItem('voidfaction:amiralToken') || null;
 let socket = null;

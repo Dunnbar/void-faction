@@ -27,7 +27,7 @@ function startBaseClock() {
   baseClockInterval = setInterval(tick, 1000);
 }
 const ZOOM_FACTOR_MIN = 0.5;   // plage de zoom resserree (double-clic pour zoomer sur un element)
-const ZOOM_FACTOR_MAX = 1.6;
+const ZOOM_FACTOR_MAX = 1.3;
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
@@ -263,6 +263,9 @@ function getElement(id) {
 function updateUserLine() {
   const authBtnLabel = document.getElementById('authBtnLabel');
   const pmAction = document.getElementById('pmAuthAction');
+  // Les barres d'XP (toujours visibles sous le profil) ne concernent que les joueurs connectes.
+  const xpPanel = document.getElementById('xpPanel');
+  if (xpPanel) xpPanel.classList.toggle('hidden', !(authenticated && username));
   if (authenticated && username) {
     userLabelEl.textContent = username;
     userLineEl.classList.remove('anon');
@@ -1131,11 +1134,11 @@ function connectSocket() {
       for (const cat of ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE']) {
         if (deltas[cat] > 0) animateBarPlus(cat, deltas[cat]);
       }
-      // +N sur l'élément activé (catégorie de l'action active si elle existe).
-      // DEFENSIF (reparation) exclu : le serveur diffuse le GAIN DE PV TOTAL via 'element:plus'
-      // (somme de tous les contributeurs) — sinon on afficherait juste sa propre contribution.
+      // "+N" toutes les 10s sur l'élément : seulement pour UTILITAIRE (minage/remplir).
+      // DEFENSIF -> gain de PV total diffuse par le serveur ('element:plus'). PUISSANCE (attaque)
+      // -> rien (la puissance est dynamique, un "+1" par tick n'aurait pas de sens).
       const cat = activeAction?.category;
-      if (cat && cat !== 'DEFENSIF' && deltas[cat] > 0) {
+      if (cat === 'UTILITAIRE' && deltas[cat] > 0) {
         const scene = game.scene.getScene('main');
         if (scene && scene.scene.isActive()) {
           scene.flashElementPlus(activeAction.element_id, deltas[cat], cat);

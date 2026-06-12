@@ -691,11 +691,11 @@ function publicElementState(rt, id) {
     const dead = el.type === 'turret' && s.dead;
     const out = {
       id, ...s,
-      puissance: dead ? 0 : Math.max(1, Math.min(10, sumContributionsOnAction(rt, id, 'tir', 'PUISSANCE'))),
-      range:     dead ? 0 : Math.max(1, Math.min(10, sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE')))
+      puissance: dead ? 0 : Math.min(10, 1 + sumContributionsOnAction(rt, id, 'tir', 'PUISSANCE')),
+      range:     dead ? 0 : Math.min(10, 1 + sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE'))
     };
     // Le vaisseau a en plus une "capacite" (vitesse) boostee par les viewers (niveaux UTILITAIRE).
-    if (el.type === 'ship') out.capacite = Math.max(1, Math.min(10, sumContributionsOnAction(rt, id, 'capacite', 'UTILITAIRE')));
+    if (el.type === 'ship') out.capacite = Math.min(10, 1 + sumContributionsOnAction(rt, id, 'capacite', 'UTILITAIRE'));
     return out;
   }
   // Base : on calcule le nombre de jours depuis sa naissance
@@ -2403,8 +2403,8 @@ function tickTurretsServer(rt, combat, now) {
     if (el.type !== 'turret') continue;
     const s = rt.elementStates.get(el.id);
     if (!s || s.dead || s.hp <= 0) continue;
-    const puissance = Math.max(1, Math.min(TURRET_PUISSANCE_CAP, sumContributionsOnAction(rt, el.id, 'tir', 'PUISSANCE')));
-    const range     = Math.max(1, Math.min(TURRET_RANGE_CAP, sumContributionsOnAction(rt, el.id, 'visee', 'PUISSANCE')));
+    const puissance = Math.min(TURRET_PUISSANCE_CAP, 1 + sumContributionsOnAction(rt, el.id, 'tir', 'PUISSANCE'));
+    const range     = Math.min(TURRET_RANGE_CAP, 1 + sumContributionsOnAction(rt, el.id, 'visee', 'PUISSANCE'));
     const rangePx = turretRangePxServer(range);
     let best = null, bestD = rangePx;
     for (const en of combat.enemies.values()) {
@@ -2447,7 +2447,7 @@ function resolveShipFire(rt, data) {
   if (hit) { tx = Math.round(hit.x); ty = Math.round(hit.y); }
   io.to(amiralRoom(rt.id)).emit('combat:tracer', { from: { x: Math.round(data.x), y: Math.round(data.y) }, to: { x: Math.round(tx), y: Math.round(ty) }, kind: 'ship' });
   if (hit && combat) {
-    const puissance = Math.max(1, Math.min(TURRET_PUISSANCE_CAP, sumContributionsOnAction(rt, 'ship-1', 'tir', 'PUISSANCE')));
+    const puissance = Math.min(TURRET_PUISSANCE_CAP, 1 + sumContributionsOnAction(rt, 'ship-1', 'tir', 'PUISSANCE'));
     damageEnemyServer(rt, combat, hit, 5 + Math.floor(puissance * 0.5));
   }
 }
