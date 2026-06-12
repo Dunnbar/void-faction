@@ -104,7 +104,7 @@ const BASE_ACTIONS = [
 const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE', effect: '+1 ressource toutes les 10 s' }];
 const SHIP_ACTIONS = [
   { id: 'tir',      label: 'Tir',      category: 'PUISSANCE',  effect: '+1 par contributeur' },
-  { id: 'capacite', label: 'Capacité', category: 'UTILITAIRE', effect: '+1 vitesse (max 10)' }
+  { id: 'capacite', label: 'Capacité', category: 'PUISSANCE', effect: '+1 vitesse (max 10)' }
 ];
 const SHIP_HP_MAX = 100;
 
@@ -702,7 +702,7 @@ function publicElementState(rt, id) {
       range:     dead ? 0 : Math.min(10, 1 + sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE'))
     };
     // Le vaisseau a en plus une "capacite" (vitesse) boostee par les viewers (niveaux UTILITAIRE).
-    if (el.type === 'ship') out.capacite = Math.min(10, 1 + sumContributionsOnAction(rt, id, 'capacite', 'UTILITAIRE'));
+    if (el.type === 'ship') out.capacite = Math.min(10, 1 + sumContributionsOnAction(rt, id, 'capacite', 'PUISSANCE'));
     return out;
   }
   // Base : on calcule le nombre de jours depuis sa naissance
@@ -827,16 +827,20 @@ function allElementStates(rt) {
 }
 // Union des actions actives sur les elements d'un Amiral : joueurs + l'Amiral lui-meme
 const stmtActiveElementsByAmiralUnion = db.prepare(`
-  SELECT a.element_id, a.action_id, a.category, u.username
+  SELECT a.element_id, a.action_id, a.category, u.username, a.user_id AS uid, 'user' AS kind
   FROM active_actions a JOIN users u ON u.id = a.user_id
   WHERE u.amiral_id = ?
   UNION ALL
-  SELECT a.element_id, a.action_id, a.category, am.username
+  SELECT a.element_id, a.action_id, a.category, am.username, NULL AS uid, 'amiral' AS kind
   FROM amiral_active_actions a JOIN amirals am ON am.id = a.amiral_id
   WHERE am.id = ?
 `);
 function activeElementStatesForAmiral(amiralId) {
-  return stmtActiveElementsByAmiralUnion.all(amiralId, amiralId);
+  // On attache le NIVEAU de chaque acteur dans la categorie de l'action (Amiral = 1 fixe).
+  return stmtActiveElementsByAmiralUnion.all(amiralId, amiralId).map(r => ({
+    element_id: r.element_id, action_id: r.action_id, category: r.category, username: r.username,
+    level: r.kind === 'amiral' ? 1 : userLevelForCategory(r.uid, r.category)
+  }));
 }
 // Contribution TOTALE (somme des niveaux des acteurs actifs) par (element, action) -> "vraie valeur"
 // affichee sur le bouton d'action. Cle = "elementId|actionId".

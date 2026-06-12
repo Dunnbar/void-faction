@@ -433,8 +433,10 @@
     .xpbar .xp-head { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 3px; }
     .xpbar .xp-name { font-size: 12px; font-weight: 600; letter-spacing: 0.4px; }
     .xpbar .xp-lvl { font-size: 10px; color: #9fb3c8; font-variant-numeric: tabular-nums; }
-    .xpbar .xp-track { height: 7px; border-radius: 5px; background: rgba(255,255,255,0.08); overflow: hidden; }
+    .xpbar .xp-track { position: relative; height: 15px; border-radius: 5px; background: rgba(255,255,255,0.08); overflow: hidden; }
     .xpbar .xp-fill { height: 100%; width: 0%; border-radius: 5px; transition: width 0.4s ease; }
+    .xpbar .xp-val { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;
+      font-size: 9px; font-weight: 700; color: #fff; text-shadow: 0 0 3px #000, 0 1px 2px #000; font-variant-numeric: tabular-nums; pointer-events: none; }
     .xpbar.PUISSANCE  .xp-name { color: var(--c-puissance); }
     .xpbar.PUISSANCE  .xp-fill { background: var(--c-puissance); }
     .xpbar.DEFENSIF   .xp-name { color: var(--c-defensif); }
@@ -734,6 +736,16 @@
     }
     #actionMenu .deact:hover { background: #f55; color: #000; }
     #actionMenu .note { font-size: 10px; opacity: 0.6; margin-top: 6px; font-style: italic; }
+    /* Liste des joueurs actifs sur l'element (qui fait quoi, a quel niveau) */
+    #actionMenu .players { margin-top: 8px; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+    #actionMenu .players.hidden { display: none; }
+    #actionMenu .players .pl-title { font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: #7f97ad; }
+    #actionMenu .players .pl-row { display: flex; justify-content: space-between; gap: 8px; font-size: 11px; color: #cdd9e6; }
+    #actionMenu .players .pl-row .pl-name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    #actionMenu .players .pl-row .pl-act { font-weight: bold; flex-shrink: 0; }
+    #actionMenu .players .pl-row.PUISSANCE  .pl-act { color: var(--c-puissance); }
+    #actionMenu .players .pl-row.DEFENSIF   .pl-act { color: var(--c-defensif); }
+    #actionMenu .players .pl-row.UTILITAIRE .pl-act { color: var(--c-utilitaire); }
     #actionMenu .stats {
       font-size: 11px; color: #9bd0ff; padding: 6px 0 8px;
       border-bottom: 1px solid rgba(74,175,255,0.2);
@@ -892,15 +904,15 @@
   <div id="xpPanel" class="pm-xp">
     <div class="xpbar PUISSANCE">
       <div class="xp-head"><span class="xp-name">Attaque</span><span class="xp-lvl" id="xpLvlPuissance">Niv. 1</span></div>
-      <div class="xp-track"><div class="xp-fill" id="xpFillPuissance"></div></div>
+      <div class="xp-track"><div class="xp-fill" id="xpFillPuissance"></div><span class="xp-val" id="xpValPuissance"></span></div>
     </div>
     <div class="xpbar DEFENSIF">
       <div class="xp-head"><span class="xp-name">Défense</span><span class="xp-lvl" id="xpLvlDefensif">Niv. 1</span></div>
-      <div class="xp-track"><div class="xp-fill" id="xpFillDefensif"></div></div>
+      <div class="xp-track"><div class="xp-fill" id="xpFillDefensif"></div><span class="xp-val" id="xpValDefensif"></span></div>
     </div>
     <div class="xpbar UTILITAIRE">
       <div class="xp-head"><span class="xp-name">Utilitaire</span><span class="xp-lvl" id="xpLvlUtilitaire">Niv. 1</span></div>
-      <div class="xp-track"><div class="xp-fill" id="xpFillUtilitaire"></div></div>
+      <div class="xp-track"><div class="xp-fill" id="xpFillUtilitaire"></div><span class="xp-val" id="xpValUtilitaire"></span></div>
     </div>
   </div>
   <div id="profileMenu" class="hidden">
@@ -950,6 +962,7 @@
     </div>
     <div class="stats hidden" id="actionMenuStats"></div>
     <div class="actions" id="actionMenuActions"></div>
+    <div class="players hidden" id="actionMenuPlayers"></div>
     <div class="note hidden" id="actionMenuNote"></div>
   </div>
 

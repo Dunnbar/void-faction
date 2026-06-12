@@ -407,12 +407,14 @@ function renderLevels() {
     const x = (xp && xp[cat]) || 0;
     const lvlEl = document.getElementById('xpLvl' + suffix[cat]);
     const fillEl = document.getElementById('xpFill' + suffix[cat]);
+    const valEl = document.getElementById('xpVal' + suffix[cat]);
     // Valeur lisible : XP dans le palier courant / XP requise pour le palier suivant.
     const lo = lvl === 1 ? 0 : t2;
     const hi = lvl === 1 ? t2 : t3;
     const within = Math.max(0, x - lo);
     const need = Math.max(1, hi - lo);
-    if (lvlEl) lvlEl.textContent = lvl >= 3 ? `Niv. 3 · MAX (${x})` : `Niv. ${lvl} · ${within}/${need}`;
+    if (lvlEl) lvlEl.textContent = `Niv. ${lvl}`;            // niveau aligne a droite (entete)
+    if (valEl) valEl.textContent = lvl >= 3 ? `MAX (${x})` : `${within} / ${need}`; // valeur DANS la barre
     if (fillEl) {
       const pct = lvl >= 3 ? 100 : (within / need) * 100;
       fillEl.style.width = `${Math.max(0, Math.min(100, pct))}%`;
@@ -754,6 +756,20 @@ function openActionMenu(elementId, anchor, keepPos) {
       activateAction(elementId, a.id);
     });
     actionMenuActions.appendChild(btn);
+  }
+  // Liste des joueurs actifs sur CET element (qui fait quoi, a quel niveau).
+  const playersEl = document.getElementById('actionMenuPlayers');
+  if (playersEl) {
+    const here = (lastActiveList || []).filter(a => a.element_id === elementId);
+    if (here.length) {
+      const labelOf = (aid) => { const def = el.actions.find(x => x.id === aid); return def ? def.label : aid; };
+      playersEl.innerHTML = `<div class="pl-title">Joueurs actifs (${here.length})</div>` + here.map(a =>
+        `<div class="pl-row ${a.category}"><span class="pl-name">${escapeHtml(a.username || '?')}</span>` +
+        `<span class="pl-act">${escapeHtml(labelOf(a.action_id))} · Niv.${a.level || 1}</span></div>`).join('');
+      playersEl.classList.remove('hidden');
+    } else {
+      playersEl.classList.add('hidden');
+    }
   }
   actionMenuNote.style.color = ''; // reset (peut avoir ete passe en rouge par un echec)
   if (activeAction && activeAction.element_id !== elementId) {

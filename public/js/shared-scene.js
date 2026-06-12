@@ -196,7 +196,7 @@
   // Cle de texture par action (icones Ability prechargees par chaque scene).
   const ACTION_ICON_KEY = { tir: 'act-tir', visee: 'act-visee', reparation: 'act-reparation', remplir: 'act-remplir', minage: 'act-minage' };
   // Categorie par action -> couleur du badge compteur (rouge attaque / bleu defense / jaune utilitaire).
-  const ACTION_CAT = { tir: 'PUISSANCE', visee: 'PUISSANCE', capacite: 'UTILITAIRE', reparation: 'DEFENSIF', remplir: 'UTILITAIRE', minage: 'UTILITAIRE' };
+  const ACTION_CAT = { tir: 'PUISSANCE', visee: 'PUISSANCE', capacite: 'PUISSANCE', reparation: 'DEFENSIF', remplir: 'UTILITAIRE', minage: 'UTILITAIRE' };
   const CAT_COLOR = { PUISSANCE: 0xff4f6d, DEFENSIF: 0x4fa3ff, UTILITAIRE: 0xffd24f };
 
   // Construit le groupe d'icones d'actions d'un element : une icone par action active,
