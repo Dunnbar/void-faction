@@ -1870,6 +1870,13 @@ class MainScene extends Phaser.Scene {
     this.thrust.emitting = inMotion;
     if (this.shipFlame) this.shipFlame.setVisible(inMotion); // flamme reacteur masquee a l'arret
     this._shipMoving = inMotion;
+    // Le sprite du vaisseau EST l'animation d'echappement (frames Exhaust). A l'arret on coupe
+    // l'anim et on affiche le corps statique (Ship_LVL_1 = texture 'ship') -> plus de flamme.
+    if (inMotion) {
+      if (this.ship.anims && !this.ship.anims.isPlaying) this.ship.play('ship-thrust');
+    } else if (this.ship.anims && this.ship.anims.isPlaying) {
+      this.ship.stop(); this.ship.setTexture('ship');
+    }
 
     // Cible verrouillee disparue -> on retire le verrouillage.
     if (this.lockedEnemy && !this.lockedEnemy.active) this.clearLock();

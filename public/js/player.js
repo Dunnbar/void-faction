@@ -1514,13 +1514,20 @@ class MainScene extends Phaser.Scene {
         this.shipHpBar.y = this.ship.y - 40;
       }
       // Sync flamme de reacteur a l'arriere du vaisseau (masquee a l'arret)
+      const moving = this.time.now < (this._shipMovingUntil || 0);
       if (this.shipFlame) {
         const rearAngle = this.ship.rotation + Math.PI / 2;
         const offset = 18;
         this.shipFlame.x = this.ship.x + Math.cos(rearAngle) * offset;
         this.shipFlame.y = this.ship.y + Math.sin(rearAngle) * offset;
         this.shipFlame.rotation = rearAngle - Math.PI / 2;
-        this.shipFlame.setVisible(this.time.now < (this._shipMovingUntil || 0));
+        this.shipFlame.setVisible(moving);
+      }
+      // Le sprite du vaisseau EST l'animation d'echappement : a l'arret, corps statique sans flamme.
+      if (moving) {
+        if (this.ship.anims && !this.ship.anims.isPlaying) this.ship.play('ship-thrust');
+      } else if (this.ship.anims && this.ship.anims.isPlaying) {
+        this.ship.stop(); this.ship.setTexture('ship');
       }
     }
     SharedScene.lerpEnemies(this); // interpolation des ennemis pousses par le serveur
