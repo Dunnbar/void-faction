@@ -211,6 +211,27 @@
     #hudButtons .hint-pop { left: auto; right: 0; }
     .hint:hover .hint-pop.hint-up, .hint:focus .hint-pop.hint-up, .hint:focus-within .hint-pop.hint-up { transform: none; }
 
+    /* Retrospective 12h : panneau modal avec image + reglette temporelle */
+    #snapshotPanel {
+      position: fixed; top: 50%; left: 50%; transform: translate(-50%, -50%); z-index: 70;
+      width: min(560px, 92vw); background: rgba(8, 16, 28, 0.98);
+      border: 1px solid var(--c-frame); border-radius: 10px; box-shadow: 0 14px 40px rgba(0,0,0,0.6);
+      padding: 12px 14px; color: #cdd9e6;
+    }
+    #snapshotPanel.hidden { display: none; }
+    #snapshotPanel .sp-head { display: flex; justify-content: space-between; align-items: center; font-size: 12px; letter-spacing: 2px; color: #7f97ad; margin-bottom: 10px; }
+    #snapshotPanel .sp-head button { background: none; border: 0; color: #9fb3c8; font-size: 20px; line-height: 1; cursor: pointer; padding: 0 4px; }
+    #snapshotPanel .sp-head button:hover { color: #fff; }
+    #snapshotPanel .sp-stage { position: relative; width: 100%; aspect-ratio: 16 / 9; background: #05070c; border-radius: 6px; overflow: hidden; display: flex; align-items: center; justify-content: center; }
+    #snapshotPanel .sp-stage img { width: 100%; height: 100%; object-fit: contain; display: none; }
+    #snapshotPanel .sp-stage img.shown { display: block; }
+    #snapshotPanel .sp-empty { text-align: center; font-size: 13px; color: #6e8197; padding: 0 24px; }
+    #snapshotPanel .sp-empty span { font-size: 11px; opacity: 0.8; }
+    #snapshotPanel .sp-controls { display: flex; align-items: center; gap: 10px; margin-top: 10px; }
+    #snapshotPanel .sp-time { font-size: 13px; font-variant-numeric: tabular-nums; color: #cfe3ff; min-width: 96px; }
+    #snapshotPanel .sp-count { font-size: 11px; color: #7f97ad; min-width: 54px; text-align: right; }
+    #snapshotPanel #snapSlider { flex: 1; accent-color: #4aafff; cursor: pointer; }
+
     /* Chat communautaire (meme ancrage que le journal) */
     #chat {
       position: fixed; bottom: 76px; right: 12px; z-index: 11; width: 320px;
@@ -803,6 +824,24 @@
       <span class="badge" id="chatBadge"></span>
       <span class="hint-pop hint-up">Chat de la base — discute avec les joueurs connectés (connexion requise).</span>
     </button>
+    <button id="snapshotBtn" class="hud-btn hint" type="button">
+      <svg viewBox="0 0 24 24" width="34" height="34" fill="none" stroke="#cfe3ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3.5 2"/></svg>
+      <span class="hint-pop hint-up">Rétrospective — revois les 12 dernières heures de la base en images.</span>
+    </button>
+  </div>
+
+  <!-- Retrospective 12h : succession de captures avec reglette temporelle -->
+  <div id="snapshotPanel" class="hidden">
+    <div class="sp-head"><span>RÉTROSPECTIVE — 12 H</span><button id="snapClose" type="button" title="Fermer">×</button></div>
+    <div class="sp-stage">
+      <img id="snapImg" alt="capture de la base">
+      <div id="snapEmpty" class="sp-empty">Aucune capture pour l'instant.<br><span>Une image est prise ~toutes les 12 min quand la base est observée.</span></div>
+    </div>
+    <div class="sp-controls">
+      <span id="snapTimeLabel" class="sp-time">—</span>
+      <input id="snapSlider" type="range" min="0" max="0" value="0" step="1">
+      <span id="snapCount" class="sp-count"></span>
+    </div>
   </div>
 
   <!-- Bouton son (a gauche du bouton profil) : ouvre le menu de reglages -->

@@ -625,6 +625,8 @@ function wireSocketEvents() {
     const scene = game?.scene.getScene('main');
     if (scene && scene.scene.isActive()) { SharedScene.clearAllEnemies(scene); scene.hideWaveWarnIcon(); }
   });
+  // Retrospective : le serveur nous demande une capture du canvas (cadence ~12 min).
+  socket.on('snapshot:capture', () => captureSnapshot());
   socket.on('streamer:kicked', () => {
     alert('Un autre Amiral s\'est connecté avec ton compte. Tu as perdu le contrôle.');
     amiralToken = null;
@@ -767,6 +769,23 @@ function playWaveSound(type) {
   if (!base) return;
   const vol = 0.6 * (window.SFX ? SFX.getVol('announce') : 1); // canal Annonces
   try { const a = base.cloneNode(); a.volume = vol; a.play().catch(() => {}); } catch (e) {}
+}
+
+// Retrospective : capture le canvas Phaser, le reduit (~480px, JPEG) et l'envoie au serveur.
+function captureSnapshot() {
+  const scene = (typeof game !== 'undefined' && game) ? game.scene.getScene('main') : null;
+  if (!scene || !scene.scene.isActive() || !game.renderer || !game.renderer.snapshot) return;
+  try {
+    game.renderer.snapshot((image) => {
+      try {
+        if (!image || !image.width) return;
+        const W = 480, H = Math.max(1, Math.round(W * (image.height / image.width)));
+        const c = document.createElement('canvas'); c.width = W; c.height = H;
+        c.getContext('2d').drawImage(image, 0, 0, W, H);
+        if (socket) socket.emit('snapshot:store', { dataUrl: c.toDataURL('image/jpeg', 0.6) });
+      } catch (e) {}
+    });
+  } catch (e) {}
 }
 
 // IA ennemie : cap sur la base par defaut, engagement des cibles croisees dans la range.
