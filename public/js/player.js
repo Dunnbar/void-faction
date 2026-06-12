@@ -108,6 +108,8 @@ let levels = { PUISSANCE: 1, DEFENSIF: 1, UTILITAIRE: 1 }; // niveaux viewer par
 let xp = { PUISSANCE: 0, DEFENSIF: 0, UTILITAIRE: 0 };      // XP brute par categorie (pour les barres)
 // Seuils niv2 / niv3 PAR categorie (fournis par le serveur). Attaque en combats, def/util en temps.
 let levelXp = { PUISSANCE: [5, 15], DEFENSIF: [1200, 3600], UTILITAIRE: [1200, 3600] };
+// Contribution TOTALE en cours par action ("elementId|actionId" -> somme des niveaux des acteurs).
+let actionContributions = {};
 let baseDead = false; // base detruite : aucune action possible en attendant la relance de l'Amiral
 let actionDurationMs = ACTION_MAX_DURATION_MS_DEFAULT;
 let history = [];
@@ -730,8 +732,11 @@ function openActionMenu(elementId, anchor, keepPos) {
     btn.className = 'act-block ' + a.category;
     const icon = a.icon || ACTION_ICONS[a.id];
     const catIco = `<svg class="act-cat"><use href="#ic-${a.category.toLowerCase()}"/></svg>`;
-    // Effet dynamique : le +X = TA contribution (ton niveau dans la categorie), en gras, suivi du logo.
-    const lvl = (levels && levels[a.category]) ? levels[a.category] : 1;
+    // Effet dynamique : +X = contribution TOTALE en cours (somme des niveaux des acteurs actifs).
+    // Si personne n'agit encore, on montre ce que TOI tu ajouterais (ton niveau dans la categorie).
+    const total = actionContributions[elementId + '|' + a.id] || 0;
+    const own = (levels && levels[a.category]) ? levels[a.category] : 1;
+    const lvl = total > 0 ? total : own;
     const rest = (a.effect || '').replace(/^\+\s*\d+\s*/, '');
     const sub = `<span class="act-sub"><b class="act-amt">+${lvl}</b> (<svg class="act-cat-inline"><use href="#ic-${a.category.toLowerCase()}"/></svg>)${rest ? ' ' + escapeHtml(rest) : ''}</span>`;
     btn.innerHTML = `${catIco}${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>${sub}`;
@@ -1011,6 +1016,7 @@ function connectSocket() {
     if (data.levels) levels = data.levels;
     if (data.xp) xp = data.xp;
     if (data.levelXp && typeof data.levelXp === 'object') levelXp = data.levelXp;
+    if (data.contributions) actionContributions = data.contributions;
     renderLevels();
     baseDead = !!data.baseDead;
     document.getElementById('baseDeadOverlay')?.classList.toggle('hidden', !baseDead);
@@ -1154,6 +1160,7 @@ function connectSocket() {
       lastActiveList = data.activeElements;
       rebuildActiveElementsMap(data.activeElements);
     }
+    if (data.contributions) actionContributions = data.contributions;
     if (Array.isArray(data.states)) {
       // Fusion (pas de remplacement) : les broadcasts partiels (base, asteroides) ne doivent pas s'ecraser
       for (const s of data.states) elementStates.set(s.id, s);

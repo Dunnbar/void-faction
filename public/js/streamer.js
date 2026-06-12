@@ -172,6 +172,8 @@ signupForm.addEventListener('submit', (e) => {
 let lastActiveElements = [];
 let elementStates = new Map();
 let factionResources = { materiaux: 0, radius: 0 };
+// Contribution TOTALE en cours par action ("elementId|actionId" -> somme des niveaux des acteurs).
+let actionContributions = {};
 let amiralDisplayName = 'AMIRAL';  // pseudo affiche sous le vaisseau
 let activeAction = null;  // action active de l'Amiral (slot unique)
 let amiralProgress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
@@ -275,9 +277,11 @@ function openActionMenu(elementId, anchor, keepPos) {
     btn.className = 'act-block ' + a.category;
     const icon = a.icon || ACTION_ICONS[a.id];
     const catIco = `<svg class="act-cat"><use href="#ic-${a.category.toLowerCase()}"/></svg>`;
-    // L'Amiral contribue toujours +1 ; effet en gras + logo de categorie.
+    // +X = contribution TOTALE en cours (somme des acteurs) ; sinon ce que l'Amiral ajouterait (+1).
+    const total = actionContributions[elementId + '|' + a.id] || 0;
+    const lvl = total > 0 ? total : 1;
     const rest = (a.effect || '').replace(/^\+\s*\d+\s*/, '');
-    const sub = `<span class="act-sub"><b class="act-amt">+1</b> (<svg class="act-cat-inline"><use href="#ic-${a.category.toLowerCase()}"/></svg>)${rest ? ' ' + escapeHtml(rest) : ''}</span>`;
+    const sub = `<span class="act-sub"><b class="act-amt">+${lvl}</b> (<svg class="act-cat-inline"><use href="#ic-${a.category.toLowerCase()}"/></svg>)${rest ? ' ' + escapeHtml(rest) : ''}</span>`;
     btn.innerHTML = `${catIco}${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>${sub}`;
     if (isActive) btn.classList.add('active');
     // Ressource requise indisponible -> action non-cliquable (reparation=matériaux, remplir=radius).
@@ -491,6 +495,7 @@ function wireSocketEvents() {
     hideLoginUI();
     document.getElementById('baseDeadOverlay')?.classList.toggle('hidden', !data.baseDead);
     lastActiveElements = data.activeElements || [];
+    if (data.contributions) actionContributions = data.contributions;
     serverElements = data.elements || [];
     elementStates = new Map((data.elementStates || []).map(s => [s.id, s]));
     factionResources = data.factionResources || factionResources;
@@ -545,6 +550,7 @@ function wireSocketEvents() {
   socket.on('elements:update', (data) => {
     // Ne pas ecraser la liste active sur les broadcasts partiels (qui n'envoient que des states).
     if (Array.isArray(data.activeElements)) lastActiveElements = data.activeElements;
+    if (data.contributions) actionContributions = data.contributions;
     if (Array.isArray(data.states)) {
       // Fusion (pas de remplacement) : les broadcasts partiels (base, asteroides) ne doivent pas s'ecraser
       for (const s of data.states) elementStates.set(s.id, s);

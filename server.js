@@ -838,6 +838,20 @@ const stmtActiveElementsByAmiralUnion = db.prepare(`
 function activeElementStatesForAmiral(amiralId) {
   return stmtActiveElementsByAmiralUnion.all(amiralId, amiralId);
 }
+// Contribution TOTALE (somme des niveaux des acteurs actifs) par (element, action) -> "vraie valeur"
+// affichee sur le bouton d'action. Cle = "elementId|actionId".
+function contributionsForAmiral(rt) {
+  if (!rt) return {};
+  const out = {};
+  const seen = new Set();
+  for (const r of stmtActiveElementsByAmiralUnion.all(rt.id, rt.id)) {
+    const key = r.element_id + '|' + r.action_id;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out[key] = sumContributionsOnAction(rt, r.element_id, r.action_id, r.category);
+  }
+  return out;
+}
 function recentHistoryForAmiral(amiralId) {
   return stmtRecentActionLog.all(amiralId, HISTORY_LIMIT).map(r => ({
     username: r.username,
@@ -1240,6 +1254,7 @@ io.on('connection', (socket) => {
     xp: socket.data.userId ? userXp(socket.data.userId) : { PUISSANCE: 0, DEFENSIF: 0, UTILITAIRE: 0 },
     levelXp: LEVEL_XP_BY_CAT,
     activeElements: rtForInit ? activeElementStatesForAmiral(rtForInit.id) : [],
+    contributions: rtForInit ? contributionsForAmiral(rtForInit) : {},
     world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y, gameTz: GAME_TZ,
              mapMinI: MAP_MIN_I, mapMaxI: MAP_MAX_I, mapMinJ: MAP_MIN_J, mapMaxJ: MAP_MAX_J },
     currentWave: rtForInit && rtForInit.currentWave && rtForInit.currentWave.endsAt > Date.now() ? rtForInit.currentWave : null,
@@ -1309,6 +1324,7 @@ io.on('connection', (socket) => {
 
     io.to(amiralRoom(rt.id)).emit('elements:update', {
       activeElements: activeElementStatesForAmiral(rt.id),
+      contributions: contributionsForAmiral(rt),
       // Diffuse les etats de tourelles : leur puissance/range derive du nombre d'acteurs actifs.
       states: turretStatesPayload(rt)
     });
@@ -1864,6 +1880,7 @@ function tickActions() {
       persistElementStates(rt); // ecriture periodique HP/essence (toutes les 10s tant que la base vit)
       io.to(amiralRoom(amiralId)).emit('elements:update', {
         activeElements: activeElementStatesForAmiral(amiralId),
+        contributions: contributionsForAmiral(rt),
         states: allElementStates(rt),
         faction: { ...rt.factionResources }
       });
