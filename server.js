@@ -109,7 +109,8 @@ const ASTEROID_RESPAWN_MS = 20 * 60 * 1000;
 const ASTEROID_HP_MAX     = 240;  // legacy, gardé pour eventuel fallback
 const TURRET_HP_MAX       = 200;
 const BASE_HP_MAX         = 400;
-const BASE_ESSENCE_MAX    = 720;   // 2h d'autonomie au drain de 1/10s (360/h)
+const BASE_ESSENCE_MAX    = 720;   // 12h d'autonomie au drain de 1/min (cf. ESSENCE_DRAIN_MS)
+const ESSENCE_DRAIN_MS    = 60 * 1000; // -1 essence par minute (720 min = 12h) ; assez lent pour que "Remplir" remonte vraiment
 const BASE_HIT_DMG        = 3;    // degats par tir ennemi atteignant la base (tempo lent)
 
 function poly(angleRad, dist) {
@@ -1825,14 +1826,16 @@ function tickActions() {
       dirtyAmiraux.add(actor.amiralId);
     }
   }
-  // Drain d'essence : 1 par tick (toutes les 10s) sur la base de chaque amiral.
-  // L'essence alimente la base ; si elle tombe a 0, les tourelles sont desactivees (cote client).
+  // Drain d'essence : -1 par MINUTE (720 min = 12h d'autonomie). Assez lent pour que l'action
+  // "Remplir" (qui ajoute par tick de 10s) remonte reellement la jauge au lieu de juste compenser.
   for (const rt of amiralsRuntime.values()) {
     if (rt.baseDead) continue; // base detruite -> tout est en pause
     const baseEl = rt.elements.find(e => e.type === 'base');
     if (!baseEl) continue;
     const state = rt.elementStates.get(baseEl.id);
     if (!state || state.essence <= 0) continue;
+    if (now - (rt._lastEssenceDrainAt || 0) < ESSENCE_DRAIN_MS) continue;
+    rt._lastEssenceDrainAt = now;
     state.essence = Math.max(0, state.essence - 1);
     dirtyAmiraux.add(rt.id);
   }

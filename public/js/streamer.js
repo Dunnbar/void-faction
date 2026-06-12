@@ -274,8 +274,10 @@ function openActionMenu(elementId, anchor, keepPos) {
     const btn = document.createElement('button');
     btn.className = 'act-block ' + a.category;
     const icon = a.icon || ACTION_ICONS[a.id];
-    const sub = a.effect ? `<span class="act-sub">${escapeHtml(a.effect)}</span>` : '';
     const catIco = `<svg class="act-cat"><use href="#ic-${a.category.toLowerCase()}"/></svg>`;
+    // L'Amiral contribue toujours +1 ; effet en gras + logo de categorie.
+    const rest = (a.effect || '').replace(/^\+\s*\d+\s*/, '');
+    const sub = `<span class="act-sub"><b class="act-amt">+1</b> (<svg class="act-cat-inline"><use href="#ic-${a.category.toLowerCase()}"/></svg>)${rest ? ' ' + escapeHtml(rest) : ''}</span>`;
     btn.innerHTML = `${catIco}${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>${sub}`;
     if (isActive) btn.classList.add('active');
     // Ressource requise indisponible -> action non-cliquable (reparation=matériaux, remplir=radius).
