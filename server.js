@@ -95,9 +95,8 @@ const BASE_ACTIONS = [
 ];
 const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE', effect: '+1 ressource toutes les 10 s' }];
 const SHIP_ACTIONS = [
-  { id: 'tir',      label: 'Tir',    category: 'PUISSANCE', effect: '+1 par contributeur' },
-  { id: 'visee',    label: 'Portée', category: 'PUISSANCE', effect: '+1 par contributeur' }
-  // Capacite (vitesse boostee par les viewers) retiree pour l'instant : non utilisee.
+  { id: 'tir',      label: 'Tir',      category: 'PUISSANCE',  effect: '+1 par contributeur' },
+  { id: 'capacite', label: 'Capacité', category: 'UTILITAIRE', effect: '+1 vitesse (max 8)' }
 ];
 const SHIP_HP_MAX = 100;
 
@@ -694,7 +693,7 @@ function publicElementState(rt, id) {
       range:     dead ? 0 : Math.min(8, sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE'))
     };
     // Le vaisseau a en plus une "capacite" (vitesse) boostee par les viewers (niveaux UTILITAIRE).
-    if (el.type === 'ship') out.capacite = sumContributionsOnAction(rt, id, 'capacite', 'UTILITAIRE');
+    if (el.type === 'ship') out.capacite = Math.min(8, sumContributionsOnAction(rt, id, 'capacite', 'UTILITAIRE'));
     return out;
   }
   // Base : on calcule le nombre de jours depuis sa naissance
@@ -1277,6 +1276,13 @@ io.on('connection', (socket) => {
         return respond({ ok: false, error: 'astéroïdes détruits (respawn en cours)' });
       }
     }
+    // Ressources requises : reparation coute des Materiaux, remplir coute du Radius.
+    if (actionId === 'reparation' && (rt.factionResources.materiaux || 0) <= 0) {
+      return respond({ ok: false, error: 'Pas assez de matériaux' });
+    }
+    if (actionId === 'remplir' && (rt.factionResources.radius || 0) <= 0) {
+      return respond({ ok: false, error: 'Pas assez de radius' });
+    }
 
     const now = Date.now();
     const prev = getActiveActionForActor(actor);
@@ -1491,6 +1497,9 @@ function applyActionEffect(rt, actionId, element, amount = 1) {
       return true;
     case 'reparation': {
       if (state.hp >= state.hpMax) return false;
+      // Cout : 1 Materiau par PV repare. Penurie -> 'no_resource' (l'action sera annulee).
+      if ((rt.factionResources.materiaux || 0) < amount) return 'no_resource';
+      rt.factionResources.materiaux -= amount;
       const wasDead = element.type === 'turret' && state.dead;
       state.hp = Math.min(state.hp + amount, state.hpMax);
       // Tourelle en reconstruction : reactivee des 50% HP (+ journal).
@@ -1502,6 +1511,9 @@ function applyActionEffect(rt, actionId, element, amount = 1) {
     }
     case 'remplir':
       if (state.essence >= state.essenceMax) return false;
+      // Cout : 1 Radius par point d'essence. Penurie -> 'no_resource'.
+      if ((rt.factionResources.radius || 0) < amount) return 'no_resource';
+      rt.factionResources.radius -= amount;
       state.essence = Math.min(state.essence + amount, state.essenceMax);
       return true;
     case 'minage':
@@ -1754,14 +1766,16 @@ function settleActionGeneric(actor, action, now, rt) {
   const newRes = getResource() + delta;
   setResource(newRes);
   const element = rt.elementById[action.element_id];
+  let blocked = false; // penurie de ressource -> l'action doit etre annulee par l'appelant
   if (element) {
     const amount = actorContribution(actor, action.category); // niveau du joueur (1-3), 1 pour l'Amiral
     for (let i = 0; i < delta; i++) {
       const applied = applyActionEffect(rt, action.action_id, element, amount);
+      if (applied === 'no_resource') { blocked = true; break; }
       if (!applied) break;
     }
   }
-  return delta;
+  return { delta, blocked };
 }
 
 let lastBroadcastResource = -1;
@@ -1795,9 +1809,10 @@ function tickActions() {
   for (const { actor, action } of all) {
     const rt = amiralsRuntime.get(actor.amiralId);
     if (!rt) continue;
-    const delta = settleActionGeneric(actor, action, now, rt);
+    const { delta, blocked } = settleActionGeneric(actor, action, now, rt);
     if (delta > 0) dirtyAmiraux.add(actor.amiralId);
-    if (now >= action.started_at + ACTION_MAX_DURATION_MS) {
+    // Penurie de ressource (reparation/remplir) OU duree max atteinte -> on coupe l'action.
+    if (blocked || now >= action.started_at + ACTION_MAX_DURATION_MS) {
       deleteActiveActionForActor(actor);
       insertActorActionLog(actor, actor.amiralId, action.element_id, action.action_id, action.category, 'expire', now);
       expiredActors.push(actor);
@@ -2182,9 +2197,9 @@ setInterval(() => {
 // ============================================================================
 const COMBAT_TICK_MS         = 100;  // ~10 Hz
 const COMBAT_DETECT_RANGE    = 340;  // rayon de detection d'une cible a engager (vaisseau)
-const COMBAT_ORBIT_MIN       = 90;
-const COMBAT_ORBIT_MAX       = 160;
-const COMBAT_MIN_BASE_DIST   = 300;  // distance mini au centre de la base
+const COMBAT_ORBIT_MIN       = 160;  // les ennemis gardent plus de distance avec leur cible
+const COMBAT_ORBIT_MAX       = 240;
+const COMBAT_MIN_BASE_DIST   = 380;  // distance mini au centre de la base
 const COMBAT_ENEMY_FIRE_MS   = 5000; // delai entre 2 passes d'attaque d'un ennemi
 const TURRET_PUISSANCE_CAP   = 8;    // niveaux/assets de tourelle (Gun01..Gun08)
 const TURRET_RANGE_CAP       = 8;

@@ -686,14 +686,25 @@
     #actionMenu .head .close:hover { color: #fff; }
     #actionMenu .actions { display: flex; flex-direction: row; gap: 8px; }
     #actionMenu .actions button {
+      position: relative; overflow: hidden;
       flex: 1 1 0; min-width: 74px;
       background: rgba(255,255,255,0.05); border: 1px solid #2a3e58; color: #fff;
       font-family: inherit; cursor: pointer; border-radius: 4px;
       display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center;
-      padding: 8px 6px;
+      padding: 10px 6px 8px;
     }
     #actionMenu .actions button:hover { border-color: var(--c-frame); background: rgba(74,175,255,0.1); }
     #actionMenu .actions button.active { border-color: #4f8; box-shadow: 0 0 8px rgba(68,255,136,0.4); }
+    /* Liseré de couleur (haut) + logo de catégorie (coin haut-droit) pour identifier le type. */
+    #actionMenu .actions button::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #4af; }
+    #actionMenu .actions button.PUISSANCE::before  { background: var(--c-puissance); }
+    #actionMenu .actions button.DEFENSIF::before   { background: var(--c-defensif); }
+    #actionMenu .actions button.UTILITAIRE::before { background: var(--c-utilitaire); }
+    #actionMenu .actions .act-cat { position: absolute; top: 5px; right: 4px; width: 13px; height: 13px; }
+    #actionMenu .actions button.PUISSANCE  .act-cat { color: var(--c-puissance); }
+    #actionMenu .actions button.DEFENSIF   .act-cat { color: var(--c-defensif); }
+    #actionMenu .actions button.UTILITAIRE .act-cat { color: var(--c-utilitaire); }
+    #actionMenu .actions button.disabled { opacity: 0.4; cursor: not-allowed; }
     #actionMenu .actions .act-ico { width: 40px; height: 40px; border-radius: 4px; display: block; }
     #actionMenu .actions .act-lbl { font-size: 11px; line-height: 1.15; font-weight: bold; }
     #actionMenu .actions .act-sub { font-size: 9px; line-height: 1.1; color: #9fb3c8; }

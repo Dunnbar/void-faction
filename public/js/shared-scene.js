@@ -272,10 +272,12 @@
         if (!p) { grp.visible = false; continue; }
         grp.visible = true;
         grp.x = p.x;
-        // Icones AU-DESSUS de l'element et de sa barre de vie. S'il y a une barre,
-        // on se cale au-dessus de son cadre ; sinon (asteroide) au-dessus du sprite.
+        // Vaisseau : on place l'icone AU-DESSUS DU PSEUDO (sinon ca se superpose au label).
         const bar = overlayBarFor(scene, id);
-        if (bar && bar.visible) {
+        if (id === 'ship-1' && scene.shipLabel) {
+          grp.y = scene.shipLabel.y - 18 - ICON / 2;
+        } else if (bar && bar.visible) {
+          // Icones au-dessus de la barre de vie (au-dessus de son cadre).
           const barHalf = (bar.fill && bar.fill.displayHeight ? bar.fill.displayHeight : 9) / 2;
           grp.y = bar.y - barHalf - 8 - ICON / 2;
         } else {
@@ -637,10 +639,28 @@
       duration: 1500, ease: 'Cubic.easeOut', onComplete: () => txt.destroy() });
   }
 
+  // Rotation lente de la base (ambiance) ; s'arrete quand elle n'a plus d'essence.
+  function spinBase(scene, delta) {
+    const id = scene.baseElementId || 'base-1';
+    const sp = scene.elementSprites && scene.elementSprites.get(id);
+    if (!sp) return;
+    const states = getStates();
+    const st = states && states.get(id);
+    if (st && (st.essence || 0) > 0) sp.rotation += 0.00025 * (delta || 16);
+  }
+
+  // Centre la vue sur un point monde (borne a la case courante). Utilise pour le double-clic zoom.
+  function centerViewOn(scene, x, y) {
+    scene._viewCenter = { x, y };
+    applyViewCenter(scene);
+  }
+
   window.SharedScene = {
     reconcileEnemies,
     lerpEnemies,
     flashElementPlus,
+    spinBase,
+    centerViewOn,
     removeEnemySprite,
     clearAllEnemies,
     drawTracer,

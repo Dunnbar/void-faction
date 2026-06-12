@@ -26,8 +26,8 @@ function startBaseClock() {
   if (baseClockInterval) return;
   baseClockInterval = setInterval(tick, 1000);
 }
-const ZOOM_FACTOR_MIN = 0.4;   // dezoom large : jusqu'a ~2.5x plus large que la case (nebuleuse autour)
-const ZOOM_FACTOR_MAX = 2.0;
+const ZOOM_FACTOR_MIN = 0.5;   // plage de zoom resserree (double-clic pour zoomer sur un element)
+const ZOOM_FACTOR_MAX = 1.6;
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
@@ -48,7 +48,8 @@ const ENEMY_FIRE_MS      = 5000;
 const GUN_LEVELS = 8;
 const GUN_SCALE = 0.55;
 function turretGunLevel(puissance) {
-  return Math.min(GUN_LEVELS, Math.max(1, puissance | 0));
+  // Gun01 par defaut, +1 asset par point de puissance (chaque +1 change le sprite), plafonne a Gun08.
+  return Math.min(GUN_LEVELS, 1 + Math.max(0, puissance | 0));
 }
 function turretRangePx(state) {
   // 280px de base + 10px par point de "range" — au range 0 on couvre déjà
@@ -663,6 +664,7 @@ const ACTION_ICONS = {
   remplir:    '/assets/PNG/Ability10.png',
   tir:        '/assets/PNG/Ability02.png',
   visee:      '/assets/PNG/Ability14.png',
+  capacite:   '/assets/PNG/Ability14.png',
   minage:     '/assets/PNG/Ability24.png'
 };
 
@@ -718,9 +720,21 @@ function openActionMenu(elementId, anchor, keepPos) {
     btn.className = 'act-block ' + a.category;
     const icon = a.icon || ACTION_ICONS[a.id];
     const sub = a.effect ? `<span class="act-sub">${escapeHtml(a.effect)}</span>` : '';
-    btn.innerHTML = `${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>${sub}`;
+    const catIco = `<svg class="act-cat"><use href="#ic-${a.category.toLowerCase()}"/></svg>`;
+    btn.innerHTML = `${catIco}${icon ? `<img class="act-ico" src="${icon}" alt="">` : ''}<span class="act-lbl">${escapeHtml(a.label)}</span>${sub}`;
     if (isActive) btn.classList.add('active');
-    btn.addEventListener('click', () => activateAction(elementId, a.id));
+    // Ressource requise indisponible -> action non-cliquable (reparation=matériaux, remplir=radius).
+    const needRes = a.id === 'reparation' ? 'materiaux' : a.id === 'remplir' ? 'radius' : null;
+    const blocked = needRes && (factionResources[needRes] || 0) <= 0;
+    if (blocked) btn.classList.add('disabled');
+    btn.addEventListener('click', () => {
+      if (blocked) {
+        actionMenuNote.textContent = `Pas assez de ${needRes === 'materiaux' ? 'matériaux' : 'radius'}.`;
+        actionMenuNote.style.color = '#ff6b6b'; actionMenuNote.classList.remove('hidden');
+        return;
+      }
+      activateAction(elementId, a.id);
+    });
     actionMenuActions.appendChild(btn);
   }
   actionMenuNote.style.color = ''; // reset (peut avoir ete passe en rouge par un echec)
@@ -1428,6 +1442,18 @@ class MainScene extends Phaser.Scene {
       this._userZoomFactor = Phaser.Math.Clamp(this._userZoomFactor - deltaY * 0.0006, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
       SharedScene.zoomView(this, pointer, () => this.applyFitZoom());
     });
+    // Double-clic sur un element -> zoom + centrage dessus.
+    this.input.on('pointerdown', (pointer) => {
+      const now = this.time.now;
+      if (this._lastClickAt && now - this._lastClickAt < 350 &&
+          Math.hypot(pointer.x - this._lastClickX, pointer.y - this._lastClickY) < 24) {
+        const el = this.findElementAt(pointer.worldX, pointer.worldY);
+        if (el) this.zoomOnElement(el);
+        this._lastClickAt = 0;
+      } else {
+        this._lastClickAt = now; this._lastClickX = pointer.x; this._lastClickY = pointer.y;
+      }
+    });
 
     // Drag-to-pan (style MOBA) : clic gauche maintenu + deplacement = panoramique de la carte
     // Si le mouvement est inferieur a un seuil, on traite comme un clic et on ouvre le menu d'action de l'element vise.
@@ -1498,6 +1524,8 @@ class MainScene extends Phaser.Scene {
       }
     }
     SharedScene.lerpEnemies(this); // interpolation des ennemis pousses par le serveur
+    this.updateTurretAim(delta);   // les tourelles suivent l'ennemi vise
+    SharedScene.spinBase(this, delta); // la base tourne lentement (s'arrete sans essence)
     if (window.SFX) SFX.updateAmbience(this, this.enemyById ? this.enemyById.size : 0);
     // Le viewer suit la case du streameur, toujours centree (comme le streameur sur la sienne).
     if (this.ship) SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
@@ -1573,6 +1601,33 @@ class MainScene extends Phaser.Scene {
     // Le zoom s'ajuste a l'ecran ; l'espace en plus (ecran non 16:9) montre la nebuleuse.
     const fit = Math.min(cam.width / WORLD_W, cam.height / WORLD_H);
     cam.setZoom(fit * (this._userZoomFactor || 1));
+  }
+
+  // Element (tourelle/base/asteroide/vaisseau) sous un point monde, ou null.
+  findElementAt(wx, wy) {
+    let best = null, bestD = Infinity;
+    if (this.elementSprites) {
+      for (const sp of this.elementSprites.values()) {
+        if (!sp.visible) continue;
+        const r = Math.max(sp.displayWidth, sp.displayHeight) * 0.6 || 40;
+        const d = Phaser.Math.Distance.Between(wx, wy, sp.x, sp.y);
+        if (d < r && d < bestD) { best = sp; bestD = d; }
+      }
+    }
+    if (this.ship && this.ship.active) {
+      const r = Math.max(this.ship.displayWidth, this.ship.displayHeight) * 0.7 || 40;
+      const d = Phaser.Math.Distance.Between(wx, wy, this.ship.x, this.ship.y);
+      if (d < r && d < bestD) best = this.ship;
+    }
+    return best;
+  }
+  // Zoom + centrage sur un element (double-clic).
+  zoomOnElement(sprite) {
+    if (!sprite) return;
+    if (this._panState) this._panState.pendingMenu = null; // pas de menu sur un double-clic
+    this._userZoomFactor = Phaser.Math.Clamp((this._userZoomFactor || 1) + 0.7, ZOOM_FACTOR_MIN, ZOOM_FACTOR_MAX);
+    this.applyFitZoom();
+    SharedScene.centerViewOn(this, sprite.x, sprite.y);
   }
 
   onResize() {
@@ -1876,6 +1931,36 @@ class MainScene extends Phaser.Scene {
       }
       this.tweens.add({ targets: heart, alpha: 0, scaleX: heart.scaleX * 1.5, scaleY: heart.scaleY * 1.5,
         duration: 600, ease: 'Sine.easeOut', onComplete: () => heart.destroy() });
+    }
+  }
+
+  // Oriente les tourelles : suivent l'ennemi le plus proche en portee (visuel), sinon patrouille.
+  updateTurretAim(delta) {
+    if (!this.elementSprites) return;
+    const dt = (delta || 16) / 1000;
+    const powered = SharedScene.isBasePowered();
+    for (const el of serverElements) {
+      if (el.type !== 'turret') continue;
+      const sprite = this.elementSprites.get(el.id);
+      const state = elementStates.get(el.id);
+      if (!sprite || !state) continue;
+      if (state.dead || !powered) { sprite._targetingEnemy = false; continue; }
+      let best = null, bestD = turretRangePx(state);
+      if (this.enemyById) {
+        for (const e of this.enemyById.values()) {
+          if (!e.active) continue;
+          const d = Phaser.Math.Distance.Between(sprite.x, sprite.y, e.x, e.y);
+          if (d < bestD) { best = e; bestD = d; }
+        }
+      }
+      if (best) {
+        if (!sprite._targetingEnemy && sprite._patrolTween) sprite._patrolTween.stop();
+        sprite._targetingEnemy = true;
+        const target = Phaser.Math.Angle.Between(sprite.x, sprite.y, best.x, best.y) + Math.PI / 2;
+        sprite.rotation = Phaser.Math.Angle.RotateTo(sprite.rotation, target, 8 * dt);
+      } else {
+        sprite._targetingEnemy = false;
+      }
     }
   }
 

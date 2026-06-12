@@ -371,14 +371,25 @@
     #actionMenu .head .close:hover { color: #fff; }
     #actionMenu .actions { display: flex; flex-direction: row; gap: 8px; }
     #actionMenu .actions button {
+      position: relative; overflow: hidden;
       flex: 1 1 0; min-width: 74px;
       background: rgba(255,255,255,0.05); border: 1px solid #2a3e58; color: #fff;
       font-family: inherit; cursor: pointer; border-radius: 4px;
       display: flex; flex-direction: column; align-items: center; gap: 5px; text-align: center;
-      padding: 8px 6px;
+      padding: 10px 6px 8px;
     }
     #actionMenu .actions button:hover { border-color: #4af; background: rgba(74,175,255,0.1); }
     #actionMenu .actions button.active { border-color: #4f8; box-shadow: 0 0 8px rgba(68,255,136,0.4); }
+    /* Liseré de couleur (haut) + logo de catégorie (coin haut-droit) */
+    #actionMenu .actions button::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 3px; background: #4af; }
+    #actionMenu .actions button.PUISSANCE::before  { background: #ff4f6d; }
+    #actionMenu .actions button.DEFENSIF::before   { background: #4fa3ff; }
+    #actionMenu .actions button.UTILITAIRE::before { background: #ffd24f; }
+    #actionMenu .actions .act-cat { position: absolute; top: 5px; right: 4px; width: 13px; height: 13px; }
+    #actionMenu .actions button.PUISSANCE  .act-cat { color: #ff4f6d; }
+    #actionMenu .actions button.DEFENSIF   .act-cat { color: #4fa3ff; }
+    #actionMenu .actions button.UTILITAIRE .act-cat { color: #ffd24f; }
+    #actionMenu .actions button.disabled { opacity: 0.4; cursor: not-allowed; }
     #actionMenu .actions .act-ico { width: 40px; height: 40px; border-radius: 4px; display: block; }
     #actionMenu .actions .act-lbl { font-size: 11px; line-height: 1.15; font-weight: bold; }
     #actionMenu .actions .act-sub { font-size: 9px; line-height: 1.1; color: #9fb3c8; }
@@ -458,6 +469,12 @@
       <p id="loginError"></p>
     </div>
   </div>
+  <!-- Symboles de categorie (logos d'action) -->
+  <svg width="0" height="0" style="position:absolute" aria-hidden="true">
+    <symbol id="ic-puissance" viewBox="0 0 24 24" fill="currentColor"><path d="M13 2L3 14h7l-1 8 11-14h-8z"/></symbol>
+    <symbol id="ic-defensif" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linejoin="round"><path d="M12 2l8 4v6c0 5-3.5 9-8 10-4.5-1-8-5-8-10V6l8-4z"/></symbol>
+    <symbol id="ic-utilitaire" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></symbol>
+  </svg>
   <button id="soundBtn" class="sound-on" type="button" title="Réglages du son">🔊</button>
   <div id="soundMenu" class="hidden">
     <div class="sm-title">Réglages du son</div>
