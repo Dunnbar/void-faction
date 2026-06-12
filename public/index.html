@@ -175,12 +175,18 @@
     .jr-item + .jr-item { border-top: 1px solid rgba(255,255,255,0.04); }
     .jr-item .jr-time { color: #5d7b9c; font-variant-numeric: tabular-nums; font-size: 10px; flex-shrink: 0; }
     .jr-item .jr-msg { color: #cfe2f5; line-height: 1.3; }
-    .jr-item.wave          { border-left-color: #ffb347; }
-    .jr-item.wave_repelled { border-left-color: #4fdb73; }
+    .jr-item.wave          { border-left-color: #ff4f6d; background: rgba(255,79,109,0.16); }
+    .jr-item.wave_repelled { border-left-color: #4fdb73; background: rgba(79,219,115,0.12); }
     .jr-item.levelup       { border-left-color: #b07cff; }
     .jr-item.base_destroyed{ border-left-color: #ff4f6d; background: rgba(255,79,109,0.08); }
     .jr-item.base_reborn   { border-left-color: #4af; }
     .jr-item.asteroid      { border-left-color: #d4b487; }
+    /* Mots de categorie colores dans les messages de journal */
+    .jr-msg .jr-cat { font-weight: bold; }
+    .jr-msg .jr-cat.p { color: var(--c-puissance); }
+    .jr-msg .jr-cat.d { color: var(--c-defensif); }
+    .jr-msg .jr-cat.u { color: var(--c-utilitaire); }
+    .jr-msg b { color: #fff; }
     @keyframes jrIn { from { opacity: 0; transform: translateX(-8px); } to { opacity: 1; transform: none; } }
 
     /* Barre de boutons HUD (bas-gauche) : journal + chat */

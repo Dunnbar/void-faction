@@ -106,7 +106,8 @@ let progress = { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
 let previousProgress = null;
 let levels = { PUISSANCE: 1, DEFENSIF: 1, UTILITAIRE: 1 }; // niveaux viewer par categorie (1-3)
 let xp = { PUISSANCE: 0, DEFENSIF: 0, UTILITAIRE: 0 };      // XP brute par categorie (pour les barres)
-let levelXp = [5, 15];                                       // seuils niv2 / niv3 (fournis par le serveur)
+// Seuils niv2 / niv3 PAR categorie (fournis par le serveur). Attaque en combats, def/util en temps.
+let levelXp = { PUISSANCE: [5, 15], DEFENSIF: [1200, 3600], UTILITAIRE: [1200, 3600] };
 let baseDead = false; // base detruite : aucune action possible en attendant la relance de l'Amiral
 let actionDurationMs = ACTION_MAX_DURATION_MS_DEFAULT;
 let history = [];
@@ -398,8 +399,8 @@ function renderBars() {
 
 function renderLevels() {
   const suffix = { PUISSANCE: 'Puissance', DEFENSIF: 'Defensif', UTILITAIRE: 'Utilitaire' };
-  const [t2, t3] = levelXp; // seuils niveau 2 / niveau 3
   for (const cat in suffix) {
+    const [t2, t3] = levelXp[cat] || [5, 15]; // seuils niv2 / niv3 propres a la categorie
     const lvl = Math.max(1, Math.min(3, levels[cat] || 1));
     const x = (xp && xp[cat]) || 0;
     const lvlEl = document.getElementById('xpLvl' + suffix[cat]);
@@ -487,10 +488,18 @@ function formatClock(at) {
   const p = (n) => String(n).padStart(2, '0');
   return `${p(d.getHours())}:${p(d.getMinutes())}`;
 }
+// Colore les mots de categorie + met le niveau en gras dans un message de journal (deja echappe).
+function decorateJournalMsg(escaped) {
+  return (escaped || '')
+    .replace(/niveau\s+(\d+)/gi, '<b>niveau $1</b>')
+    .replace(/\bPUISSANCE\b/g, '<span class="jr-cat p">ATTAQUE</span>')
+    .replace(/\bDEFENSIF\b/g, '<span class="jr-cat d">DÉFENSE</span>')
+    .replace(/\bUTILITAIRE\b/g, '<span class="jr-cat u">UTILITAIRE</span>');
+}
 function journalItemHtml(entry) {
   const type = String(entry.type || '').replace(/[^a-z_]/gi, '');
   return `<div class="jr-item ${type}"><span class="jr-time">${formatClock(entry.at)}</span>`
-       + `<span class="jr-msg">${escapeHtml(entry.message || '')}</span></div>`;
+       + `<span class="jr-msg">${decorateJournalMsg(escapeHtml(entry.message || ''))}</span></div>`;
 }
 function renderJournal() {
   if (!journalListEl) return;
@@ -1001,7 +1010,7 @@ function connectSocket() {
     previousProgress = { ...progress };
     if (data.levels) levels = data.levels;
     if (data.xp) xp = data.xp;
-    if (Array.isArray(data.levelXp)) levelXp = data.levelXp;
+    if (data.levelXp && typeof data.levelXp === 'object') levelXp = data.levelXp;
     renderLevels();
     baseDead = !!data.baseDead;
     document.getElementById('baseDeadOverlay')?.classList.toggle('hidden', !baseDead);
@@ -2202,22 +2211,10 @@ class MainScene extends Phaser.Scene {
   }
 
   refreshElementHighlights() {
-    if (!this.elementHighlights) return;
-    for (const [elementId, highlight] of this.elementHighlights.entries()) {
-      const active = activeElementsByElement.get(elementId);
-      if (active) {
-        const color = active.category === 'PUISSANCE' ? 0xff4f6d :
-                      active.category === 'DEFENSIF'  ? 0x4fa3ff :
-                                                        0xffd24f;
-        highlight.setStrokeStyle(2, color, 0.9);
-        highlight.setFillStyle(color, 0.18);
-        this.tweens.killTweensOf(highlight);
-        this.tweens.add({
-          targets: highlight,
-          alpha: { from: 1, to: 0.5 },
-          yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut'
-        });
-      } else {
+    // Plus de cercle autour des elements en cours d'action : l'icone + le compteur au-dessus
+    // suffisent (et le halo "mon action" reste pour soi). On garde juste les anneaux eteints.
+    if (this.elementHighlights) {
+      for (const highlight of this.elementHighlights.values()) {
         this.tweens.killTweensOf(highlight);
         highlight.setStrokeStyle(2, 0xffffff, 0);
         highlight.setFillStyle(0xffffff, 0);

@@ -1756,27 +1756,10 @@ class MainScene extends Phaser.Scene {
     this.time.delayedCall(900, () => p.destroy());
   }
 
-  refreshElementHighlights(activeList) {
-    if (!this.elementHighlights) return;
-    const activeMap = new Map();
-    if (Array.isArray(activeList)) {
-      for (const a of activeList) activeMap.set(a.element_id, a);
-    }
-    for (const [id, highlight] of this.elementHighlights.entries()) {
-      const active = activeMap.get(id);
-      if (active) {
-        const color = active.category === 'PUISSANCE' ? 0xff4f6d :
-                      active.category === 'DEFENSIF'  ? 0x4fa3ff :
-                                                        0xffd24f;
-        highlight.setStrokeStyle(2, color, 0.9);
-        highlight.setFillStyle(color, 0.18);
-        this.tweens.killTweensOf(highlight);
-        this.tweens.add({
-          targets: highlight,
-          alpha: { from: 1, to: 0.5 },
-          yoyo: true, repeat: -1, duration: 900, ease: 'Sine.easeInOut'
-        });
-      } else {
+  refreshElementHighlights(/* activeList */) {
+    // Plus de cercle autour des elements en cours d'action (l'icone + le compteur suffisent).
+    if (this.elementHighlights) {
+      for (const highlight of this.elementHighlights.values()) {
         this.tweens.killTweensOf(highlight);
         highlight.setStrokeStyle(2, 0xffffff, 0);
         highlight.setFillStyle(0xffffff, 0);

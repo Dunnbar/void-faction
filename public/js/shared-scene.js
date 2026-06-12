@@ -213,14 +213,10 @@
       if (key && scene.textures.exists(key)) {
         container.add(scene.add.image(x, 0, key).setDisplaySize(ICON, ICON));
       }
-      // Badge compteur en bas a droite de l'icone, teinte selon le TYPE de l'action.
+      // Badge compteur (carre plein) en bas a droite de l'icone, couleur selon le TYPE de l'action.
       const bx = x + ICON * 0.45, by = ICON * 0.45;
       const catColor = CAT_COLOR[ACTION_CAT[act]] || 0xffffff;
-      if (scene.textures.exists('bg-hud-icon')) {
-        container.add(scene.add.image(bx, by, 'bg-hud-icon').setDisplaySize(17, 17).setTint(catColor));
-      } else {
-        container.add(scene.add.circle(bx, by, 9, catColor, 0.95).setStrokeStyle(1.5, 0x000000, 0.6));
-      }
+      container.add(scene.add.rectangle(bx, by, 16, 16, catColor, 0.95).setStrokeStyle(1.5, 0x000000, 0.7));
       container.add(scene.add.text(bx, by, String(n), {
         fontFamily: 'Consolas, monospace', fontSize: '12px', fontStyle: 'bold',
         color: '#fff', stroke: '#000', strokeThickness: 3

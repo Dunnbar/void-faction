@@ -32,11 +32,18 @@ const ACTION_MAX_DURATION_MS = 60 * 60 * 1000;
 const HISTORY_LIMIT = 10;
 const JOURNAL_LIMIT = 40; // nb d'entrees de journal conservees/affichees par base
 
-// Niveaux viewer (par categorie). Max niveau 3. L'XP = nombre de vagues ou le joueur
-// etait present + actif dans cette categorie. Seuils : niv2 a 5 vagues, niv3 a 15.
-const LEVEL_XP = [5, 15];
-const LEVEL_XP_MAX = LEVEL_XP[1];
-function levelFromXp(xp) { return (xp >= LEVEL_XP[1]) ? 3 : (xp >= LEVEL_XP[0]) ? 2 : 1; }
+// Niveaux viewer (par categorie, max 3). Seuils niv2/niv3 PAR TYPE :
+//  - ATTAQUE  : nombre de COMBATS auxquels on a participe (5 / 15).
+//  - DEFENSE / UTILITAIRE : temps passe a agir, +1 par tick de 10s (1200 / 3600).
+const LEVEL_XP_BY_CAT = {
+  PUISSANCE:  [5, 15],
+  DEFENSIF:   [1200, 3600],
+  UTILITAIRE: [1200, 3600]
+};
+function levelFromXp(xp, cat) {
+  const t = LEVEL_XP_BY_CAT[cat] || [5, 15];
+  return (xp >= t[1]) ? 3 : (xp >= t[0]) ? 2 : 1;
+}
 
 const WAVE_CHECK_INTERVAL_MS = 60 * 1000;
 const WAVE_PROBABILITY = 0.35;
@@ -1231,7 +1238,7 @@ io.on('connection', (socket) => {
     progress: userProgress,
     levels: userLevelsObj,
     xp: socket.data.userId ? userXp(socket.data.userId) : { PUISSANCE: 0, DEFENSIF: 0, UTILITAIRE: 0 },
-    levelXp: LEVEL_XP,
+    levelXp: LEVEL_XP_BY_CAT,
     activeElements: rtForInit ? activeElementStatesForAmiral(rtForInit.id) : [],
     world: { width: WORLD_W, height: WORLD_H, baseX: BASE_X, baseY: BASE_Y, basePerimeter: BASE_PERIMETER, turretX: TURRET_X, turretY: TURRET_Y, gameTz: GAME_TZ,
              mapMinI: MAP_MIN_I, mapMaxI: MAP_MAX_I, mapMinJ: MAP_MIN_J, mapMaxJ: MAP_MAX_J },
@@ -1606,9 +1613,9 @@ function userLevels(uid) {
   stmtEnsureProgress.run(uid);
   const r = stmtGetXp.get(uid) || {};
   return {
-    PUISSANCE:  levelFromXp(r.xp_puissance  || 0),
-    DEFENSIF:   levelFromXp(r.xp_defensif   || 0),
-    UTILITAIRE: levelFromXp(r.xp_utilitaire || 0)
+    PUISSANCE:  levelFromXp(r.xp_puissance  || 0, 'PUISSANCE'),
+    DEFENSIF:   levelFromXp(r.xp_defensif   || 0, 'DEFENSIF'),
+    UTILITAIRE: levelFromXp(r.xp_utilitaire || 0, 'UTILITAIRE')
   };
 }
 function userLevelForCategory(uid, category) {
@@ -1632,9 +1639,10 @@ function actorContribution(actor, category) {
 }
 function incrementXp(uid, category, n) {
   if (n <= 0) return;
-  if (category === 'PUISSANCE')       stmtIncXpPuissance.run(n, LEVEL_XP_MAX, uid);
-  else if (category === 'DEFENSIF')   stmtIncXpDefensif.run(n, LEVEL_XP_MAX, uid);
-  else if (category === 'UTILITAIRE') stmtIncXpUtil.run(n, LEVEL_XP_MAX, uid);
+  const max = (LEVEL_XP_BY_CAT[category] || [5, 15])[1]; // plafond = seuil niv3 de la categorie
+  if (category === 'PUISSANCE')       stmtIncXpPuissance.run(n, max, uid);
+  else if (category === 'DEFENSIF')   stmtIncXpDefensif.run(n, max, uid);
+  else if (category === 'UTILITAIRE') stmtIncXpUtil.run(n, max, uid);
 }
 // Tableau de bord Amiral : viewers inscrits sur sa base, combien connectes, et leurs niveaux.
 function amiralDashboard(amiralId) {
@@ -1814,10 +1822,13 @@ function tickActions() {
     if (delta > 0 && actor.type === 'user') {
       const cat = action.category;
       if (cat === 'DEFENSIF' || cat === 'UTILITAIRE') {
-        awardActionXp(rt, actor.id, cat, delta);
+        awardActionXp(rt, actor.id, cat, delta); // au temps passe (par tick)
       } else if (cat === 'PUISSANCE' && combatActiveFor(rt)) {
-        awardActionXp(rt, actor.id, cat, delta);
-        rt.combat.participants.add(actor.id);
+        // ATTAQUE : +1 par COMBAT participe, une seule fois (au 1er tick de participation).
+        if (!rt.combat.participants.has(actor.id)) {
+          rt.combat.participants.add(actor.id);
+          awardActionXp(rt, actor.id, cat, 1);
+        }
       }
     }
     // Penurie de ressource (reparation/remplir) OU duree max atteinte -> on coupe l'action.
