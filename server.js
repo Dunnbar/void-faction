@@ -96,7 +96,7 @@ const BASE_ACTIONS = [
 const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE', effect: '+1 ressource toutes les 10 s' }];
 const SHIP_ACTIONS = [
   { id: 'tir',      label: 'Tir',      category: 'PUISSANCE',  effect: '+1 par contributeur' },
-  { id: 'capacite', label: 'Capacité', category: 'UTILITAIRE', effect: '+1 vitesse (max 8)' }
+  { id: 'capacite', label: 'Capacité', category: 'UTILITAIRE', effect: '+1 vitesse (max 10)' }
 ];
 const SHIP_HP_MAX = 100;
 
@@ -693,7 +693,7 @@ function publicElementState(rt, id) {
       range:     dead ? 0 : Math.max(1, Math.min(10, sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE')))
     };
     // Le vaisseau a en plus une "capacite" (vitesse) boostee par les viewers (niveaux UTILITAIRE).
-    if (el.type === 'ship') out.capacite = Math.max(1, Math.min(8, sumContributionsOnAction(rt, id, 'capacite', 'UTILITAIRE')));
+    if (el.type === 'ship') out.capacite = Math.max(1, Math.min(10, sumContributionsOnAction(rt, id, 'capacite', 'UTILITAIRE')));
     return out;
   }
   // Base : on calcule le nombre de jours depuis sa naissance
@@ -1657,28 +1657,23 @@ function pushAmiralDashboard(amiralId) {
   for (const s of set) s.emit('dashboard', dash);
 }
 
-// Attribution d'XP a chaque vague : +1 dans la categorie de l'action en cours,
-// pour les joueurs CONNECTES (presents) ET ayant une action active (participent).
-function awardWaveXp(rt) {
-  if (!rt) return;
-  const rows = stmtActiveUsersByAmiral.all(rt.id);
-  for (const r of rows) {
-    const sockets = socketsByUser.get(r.user_id);
-    if (!sockets || sockets.size === 0) continue; // doit etre present (connecte)
-    stmtEnsureProgress.run(r.user_id);
-    const levelBefore = userLevels(r.user_id)[r.category] || 1;
-    incrementXp(r.user_id, r.category, 1);
-    const levels = userLevels(r.user_id);
-    const xp = userXp(r.user_id);
-    for (const s of sockets) s.emit('levels', { levels, xp });
-    const levelAfter = levels[r.category] || 1;
-    if (levelAfter > levelBefore) {
-      const uname = [...sockets][0]?.data?.username || 'Un viewer';
-      logJournal(rt, 'levelup', `${uname} passe niveau ${levelAfter} en ${r.category}`);
-    }
+// Attribution d'XP a un joueur present (connecte) sur une categorie. Emet 'levels' + journal de niveau.
+// ATTAQUE (PUISSANCE) : seulement pendant un combat. DEFENSE/UTILITAIRE : au temps passe a agir.
+function awardActionXp(rt, userId, category, n) {
+  if (!rt || n <= 0) return;
+  const sockets = socketsByUser.get(userId);
+  if (!sockets || sockets.size === 0) return; // present requis
+  stmtEnsureProgress.run(userId);
+  const before = userLevels(userId)[category] || 1;
+  incrementXp(userId, category, n);
+  const levels = userLevels(userId);
+  const xp = userXp(userId);
+  for (const s of sockets) s.emit('levels', { levels, xp, gain: { category, n } });
+  const after = levels[category] || 1;
+  if (after > before) {
+    const uname = [...sockets][0]?.data?.username || 'Un viewer';
+    logJournal(rt, 'levelup', `${uname} passe niveau ${after} en ${category}`);
   }
-  pushAmiralDashboard(rt.id); // niveaux mis a jour -> rafraichit le tableau de bord
-  console.log(`[amiral ${rt.username}] XP de vague attribuee (${rows.length} action(s) active(s))`);
 }
 
 // ============ Acteurs (user OU amiral) ============
@@ -1811,6 +1806,17 @@ function tickActions() {
     if (!rt) continue;
     const { delta, blocked } = settleActionGeneric(actor, action, now, rt);
     if (delta > 0) dirtyAmiraux.add(actor.amiralId);
+    // XP des viewers : DEFENSE/UTILITAIRE montent au temps passe a agir ; ATTAQUE (PUISSANCE)
+    // ne monte QUE pendant un combat (et on retient le joueur comme participant a la bataille).
+    if (delta > 0 && actor.type === 'user') {
+      const cat = action.category;
+      if (cat === 'DEFENSIF' || cat === 'UTILITAIRE') {
+        awardActionXp(rt, actor.id, cat, delta);
+      } else if (cat === 'PUISSANCE' && combatActiveFor(rt)) {
+        awardActionXp(rt, actor.id, cat, delta);
+        rt.combat.participants.add(actor.id);
+      }
+    }
     // Penurie de ressource (reparation/remplir) OU duree max atteinte -> on coupe l'action.
     if (blocked || now >= action.started_at + ACTION_MAX_DURATION_MS) {
       deleteActiveActionForActor(actor);
@@ -1982,9 +1988,8 @@ function rollWaveFor(rt, force = false, type = null) {
   const firstCheck = Math.max(0, rt.currentWave.endsAt - Date.now());
   scheduleWaveResolution(rt, waveId, waveSnapshot, firstCheck);
 
-  // XP de vague : a l'arrivee des ennemis, +1 XP aux joueurs presents+actifs (cf. awardWaveXp).
-  const xpDelay = Math.max(0, spawnAt - Date.now());
-  setTimeout(() => { if (amiralsRuntime.get(rt.id) === rt) awardWaveXp(rt); }, xpDelay);
+  // (L'XP n'est plus donnee en bloc a l'arrivee : elle s'accumule au tick — DEFENSE/UTILITAIRE au
+  //  temps passe, ATTAQUE seulement pendant le combat. Cf. tickActions + awardActionXp.)
 
   // Si la cible est un astéroïde, on planifie les tirs ennemis qui vont rogner
   // la durée du groupe (simulation server-side, indépendamment du combat client).
@@ -2236,7 +2241,14 @@ function buildCombatForWave(rt) {
       engageRef: null, engaging: false, phase: 'cruise', lastFireAt: 0, firedThisRun: false, peelSide: 1
     });
   }
-  return { waveId: wave.id, enemies, lastTickAt: Date.now(), turretLastShot: {} };
+  return { waveId: wave.id, enemies, lastTickAt: Date.now(), turretLastShot: {}, participants: new Set() };
+}
+
+// Un combat est "actif" si au moins un ennemi est apparu (vague en cours, pas juste annoncee).
+function combatActiveFor(rt) {
+  if (!rt.combat) return false;
+  for (const e of rt.combat.enemies.values()) if (e.spawned) return true;
+  return false;
 }
 
 // Snapshot serialisable des ennemis spawnes (pour init + diffusion).
@@ -2270,11 +2282,15 @@ function killEnemyServer(rt, combat, en) {
   if (rt.currentWave) {
     rt.currentWave.alive = Math.max(0, (rt.currentWave.alive || 0) - 1);
     if (rt.currentWave.alive <= 0 && !rt.baseDead) {
-      logJournal(rt, 'wave_repelled', `Vague repoussée — tous les ennemis détruits`);
+      // Recap de bataille : qui a combattu (action ATTAQUE pendant le combat).
+      const parts = combat && combat.participants ? [...combat.participants] : [];
+      const names = parts.map(uid => { const set = socketsByUser.get(uid); return set && set.size ? [...set][0].data.username : null; }).filter(Boolean);
+      const recap = names.length ? `Vague repoussée — au combat : ${names.join(', ')}` : `Vague repoussée — tous les ennemis détruits`;
+      logJournal(rt, 'wave_repelled', recap);
       const wid = rt.currentWave.id;
       rt.currentWave = null;
       rt.combat = null;
-      io.to(amiralRoom(rt.id)).emit('wave:repelled', { waveId: wid });
+      io.to(amiralRoom(rt.id)).emit('wave:repelled', { waveId: wid, participants: names });
     }
   }
 }

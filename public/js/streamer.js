@@ -1707,26 +1707,9 @@ class MainScene extends Phaser.Scene {
     this.showWaveWarnIcon(wave);
   }
 
-  showWaveWarnIcon(wave) {
-    this.hideWaveWarnIcon();
-    const avgX = wave.enemies.reduce((s, e) => s + e.spawnX, 0) / wave.enemies.length;
-    const avgY = wave.enemies.reduce((s, e) => s + e.spawnY, 0) / wave.enemies.length;
-    const x = Math.max(60, Math.min(WORLD_W - 60, avgX));
-    const y = Math.max(60, Math.min(WORLD_H - 60, avgY));
-    // Viseur leger marquant la zone d'arrivee des ennemis (pas de cible nommee).
-    this.waveWarnIcon = SharedScene.makeReticle(this, x, y);
-  }
-
-  hideWaveWarnIcon() {
-    if (this.waveWarnIcon) {
-      this.tweens.killTweensOf(this.waveWarnIcon);
-      this.tweens.add({
-        targets: this.waveWarnIcon, alpha: 0, duration: 300,
-        onComplete: () => this.waveWarnIcon?.destroy()
-      });
-      this.waveWarnIcon = null;
-    }
-  }
+  // Provenance de la vague : "!" colle au bord de l'ecran (cf. SharedScene), independant du zoom.
+  showWaveWarnIcon(wave) { SharedScene.setWaveOrigin(this, wave); }
+  hideWaveWarnIcon() { SharedScene.clearWaveOrigin(this); }
 
   // Fabrique d'un sprite ennemi (l'etat/mouvement vient du serveur, via SharedScene.reconcileEnemies).
   createEnemySprite(e) {
@@ -1808,6 +1791,7 @@ class MainScene extends Phaser.Scene {
     SharedScene.lerpEnemies(this); // interpolation des ennemis pousses par le serveur
     this.updateTurretAim(delta);   // les tourelles suivent l'ennemi vise
     SharedScene.spinBase(this, delta); // la base tourne lentement (s'arrete sans essence)
+    SharedScene.updateWaveEdgeIndicator(this); // "!" de provenance de la vague colle au bord
     if (window.SFX) SFX.updateAmbience(this, this.enemyById ? this.enemyById.size : 0);
     if (!this.ship) return;
     if (this.shipLabel) {

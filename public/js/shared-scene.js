@@ -656,6 +656,48 @@
     if (st && (st.essence || 0) > 0) sp.rotation += 0.00025 * (delta || 16);
   }
 
+  // ===== Indicateur de vague : "!" colle au bord de l'ecran, pointe vers l'origine de la vague =====
+  // Memorise l'origine monde de la vague (moyenne des points de spawn).
+  function setWaveOrigin(scene, wave) {
+    if (!wave || !wave.enemies || !wave.enemies.length) { scene._waveOrigin = null; return; }
+    let sx = 0, sy = 0;
+    for (const e of wave.enemies) { sx += e.spawnX; sy += e.spawnY; }
+    scene._waveOrigin = { x: sx / wave.enemies.length, y: sy / wave.enemies.length };
+  }
+  function clearWaveOrigin(scene) {
+    scene._waveOrigin = null;
+    if (scene._waveEdge) scene._waveEdge.setVisible(false);
+  }
+  // A appeler chaque frame : place le marqueur sur le bord de l'ecran (independant du zoom).
+  function updateWaveEdgeIndicator(scene) {
+    const o = scene._waveOrigin;
+    if (!scene._waveEdge) {
+      const c = scene.add.container(0, 0).setScrollFactor(0).setDepth(40).setVisible(false);
+      const bg = scene.add.circle(0, 0, 16, 0xff3b3b, 0.92).setStrokeStyle(2, 0xffffff, 0.9);
+      const txt = scene.add.text(0, 0, '!', { fontFamily: 'Consolas, monospace', fontSize: '22px', color: '#fff', fontStyle: 'bold' }).setOrigin(0.5);
+      c.add([bg, txt]);
+      scene.tweens.add({ targets: c, scaleX: { from: 1, to: 1.18 }, scaleY: { from: 1, to: 1.18 }, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+      scene._waveEdge = c;
+    }
+    const marker = scene._waveEdge;
+    if (!o) { marker.setVisible(false); return; }
+    const cam = scene.cameras.main, v = cam.worldView;
+    const sx = (o.x - v.x) * cam.zoom, sy = (o.y - v.y) * cam.zoom;
+    const W = cam.width, H = cam.height, m = 30, cx = W / 2, cy = H / 2;
+    let px = sx, py = sy;
+    const inside = sx > m && sx < W - m && sy > m && sy < H - m;
+    if (!inside) {
+      const ang = Math.atan2(sy - cy, sx - cx);
+      const hw = W / 2 - m, hh = H / 2 - m;
+      const tx = Math.abs(Math.cos(ang)) < 1e-6 ? Infinity : hw / Math.abs(Math.cos(ang));
+      const ty = Math.abs(Math.sin(ang)) < 1e-6 ? Infinity : hh / Math.abs(Math.sin(ang));
+      const t = Math.min(tx, ty);
+      px = cx + Math.cos(ang) * t; py = cy + Math.sin(ang) * t;
+    }
+    marker.setVisible(true);
+    marker.x = px; marker.y = py;
+  }
+
   // Centre la vue sur un point monde (borne a la case courante). Utilise pour le double-clic zoom.
   function centerViewOn(scene, x, y) {
     scene._viewCenter = { x, y };
@@ -668,6 +710,9 @@
     flashElementPlus,
     spinBase,
     centerViewOn,
+    setWaveOrigin,
+    clearWaveOrigin,
+    updateWaveEdgeIndicator,
     removeEnemySprite,
     clearAllEnemies,
     drawTracer,
