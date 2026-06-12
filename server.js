@@ -9,6 +9,7 @@ const Database = require('better-sqlite3');
 const STREAMER_PASSWORD = process.env.STREAMER_PASSWORD || 'satelitteOrion';
 const PORT = Number(process.env.PORT) || 3000;
 const BUILD_TIME = new Date().toISOString();
+const APP_VERSION = (() => { try { return require('./package.json').version || '?'; } catch (e) { return '?'; } })();
 const WORLD_W = 2400;
 const WORLD_H = 1350;
 // Grille de "cases" explorables (chaque case = WORLD_W x WORLD_H). La base est dans la case (0,0).
@@ -1237,7 +1238,8 @@ io.on('connection', (socket) => {
     currentWave: rtForInit && rtForInit.currentWave && rtForInit.currentWave.endsAt > Date.now() ? rtForInit.currentWave : null,
     combatEnemies: rtForInit ? combatSnapshot(rtForInit.combat) : [],
     baseDead: rtForInit ? !!rtForInit.baseDead : false,
-    buildTime: BUILD_TIME
+    buildTime: BUILD_TIME,
+    version: APP_VERSION
   });
 
   // Amiral : tableau de bord (viewers connectes/inscrits + niveaux). Joueur : maj du dashboard de son amiral.

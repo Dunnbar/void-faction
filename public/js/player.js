@@ -989,7 +989,7 @@ function connectSocket() {
         return;
       }
       knownBuildTime = data.buildTime;
-      window.gameBuildTime = data.buildTime; // numero de version affiche sous l'horloge
+      if (data.version) window.gameVersion = data.version; // numero de version affiche sous l'horloge
       const d = new Date(data.buildTime);
       console.log(`%c[VoidFaction] dernière MAJ : ${d.toLocaleString('fr-FR', { dateStyle: 'short', timeStyle: 'medium' })}`,
         'color:#4af; font-weight:bold');
