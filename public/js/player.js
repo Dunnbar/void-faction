@@ -2151,12 +2151,12 @@ class MainScene extends Phaser.Scene {
 
   setShipState(s) {
     if (!this.ship || !s) return;
-    // Detecte le mouvement (delta de position) pour n'afficher la flamme que quand le vaisseau bouge.
-    const moved = Math.hypot(s.x - this.ship.x, s.y - this.ship.y) > 0.5;
+    // Etat de deplacement : flag autoritaire du streameur (sinon repli sur le delta de position).
+    const moved = (typeof s.moving === 'boolean') ? s.moving : (Math.hypot(s.x - this.ship.x, s.y - this.ship.y) > 0.5);
     this.ship.x = s.x;
     this.ship.y = s.y;
     this.ship.rotation = s.rotation;
-    if (moved) this._shipMovingUntil = this.time.now + 250; // courte remanence entre 2 updates reseau
+    this._shipMovingUntil = moved ? this.time.now + 250 : 0; // courte remanence ; coupe net a l'arret
   }
 
   flashElementPlus(elementId, n, category) {

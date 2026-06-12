@@ -1777,8 +1777,13 @@ class MainScene extends Phaser.Scene {
     } else {
       this.ship.setAcceleration(0, 0);
     }
-    this.thrust.emitting = moving;
-    if (this.shipFlame) this.shipFlame.setVisible(moving); // flamme reacteur masquee a l'arret
+    // Flammes basees sur la VITESSE reelle (pas seulement "a une destination") : le vaisseau
+    // peut osciller pres de sa cible sans vraiment avancer -> on coupe les flammes des qu'il est lent.
+    const shipSpeed = Math.hypot(this.ship.body.velocity.x, this.ship.body.velocity.y);
+    const inMotion = shipSpeed > 10;
+    this.thrust.emitting = inMotion;
+    if (this.shipFlame) this.shipFlame.setVisible(inMotion); // flamme reacteur masquee a l'arret
+    this._shipMoving = inMotion;
 
     // Cible verrouillee disparue -> on retire le verrouillage.
     if (this.lockedEnemy && !this.lockedEnemy.active) this.clearLock();
@@ -1816,7 +1821,8 @@ class MainScene extends Phaser.Scene {
       socket.emit('streamer:ship', {
         x: this.ship.x,
         y: this.ship.y,
-        rotation: this.ship.rotation
+        rotation: this.ship.rotation,
+        moving: !!this._shipMoving
       });
     }
   }

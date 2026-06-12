@@ -1334,6 +1334,7 @@ io.on('connection', (socket) => {
     rt.ship.x = Math.max(SHIP_MIN_X, Math.min(SHIP_MAX_X, data.x));
     rt.ship.y = Math.max(SHIP_MIN_Y, Math.min(SHIP_MAX_Y, data.y));
     rt.ship.rotation = data.rotation;
+    rt.ship.moving = !!data.moving; // etat de deplacement (pour masquer les flammes a l'arret)
     socket.broadcast.to(amiralRoom(rt.id)).emit('ship', rt.ship);
     // Persistance DB throttlee (la position reste apres un refresh / redemarrage).
     const now = Date.now();
