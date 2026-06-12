@@ -1099,9 +1099,11 @@ function connectSocket() {
       for (const cat of ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE']) {
         if (deltas[cat] > 0) animateBarPlus(cat, deltas[cat]);
       }
-      // +N sur l'élément activé (catégorie de l'action active si elle existe)
+      // +N sur l'élément activé (catégorie de l'action active si elle existe).
+      // DEFENSIF (reparation) exclu : le serveur diffuse le GAIN DE PV TOTAL via 'element:plus'
+      // (somme de tous les contributeurs) — sinon on afficherait juste sa propre contribution.
       const cat = activeAction?.category;
-      if (cat && deltas[cat] > 0) {
+      if (cat && cat !== 'DEFENSIF' && deltas[cat] > 0) {
         const scene = game.scene.getScene('main');
         if (scene && scene.scene.isActive()) {
           scene.flashElementPlus(activeAction.element_id, deltas[cat], cat);
@@ -1138,6 +1140,15 @@ function connectSocket() {
       scene.applyAllElementStates();
       SharedScene.refreshActionOverlay(scene, lastActiveList, activeAction?.element_id);
     }
+    // Panneau d'action ouvert : rafraichit les stats (HP, essence...) en direct, sans re-clic.
+    if (actionMenuElementId && !actionMenu.classList.contains('hidden')) openActionMenu(actionMenuElementId, null, true);
+  });
+
+  // Gain de PV total "+N" sur un element (reparation, somme des contributeurs).
+  socket.on('element:plus', (d) => {
+    if (!d || !d.id || !d.n) return;
+    const scene = game.scene.getScene('main');
+    if (scene && scene.scene.isActive()) SharedScene.flashElementPlus(scene, d.id, d.n, d.category || 'DEFENSIF');
   });
 
   socket.on('asteroid:destroyed', (data) => {

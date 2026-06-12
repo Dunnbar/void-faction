@@ -540,6 +540,14 @@ function wireSocketEvents() {
       scene.applyAllElementStates();
       SharedScene.refreshActionOverlay(scene, lastActiveElements, activeAction?.element_id);
     }
+    // Panneau d'action ouvert : rafraichit les stats (HP, essence...) en direct, sans re-clic.
+    if (actionMenuElementId && !actionMenu.classList.contains('hidden')) openActionMenu(actionMenuElementId, null, true);
+  });
+  // Gain de PV total "+N" sur un element (reparation, somme des contributeurs).
+  socket.on('element:plus', (d) => {
+    if (!d || !d.id || !d.n) return;
+    const scene = game?.scene.getScene('main');
+    if (scene && scene.scene.isActive()) SharedScene.flashElementPlus(scene, d.id, d.n, d.category || 'DEFENSIF');
   });
   socket.on('asteroid:destroyed', (data) => {
     const scene = game?.scene.getScene('main');

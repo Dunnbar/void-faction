@@ -622,9 +622,25 @@
     scene.tweens.add({ targets: flash, scale: 2.2, alpha: 0, duration: 200, ease: 'Quad.easeOut', onComplete: () => flash.destroy() });
   }
 
+  // Texte flottant "+N" sur un element (gain de PV total, gain de ressource...). Couleur par categorie.
+  function flashElementPlus(scene, elementId, n, category) {
+    const sprite = scene.elementSprites && scene.elementSprites.get(elementId);
+    if (!sprite || !n) return;
+    const color = category === 'PUISSANCE'  ? '#ff4f6d'
+                : category === 'DEFENSIF'   ? '#4fa3ff'
+                : category === 'UTILITAIRE' ? '#ffd24f'
+                :                             '#ffffff';
+    const txt = scene.add.text(sprite.x, sprite.y - 30, `+${n}`, {
+      fontFamily: 'Consolas, monospace', fontSize: '22px', color, stroke: '#000000', strokeThickness: 4, fontStyle: 'bold'
+    }).setOrigin(0.5).setDepth(13);
+    scene.tweens.add({ targets: txt, y: txt.y - 48, alpha: { from: 1, to: 0 }, scale: { from: 0.7, to: 1.1 },
+      duration: 1500, ease: 'Cubic.easeOut', onComplete: () => txt.destroy() });
+  }
+
   window.SharedScene = {
     reconcileEnemies,
     lerpEnemies,
+    flashElementPlus,
     removeEnemySprite,
     clearAllEnemies,
     drawTracer,

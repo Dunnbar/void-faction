@@ -725,8 +725,13 @@ function rebirthBase(rt) {
   state.essence = state.essenceMax;
   state.bornAt = Date.now();
   if (rt.id !== 0) { try { stmtSetAmiralBornAt.run(state.bornAt, rt.id); } catch (e) {} }
+  // Renaissance = repart de zero : on remet aussi les ressources de faction a 0.
+  rt.factionResources.materiaux = 0;
+  rt.factionResources.radius = 0;
+  if (rt.id !== 0) { try { stmtSetAmiralResources.run(0, 0, rt.id); } catch (e) {} }
   persistElementStates(rt);
   io.to(amiralRoom(rt.id)).emit('base:reborn', { id: baseEl.id, state: publicElementState(rt, baseEl.id) });
+  io.to(amiralRoom(rt.id)).emit('elements:update', { faction: { ...rt.factionResources } });
   logJournal(rt, 'base_reborn', `La base renaît — jour 0`);
   console.log(`[amiral ${rt.username}] base ${baseEl.id} renaissance (jour 0)`);
 }
@@ -1755,6 +1760,18 @@ function tickActions() {
   }));
   const all = [...userRows, ...amiralRows];
 
+  // HP avant settlement (pour diffuser le GAIN TOTAL "+N" par element, somme de tous les
+  // contributeurs, et pas la contribution individuelle de chaque joueur).
+  const hpBefore = new Map();
+  for (const rt of amiralsRuntime.values()) {
+    for (const el of rt.elements) {
+      if (el.type === 'turret' || el.type === 'base' || el.type === 'ship') {
+        const s = rt.elementStates.get(el.id);
+        if (s) hpBefore.set(rt.id + ':' + el.id, s.hp);
+      }
+    }
+  }
+
   const dirtyAmiraux = new Set();
   const expiredActors = [];
   for (const { actor, action } of all) {
@@ -1795,6 +1812,15 @@ function tickActions() {
         states: allElementStates(rt),
         faction: { ...rt.factionResources }
       });
+      // Gain de PV total ce tick (reparation) -> flash "+N" sur l'element, vu par toute la room.
+      for (const el of rt.elements) {
+        if (el.type !== 'turret' && el.type !== 'base' && el.type !== 'ship') continue;
+        const s = rt.elementStates.get(el.id);
+        const before = hpBefore.get(amiralId + ':' + el.id);
+        if (s && before != null && s.hp > before) {
+          io.to(amiralRoom(amiralId)).emit('element:plus', { id: el.id, n: s.hp - before, category: 'DEFENSIF' });
+        }
+      }
     }
     // Notifier les acteurs encore actifs
     for (const { actor } of all) {
