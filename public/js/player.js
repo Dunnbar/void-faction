@@ -437,20 +437,6 @@ function showVictory() {
 // Clic pour fermer les overlays victoire / defaite (avec transition).
 document.getElementById('victoryOverlay')?.addEventListener('click', () => dismissOverlay(document.getElementById('victoryOverlay')));
 document.getElementById('baseDeadOverlay')?.addEventListener('click', () => dismissOverlay(document.getElementById('baseDeadOverlay')));
-// Gain d'XP : petit "+N ATQ/DÉF/UTI" flottant au-dessus de la pastille d'action en cours.
-function flashXpGain(category, n) {
-  const chip = document.getElementById('actionChip');
-  if (!chip || chip.classList.contains('idle') || !n) return;
-  const color = category === 'PUISSANCE' ? 'var(--c-puissance)' : category === 'DEFENSIF' ? 'var(--c-defensif)' : 'var(--c-utilitaire)';
-  const tag = category === 'PUISSANCE' ? 'ATQ' : category === 'DEFENSIF' ? 'DÉF' : 'UTI';
-  const float = document.createElement('span');
-  float.className = 'xp-gain-float';
-  float.textContent = `+${n} ${tag}`;
-  float.style.color = color;
-  chip.appendChild(float);
-  setTimeout(() => float.remove(), 1500);
-}
-
 function showLevelUpToast(category, lvl) {
   const label = category === 'PUISSANCE' ? 'TIR' : category === 'DEFENSIF' ? 'DÉFENSE' : 'UTILITAIRE';
   try { showCaptain(`<span class="danger">NIVEAU ${lvl} !</span><br>${label} amélioré.`, 6000); } catch (e) {}
@@ -1111,7 +1097,6 @@ function connectSocket() {
       levels = data.levels;
       if (data.xp) xp = data.xp;
       renderLevels();
-      if (data.gain && data.gain.category) flashXpGain(data.gain.category, data.gain.n || 1);
       // Petit feedback : montre quel niveau a augmente.
       for (const cat of ['PUISSANCE', 'DEFENSIF', 'UTILITAIRE']) {
         if ((levels[cat] || 1) > (before[cat] || 1)) showLevelUpToast(cat, levels[cat]);

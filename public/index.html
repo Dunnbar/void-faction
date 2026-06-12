@@ -93,13 +93,6 @@
     }
     .action-chip:hover .action-stop, .action-chip:focus-within .action-stop { display: inline-flex; }
     .action-chip .action-stop:hover { background: #f55; color: #000; }
-    /* Gain d'XP flottant (au-dessus de la pastille d'action) */
-    .xp-gain-float {
-      position: absolute; top: -10px; left: 50%; transform: translateX(-50%);
-      font-size: 12px; font-weight: bold; white-space: nowrap; pointer-events: none;
-      text-shadow: 0 0 4px #000; animation: xpFloat 1.5s ease-out forwards;
-    }
-    @keyframes xpFloat { 0% { opacity: 0; transform: translate(-50%, 6px); } 20% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -22px); } }
 
     /* Infobulle generique (essence, ressources, action) : sous-texte explicatif au survol */
     .hint { position: relative; pointer-events: auto; cursor: help; }
