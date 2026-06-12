@@ -404,15 +404,14 @@ function renderLevels() {
     const x = (xp && xp[cat]) || 0;
     const lvlEl = document.getElementById('xpLvl' + suffix[cat]);
     const fillEl = document.getElementById('xpFill' + suffix[cat]);
-    if (lvlEl) lvlEl.textContent = lvl >= 3 ? 'Niv. 3 · MAX' : `Niv. ${lvl}`;
+    // Valeur lisible : XP dans le palier courant / XP requise pour le palier suivant.
+    const lo = lvl === 1 ? 0 : t2;
+    const hi = lvl === 1 ? t2 : t3;
+    const within = Math.max(0, x - lo);
+    const need = Math.max(1, hi - lo);
+    if (lvlEl) lvlEl.textContent = lvl >= 3 ? `Niv. 3 · MAX (${x})` : `Niv. ${lvl} · ${within}/${need}`;
     if (fillEl) {
-      // Progression vers le palier suivant (barre pleine au niveau max).
-      let pct = 100;
-      if (lvl < 3) {
-        const lo = lvl === 1 ? 0 : t2;
-        const hi = lvl === 1 ? t2 : t3;
-        pct = hi > lo ? ((x - lo) / (hi - lo)) * 100 : 0;
-      }
+      const pct = lvl >= 3 ? 100 : (within / need) * 100;
       fillEl.style.width = `${Math.max(0, Math.min(100, pct))}%`;
     }
   }
