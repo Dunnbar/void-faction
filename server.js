@@ -725,13 +725,30 @@ function rebirthBase(rt) {
   state.essence = state.essenceMax;
   state.bornAt = Date.now();
   if (rt.id !== 0) { try { stmtSetAmiralBornAt.run(state.bornAt, rt.id); } catch (e) {} }
-  // Renaissance = repart de zero : on remet aussi les ressources de faction a 0.
+  // Renaissance = RESET TOTAL : ressources a 0, tourelles + vaisseau pleine vie, gisements
+  // restaures, vague en cours annulee, toutes les actions coupees. Seuls les NIVEAUX des
+  // joueurs sont conserves (on ne touche pas a user_progress / xp).
   rt.factionResources.materiaux = 0;
   rt.factionResources.radius = 0;
   if (rt.id !== 0) { try { stmtSetAmiralResources.run(0, 0, rt.id); } catch (e) {} }
+  for (const el of rt.elements) {
+    const s = rt.elementStates.get(el.id);
+    if (!s) continue;
+    if (el.type === 'turret') { s.hp = s.hpMax; s.dead = false; }
+    else if (el.type === 'ship') { s.hp = s.hpMax; }
+  }
+  clearAllActionsForAmiral(rt);
+  rt.currentWave = null;
+  rt.combat = null;
   persistElementStates(rt);
+  respawnAsteroidGroup(rt, 'materiaux');
+  respawnAsteroidGroup(rt, 'radius');
   io.to(amiralRoom(rt.id)).emit('base:reborn', { id: baseEl.id, state: publicElementState(rt, baseEl.id) });
-  io.to(amiralRoom(rt.id)).emit('elements:update', { faction: { ...rt.factionResources } });
+  io.to(amiralRoom(rt.id)).emit('elements:update', {
+    states: allElementStates(rt),
+    activeElements: activeElementStatesForAmiral(rt.id),
+    faction: { ...rt.factionResources }
+  });
   logJournal(rt, 'base_reborn', `La base renaît — jour 0`);
   console.log(`[amiral ${rt.username}] base ${baseEl.id} renaissance (jour 0)`);
 }

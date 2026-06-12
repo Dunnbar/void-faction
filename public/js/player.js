@@ -1193,7 +1193,7 @@ function connectSocket() {
   socket.on('base:reborn', (data) => {
     if (data?.state) elementStates.set(data.id, data.state);
     const scene = game.scene.getScene('main');
-    if (scene && scene.scene.isActive()) scene.applyAllElementStates();
+    if (scene && scene.scene.isActive()) { SharedScene.clearAllEnemies(scene); scene.hideWaveWarnIcon?.(); scene.applyAllElementStates(); }
     baseDead = false;
     document.getElementById('baseDeadOverlay')?.classList.add('hidden');
   });
