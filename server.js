@@ -2255,9 +2255,10 @@ setInterval(() => {
 // ============================================================================
 const COMBAT_TICK_MS         = 100;  // ~10 Hz
 const COMBAT_DETECT_RANGE    = 340;  // rayon de detection d'une cible a engager (vaisseau)
-const COMBAT_ORBIT_MIN       = 160;  // les ennemis gardent plus de distance avec leur cible
-const COMBAT_ORBIT_MAX       = 240;
-const COMBAT_MIN_BASE_DIST   = 380;  // distance mini au centre de la base
+const COMBAT_ORBIT_MIN       = 120;  // distance d'orbite autour de la cible (un peu + qu'avant)
+const COMBAT_ORBIT_MAX       = 180;
+const COMBAT_MIN_BASE_DIST   = 150;  // garde anti-collision base ; DOIT rester < TURRET_D(260) - ORBIT_MAX
+                                     // sinon le clamp empeche d'orbiter les tourelles -> ennemis "plantes"
 const COMBAT_ENEMY_FIRE_MS   = 5000; // delai entre 2 passes d'attaque d'un ennemi
 const TURRET_PUISSANCE_CAP   = 10;   // niveaux/assets de tourelle (Gun01..Gun10), min 1
 const TURRET_RANGE_CAP       = 10;
