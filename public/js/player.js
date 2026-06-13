@@ -107,7 +107,7 @@ let previousProgress = null;
 let levels = { PUISSANCE: 1, DEFENSIF: 1, UTILITAIRE: 1 }; // niveaux viewer par categorie (1-3)
 let xp = { PUISSANCE: 0, DEFENSIF: 0, UTILITAIRE: 0 };      // XP brute par categorie (pour les barres)
 // Seuils niv2 / niv3 PAR categorie (fournis par le serveur). Attaque en combats, def/util en temps.
-let levelXp = { PUISSANCE: [5, 15], DEFENSIF: [1200, 3600], UTILITAIRE: [1200, 3600] };
+let levelXp = { PUISSANCE: [5, 15], DEFENSIF: [10, 30], UTILITAIRE: [10, 30] };
 // Contribution TOTALE en cours par action ("elementId|actionId" -> somme des niveaux des acteurs).
 let actionContributions = {};
 let baseDead = false; // base detruite : aucune action possible en attendant la relance de l'Amiral

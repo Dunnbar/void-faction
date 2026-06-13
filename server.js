@@ -34,12 +34,14 @@ const JOURNAL_LIMIT = 40; // nb d'entrees de journal conservees/affichees par ba
 
 // Niveaux viewer (par categorie, max 3). Seuils niv2/niv3 PAR TYPE :
 //  - ATTAQUE  : nombre de COMBATS auxquels on a participe (5 / 15).
-//  - DEFENSE / UTILITAIRE : temps passe a agir, +1 par tick de 10s (1200 / 3600).
+//  - DEFENSE  : +1 par tranche de 200 PV repares (10 / 30).
+//  - UTILITAIRE : +1 par tranche de 200 minerai/radius mine (10 / 30).
 const LEVEL_XP_BY_CAT = {
   PUISSANCE:  [5, 15],
-  DEFENSIF:   [1200, 3600],
-  UTILITAIRE: [1200, 3600]
+  DEFENSIF:   [10, 30],
+  UTILITAIRE: [10, 30]
 };
+const XP_MILESTONE = 200; // unites d'effet (PV repares / minerai mine) pour +1 XP
 function levelFromXp(xp, cat) {
   const t = LEVEL_XP_BY_CAT[cat] || [5, 15];
   return (xp >= t[1]) ? 3 : (xp >= t[0]) ? 2 : 1;
@@ -1783,9 +1785,9 @@ function settleActionGeneric(actor, action, now, rt) {
   const cap = action.started_at + ACTION_MAX_DURATION_MS;
   const settledThrough = Math.min(now, cap);
   const elapsedSinceLast = settledThrough - action.last_settled_at;
-  if (elapsedSinceLast <= 0) return 0;
+  if (elapsedSinceLast <= 0) return { delta: 0, blocked: false, effect: 0 };
   const delta = Math.floor(elapsedSinceLast / ACTION_TICK_MS);
-  if (delta <= 0) return 0;
+  if (delta <= 0) return { delta: 0, blocked: false, effect: 0 };
   const newLastSettled = action.last_settled_at + delta * ACTION_TICK_MS;
   updateLastSettledForActor(actor, newLastSettled);
   incrementCategoryForActor(actor, action.category, delta);
@@ -1793,15 +1795,30 @@ function settleActionGeneric(actor, action, now, rt) {
   setResource(newRes);
   const element = rt.elementById[action.element_id];
   let blocked = false; // penurie de ressource -> l'action doit etre annulee par l'appelant
+  let effect = 0;      // effet reellement contribue par cet acteur (PV repares / minerai mine / ...)
   if (element) {
     const amount = actorContribution(actor, action.category); // niveau du joueur (1-3), 1 pour l'Amiral
     for (let i = 0; i < delta; i++) {
       const applied = applyActionEffect(rt, action.action_id, element, amount);
       if (applied === 'no_resource') { blocked = true; break; }
       if (!applied) break;
+      effect += amount;
     }
   }
-  return { delta, blocked };
+  return { delta, blocked, effect };
+}
+
+// XP par paliers (DEFENSE = PV repares, UTILITAIRE = minerai mine) : +1 XP tous les 200 d'effet.
+// Le reste (< 200) est accumule en memoire par joueur (perte negligeable au redemarrage).
+const xpEffectAccum = new Map(); // userId -> { DEFENSIF, UTILITAIRE }
+function addMilestoneXp(rt, uid, cat, effect) {
+  if (!(effect > 0)) return;
+  let acc = xpEffectAccum.get(uid);
+  if (!acc) { acc = { DEFENSIF: 0, UTILITAIRE: 0 }; xpEffectAccum.set(uid, acc); }
+  acc[cat] += effect;
+  let gained = 0;
+  while (acc[cat] >= XP_MILESTONE) { acc[cat] -= XP_MILESTONE; gained++; }
+  if (gained > 0) awardActionXp(rt, uid, cat, gained);
 }
 
 let lastBroadcastResource = -1;
@@ -1835,16 +1852,15 @@ function tickActions() {
   for (const { actor, action } of all) {
     const rt = amiralsRuntime.get(actor.amiralId);
     if (!rt) continue;
-    const { delta, blocked } = settleActionGeneric(actor, action, now, rt);
+    const { delta, blocked, effect } = settleActionGeneric(actor, action, now, rt);
     if (delta > 0) dirtyAmiraux.add(actor.amiralId);
-    // XP des viewers : DEFENSE/UTILITAIRE montent au temps passe a agir ; ATTAQUE (PUISSANCE)
-    // ne monte QUE pendant un combat (et on retient le joueur comme participant a la bataille).
-    if (delta > 0 && actor.type === 'user') {
-      const cat = action.category;
-      if (cat === 'DEFENSIF' || cat === 'UTILITAIRE') {
-        awardActionXp(rt, actor.id, cat, delta); // au temps passe (par tick)
-      } else if (cat === 'PUISSANCE' && combatActiveFor(rt)) {
-        // ATTAQUE : +1 par COMBAT participe, une seule fois (au 1er tick de participation).
+    // XP des viewers : DEFENSE = PV repares /200, UTILITAIRE = minerai mine /200,
+    // ATTAQUE (PUISSANCE) = +1 par COMBAT participe (une seule fois).
+    if (actor.type === 'user') {
+      const aid = action.action_id, cat = action.category;
+      if (aid === 'reparation') addMilestoneXp(rt, actor.id, 'DEFENSIF', effect);
+      else if (aid === 'minage') addMilestoneXp(rt, actor.id, 'UTILITAIRE', effect);
+      else if (cat === 'PUISSANCE' && combatActiveFor(rt)) {
         if (!rt.combat.participants.has(actor.id)) {
           rt.combat.participants.add(actor.id);
           awardActionXp(rt, actor.id, cat, 1);
