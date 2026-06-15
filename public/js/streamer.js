@@ -265,11 +265,11 @@ function openActionMenu(elementId, anchor, keepPos) {
   }
 
   actionMenuActions.innerHTML = '';
-  // Tourelle detruite : seule option = Reconstruire (meme mecanique que reparation).
+  // Tourelle/vaisseau hors service : seule option = Réparer (meme mecanique que reparation).
   const stMenu = elementStates.get(elementId);
-  const turretDead = el.type === 'turret' && stMenu && stMenu.dead;
-  const actionsToShow = turretDead
-    ? [{ id: 'reparation', label: 'Reconstruire', category: 'DEFENSIF', icon: '/assets/PNG/Ability25.png', effect: '+1 PV toutes les 10 s' }]
+  const elDead = (el.type === 'turret' || el.type === 'ship') && stMenu && stMenu.dead;
+  const actionsToShow = elDead
+    ? [{ id: 'reparation', label: el.type === 'ship' ? 'Réparer' : 'Reconstruire', category: 'DEFENSIF', icon: '/assets/PNG/Ability25.png', effect: '+1 PV toutes les 10 s' }]
     : el.actions;
   for (const a of actionsToShow) {
     const isActive = activeAction && activeAction.element_id === elementId && activeAction.action_id === a.id;
@@ -1570,6 +1570,7 @@ class MainScene extends Phaser.Scene {
   // le vaisseau), sinon tout droit dans l'axe du vaisseau. Diffuse aux viewers.
   tryFire() {
     if (!this.ship || !this.ship.active) return;
+    if (elementStates.get('ship-1')?.dead) return; // hors service : pas de tir
     const now = this.time.now;
     if (this.ship._lastShotAt && now - this.ship._lastShotAt < 200) return;
     this.ship._lastShotAt = now;
@@ -1811,6 +1812,22 @@ class MainScene extends Phaser.Scene {
     // Le vaisseau accélère pour rejoindre une "vitesse cible" qui décroît
     // en sqrt(2·a·d) à l'approche, ce qui le fait freiner avant d'arriver.
     // La "capacite" du vaisseau (boostee par les viewers) augmente la vitesse max.
+    const shipDead = !!(elementStates.get('ship-1')?.dead);
+    // Vaisseau hors service (0 PV) : immobilise, grise, plus pilotable jusqu'a reparation (50% PV).
+    if (shipDead) {
+      this.destination = null;
+      this.ship.setAcceleration(0, 0);
+      this.ship.setVelocity(0, 0);
+      if (this.destMarker) this.destMarker.setFillStyle(0x4f8aff, 0);
+      this.thrust.emitting = false;
+      if (this.shipFlame) this.shipFlame.setVisible(false);
+      this._shipMoving = false;
+      if (this.ship.anims && this.ship.anims.isPlaying) { this.ship.stop(); this.ship.setTexture('ship'); }
+      this.ship.setTint(0x556070);
+      if (this.lockedEnemy) this.clearLock();
+      this._shipWasDead = true;
+    } else {
+      if (this._shipWasDead) { this.ship.clearTint(); this._shipWasDead = false; }
     const shipCapacite = (elementStates.get('ship-1')?.capacite) || 0;
     const MAX_SPEED = 70 + shipCapacite * 12;   // px/s (70 de base + 12 par niveau de capacite) — vaisseau plus lent
     const APPROACH_DECEL = 150;      // px/s² (force de freinage théorique)
@@ -1886,6 +1903,7 @@ class MainScene extends Phaser.Scene {
       if (this.ship.y < minY) { this.ship.y = minY; this.ship.body.velocity.y = 0; }
       else if (this.ship.y > maxY) { this.ship.y = maxY; this.ship.body.velocity.y = 0; }
     }
+    } // fin else (vaisseau non hors-service)
 
     // Systeme de cases : si le vaisseau a franchi une frontiere, on bascule la camera
     // sur la case voisine (transition fluide, en gardant le vaisseau visible).

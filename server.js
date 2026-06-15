@@ -105,8 +105,9 @@ const BASE_ACTIONS = [
 ];
 const MINING_ACTION = [{ id: 'minage', label: 'Minage', category: 'UTILITAIRE', effect: '+1 ressource toutes les 10 s' }];
 const SHIP_ACTIONS = [
-  { id: 'tir',      label: 'Tir',      category: 'PUISSANCE',  effect: '+1 par contributeur' },
-  { id: 'capacite', label: 'Capacité', category: 'PUISSANCE', effect: '+1 vitesse (max 10)' }
+  { id: 'tir',        label: 'Tir',      category: 'PUISSANCE',  effect: '+1 par contributeur' },
+  { id: 'capacite',   label: 'Capacité', category: 'PUISSANCE',  effect: '+1 vitesse (max 10)' },
+  { id: 'reparation', label: 'Réparation', category: 'DEFENSIF', effect: '+1 PV toutes les 10 s' }
 ];
 const SHIP_HP_MAX = 100;
 
@@ -691,20 +692,19 @@ function publicElementState(rt, id) {
   }
   // Tourelle / Vaisseau : puissance et portee = somme des niveaux PUISSANCE des acteurs actifs.
   if (el && (el.type === 'turret' || el.type === 'ship')) {
-    // Tourelle : latch "morte" -> a 0 HP elle est detruite (seule la reconstruction est
-    // possible) ; elle redevient active des 50% HP.
-    if (el.type === 'turret') {
-      if (s.hp <= 0) s.dead = true;
-      else if (s.dead && s.hp >= s.hpMax * 0.5) s.dead = false;
-    }
-    const dead = el.type === 'turret' && s.dead;
+    // Tourelle & vaisseau : latch "mort" -> a 0 HP l'element est hors service (seule la
+    // reparation/reconstruction est possible) ; il redevient actif des 50% HP.
+    if (s.hp <= 0) s.dead = true;
+    else if (s.dead && s.hp >= s.hpMax * 0.5) s.dead = false;
+    const dead = !!s.dead;
     const out = {
       id, ...s,
       puissance: dead ? 0 : Math.min(10, 1 + sumContributionsOnAction(rt, id, 'tir', 'PUISSANCE')),
       range:     dead ? 0 : Math.min(10, 1 + sumContributionsOnAction(rt, id, 'visee', 'PUISSANCE'))
     };
     // Le vaisseau a en plus une "capacite" (vitesse) boostee par les viewers (niveaux UTILITAIRE).
-    if (el.type === 'ship') out.capacite = Math.min(10, 1 + sumContributionsOnAction(rt, id, 'capacite', 'PUISSANCE'));
+    // Hors service -> capacite 0 (le vaisseau ne peut plus etre pilote).
+    if (el.type === 'ship') out.capacite = dead ? 0 : Math.min(10, 1 + sumContributionsOnAction(rt, id, 'capacite', 'PUISSANCE'));
     return out;
   }
   // Base : on calcule le nombre de jours depuis sa naissance
@@ -824,13 +824,18 @@ function applyTurretDamage(rt, turretId, dmg) {
   persistElementStates(rt);
   io.to(amiralRoom(rt.id)).emit('elements:update', { states: [publicElementState(rt, turretId)] });
 }
-// Degats au vaisseau amiral (tir ennemi). Plancher a 0 (pas de destruction definitive pour l'instant).
+// Degats au vaisseau amiral (tir ennemi). A 0 HP -> hors service (dead) : reparation requise,
+// reactive des 50% HP (meme logique que les tourelles).
 function applyShipDamage(rt, dmg) {
   const el = rt.elements.find(e => e.type === 'ship');
   if (!el) return;
   const state = rt.elementStates.get(el.id);
   if (!state || dmg <= 0 || state.hp <= 0) return;
   state.hp = Math.max(0, state.hp - dmg);
+  if (state.hp <= 0 && !state.dead) {
+    state.dead = true;
+    logJournal(rt, 'turret', `${el.label} hors service`);
+  }
   io.to(amiralRoom(rt.id)).emit('elements:update', { states: [publicElementState(rt, el.id)] });
 }
 function allElementStates(rt) {
@@ -1302,11 +1307,11 @@ io.on('connection', (socket) => {
     if (!el) return respond({ ok: false, error: 'element inconnu' });
     const action = el.actions.find(a => a.id === actionId);
     if (!action) return respond({ ok: false, error: 'action inconnue' });
-    // Tourelle detruite : seule la reconstruction (reparation) est autorisee.
-    if (el.type === 'turret') {
+    // Tourelle/vaisseau hors service : seule la reparation est autorisee.
+    if (el.type === 'turret' || el.type === 'ship') {
       const st = rt.elementStates.get(elementId);
       if (st && st.dead && actionId !== 'reparation') {
-        return respond({ ok: false, error: 'tourelle détruite : reconstruction requise' });
+        return respond({ ok: false, error: el.type === 'ship' ? 'vaisseau hors service : réparation requise' : 'tourelle détruite : reconstruction requise' });
       }
     }
     if (el.type === 'asteroid') {
@@ -1542,12 +1547,12 @@ function applyActionEffect(rt, actionId, element, amount = 1) {
       // Cout : 1 Materiau par PV repare. Penurie -> 'no_resource' (l'action sera annulee).
       if ((rt.factionResources.materiaux || 0) < amount) return 'no_resource';
       rt.factionResources.materiaux -= amount;
-      const wasDead = element.type === 'turret' && state.dead;
+      const wasDead = (element.type === 'turret' || element.type === 'ship') && state.dead;
       state.hp = Math.min(state.hp + amount, state.hpMax);
-      // Tourelle en reconstruction : reactivee des 50% HP (+ journal).
+      // Tourelle/vaisseau en reparation : reactive des 50% HP (+ journal).
       if (wasDead && state.hp >= state.hpMax * 0.5) {
         state.dead = false;
-        logJournal(rt, 'turret', `${element.label} réactivée`);
+        logJournal(rt, 'turret', `${element.label} réactivé${element.type === 'ship' ? '' : 'e'}`);
       }
       return true;
     }
@@ -2335,7 +2340,9 @@ function combatDefenders(rt) {
     const s = rt.elementStates.get(el.id);
     if (s && s.hp > 0 && !s.dead) list.push({ kind: 'turret', id: el.id, x: el.x, y: el.y });
   }
-  list.push({ kind: 'ship', x: rt.ship.x, y: rt.ship.y });
+  const shipEl = rt.elements.find(e => e.type === 'ship');
+  const shipState = shipEl && rt.elementStates.get(shipEl.id);
+  if (!shipState || !shipState.dead) list.push({ kind: 'ship', x: rt.ship.x, y: rt.ship.y });
   return list;
 }
 
@@ -2488,6 +2495,10 @@ function tickTurretsServer(rt, combat, now) {
 // Resout le tir du vaisseau (cible verrouillee ou ray-cast) + diffuse le tracer a toute la room.
 function resolveShipFire(rt, data) {
   const combat = rt.combat;
+  // Vaisseau hors service : pas de tir.
+  const shipEl = rt.elements.find(e => e.type === 'ship');
+  const shipState = shipEl && rt.elementStates.get(shipEl.id);
+  if (shipState && shipState.dead) return;
   let tx = data.x + Math.cos(data.angle) * 900;
   let ty = data.y + Math.sin(data.angle) * 900;
   let hit = null;

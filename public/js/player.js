@@ -724,9 +724,9 @@ function openActionMenu(elementId, anchor, keepPos) {
   actionMenuActions.innerHTML = '';
   // Tourelle detruite : seule option = Reconstruire (meme mecanique que reparation).
   const stMenu = elementStates.get(elementId);
-  const turretDead = el.type === 'turret' && stMenu && stMenu.dead;
+  const turretDead = (el.type === 'turret' || el.type === 'ship') && stMenu && stMenu.dead;
   const actionsToShow = turretDead
-    ? [{ id: 'reparation', label: 'Reconstruire', category: 'DEFENSIF', icon: '/assets/PNG/Ability25.png', effect: '+1 PV toutes les 10 s' }]
+    ? [{ id: 'reparation', label: el.type === 'ship' ? 'Réparer' : 'Reconstruire', category: 'DEFENSIF', icon: '/assets/PNG/Ability25.png', effect: '+1 PV toutes les 10 s' }]
     : el.actions;
   for (const a of actionsToShow) {
     const isActive = activeAction && activeAction.element_id === elementId && activeAction.action_id === a.id;
@@ -1908,6 +1908,12 @@ class MainScene extends Phaser.Scene {
         else if (st.dead && sp._dead) this.updateTurretDeadVisual(el.id, st);
       }
       if (sp && !sp._dead) this.updateTurretAppearance(el.id);
+    }
+    // Vaisseau hors service (0 PV) : grise jusqu'a reparation (50% PV).
+    if (this.ship) {
+      const ss = elementStates.get('ship-1');
+      if (ss && ss.dead) { if (!this.ship._dead) { this.ship._dead = true; this.ship.setTint(0x556070); } }
+      else if (this.ship._dead) { this.ship._dead = false; this.ship.clearTint(); this.ship.setAlpha(amiralIsOnline ? 1 : 0.45); }
     }
     // Cercle de portee affiche : on le redessine pour suivre l'evolution en direct.
     if (this.rangeCircleId) this._drawRangeCircle();
