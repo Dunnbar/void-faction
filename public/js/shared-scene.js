@@ -706,18 +706,17 @@
     const cam = scene.cameras.main, v = cam.worldView;
     const sx = (o.x - v.x) * cam.zoom, sy = (o.y - v.y) * cam.zoom;
     const W = cam.width, H = cam.height, m = 30, cx = W / 2, cy = H / 2;
-    let px = sx, py = sy;
-    const inside = sx > m && sx < W - m && sy > m && sy < H - m;
-    if (!inside) {
-      const ang = Math.atan2(sy - cy, sx - cx);
-      const hw = W / 2 - m, hh = H / 2 - m;
-      const tx = Math.abs(Math.cos(ang)) < 1e-6 ? Infinity : hw / Math.abs(Math.cos(ang));
-      const ty = Math.abs(Math.sin(ang)) < 1e-6 ? Infinity : hh / Math.abs(Math.sin(ang));
-      const t = Math.min(tx, ty);
-      px = cx + Math.cos(ang) * t; py = cy + Math.sin(ang) * t;
-    }
+    // Le marqueur reste TOUJOURS colle au bord de l'ecran, dans la direction de la vague
+    // (meme si la provenance est visible a l'ecran).
+    let ang = Math.atan2(sy - cy, sx - cx);
+    if (Math.abs(sx - cx) < 1e-6 && Math.abs(sy - cy) < 1e-6) ang = -Math.PI / 2; // origine au centre -> haut
+    const hw = W / 2 - m, hh = H / 2 - m;
+    const tx = Math.abs(Math.cos(ang)) < 1e-6 ? Infinity : hw / Math.abs(Math.cos(ang));
+    const ty = Math.abs(Math.sin(ang)) < 1e-6 ? Infinity : hh / Math.abs(Math.sin(ang));
+    const t = Math.min(tx, ty);
     marker.setVisible(true);
-    marker.x = px; marker.y = py;
+    marker.x = cx + Math.cos(ang) * t;
+    marker.y = cy + Math.sin(ang) * t;
   }
 
   // Centre la vue sur un point monde (borne a la case courante). Utilise pour le double-clic zoom.
