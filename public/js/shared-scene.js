@@ -621,16 +621,24 @@
     for (const id of [...scene.enemyById.keys()]) removeEnemySprite(scene, id, false);
   }
 
-  // Traceur de tir : ligne lumineuse ephemere + eclat a l'arrivee. kind: 'turret'|'enemy'|'ship'.
+  // Traceur de tir : un BOLT (projectile court) qui voyage de from vers to, + eclat a l'impact.
+  // Bien plus visible qu'une ligne statique, et pas "etire". kind: 'turret'|'enemy'|'ship'.
   function drawTracer(scene, from, to, kind) {
     if (!from || !to) return;
-    const col = kind === 'enemy' ? 0xff5a5a : kind === 'ship' ? 0x7fd0ff : 0xffd24f;
-    const g = scene.add.graphics().setDepth(9);
-    g.lineStyle(kind === 'ship' ? 2.5 : 1.5, col, 0.9);
-    g.beginPath(); g.moveTo(from.x, from.y); g.lineTo(to.x, to.y); g.strokePath();
-    scene.tweens.add({ targets: g, alpha: 0, duration: 180, ease: 'Quad.easeOut', onComplete: () => g.destroy() });
-    const flash = scene.add.circle(to.x, to.y, 4, 0xffffff, 0.9).setDepth(10);
-    scene.tweens.add({ targets: flash, scale: 2.2, alpha: 0, duration: 200, ease: 'Quad.easeOut', onComplete: () => flash.destroy() });
+    const col = kind === 'enemy' ? 0xff5a5a : kind === 'ship' ? 0x8fd4ff : 0xffd24f;
+    const ang = Math.atan2(to.y - from.y, to.x - from.x);
+    const dist = Math.hypot(to.x - from.x, to.y - from.y);
+    const dur = Math.max(90, Math.min(320, dist / 3)); // vitesse ~3 px/ms, borne
+    const bolt = scene.add.rectangle(from.x, from.y, 18, 5, col, 1).setDepth(11).setRotation(ang);
+    bolt.setStrokeStyle(1, 0xffffff, 0.6);
+    scene.tweens.add({
+      targets: bolt, x: to.x, y: to.y, duration: dur, ease: 'Linear',
+      onComplete: () => {
+        bolt.destroy();
+        const flash = scene.add.circle(to.x, to.y, 7, 0xffffff, 0.95).setDepth(12);
+        scene.tweens.add({ targets: flash, scale: 2.6, alpha: 0, duration: 220, ease: 'Quad.easeOut', onComplete: () => flash.destroy() });
+      }
+    });
   }
 
   // Texte flottant "+N" sur un element (gain de PV total, gain de ressource...). Couleur par categorie.

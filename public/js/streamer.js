@@ -1284,6 +1284,8 @@ class MainScene extends Phaser.Scene {
     // Fond principal qui couvre le viewport (suit la camera)
     this.bgLayer01 = this.add.image(w / 2, h / 2, 'bg-01')
       .setOrigin(0.5).setScrollFactor(0).setDepth(-100);
+    // Voile sombre semi-transparent : attenue la nebuleuse pour que les elements ressortent.
+    this._bgDim = this.add.rectangle(w / 2, h / 2, 8000, 8000, 0x04060a, 0.4).setScrollFactor(0).setDepth(-99);
     // (Planete parallax retiree : elle faisait tache sur le fond.)
     this.updateParallaxBackground();
   }
@@ -1339,6 +1341,7 @@ class MainScene extends Phaser.Scene {
     this.applyFitZoom();
     SharedScene.recenterCurrentCase(this);
     if (this.bgLayer01) this.bgLayer01.setPosition(w / 2, h / 2);
+    if (this._bgDim) this._bgDim.setPosition(w / 2, h / 2);
     this.updateParallaxBackground();
   }
 
@@ -1809,7 +1812,7 @@ class MainScene extends Phaser.Scene {
     // en sqrt(2·a·d) à l'approche, ce qui le fait freiner avant d'arriver.
     // La "capacite" du vaisseau (boostee par les viewers) augmente la vitesse max.
     const shipCapacite = (elementStates.get('ship-1')?.capacite) || 0;
-    const MAX_SPEED = 120 + shipCapacite * 20;  // px/s (120 de base, +20 par niveau cumule)
+    const MAX_SPEED = 70 + shipCapacite * 12;   // px/s (70 de base + 12 par niveau de capacite) — vaisseau plus lent
     const APPROACH_DECEL = 150;      // px/s² (force de freinage théorique)
     const STIFFNESS = 6;             // raideur du correcteur vitesse
     const STOP_DIST = 4;             // px : on s'arrête net si proche ET lent
@@ -1857,13 +1860,18 @@ class MainScene extends Phaser.Scene {
 
     // Cible verrouillee disparue -> on retire le verrouillage.
     if (this.lockedEnemy && !this.lockedEnemy.active) this.clearLock();
-    // Orientation : uniquement vers la cible verrouillee (plus de suivi souris : ne rendait pas bien).
-    // Sans cible, le vaisseau garde son cap actuel.
+    // Orientation : vers la cible verrouillee si présente, sinon dans le SENS DU DEPLACEMENT.
+    const maxStep = 9 * ((delta || 16) / 1000);
     if (this.lockedEnemy && this.lockedEnemy.active) {
       const targetRot = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.lockedEnemy.x, this.lockedEnemy.y) + SHIP_SPRITE_OFFSET;
-      const maxStep = 9 * ((delta || 16) / 1000);
       this.ship.rotation = Phaser.Math.Angle.RotateTo(this.ship.rotation, targetRot, maxStep);
       if (this.lockReticle) { this.lockReticle.x = this.lockedEnemy.x; this.lockReticle.y = this.lockedEnemy.y; }
+    } else {
+      const v = this.ship.body && this.ship.body.velocity;
+      if (v && Math.hypot(v.x, v.y) > 12) { // assez rapide -> on s'oriente vers la direction de vol
+        const targetRot = Math.atan2(v.y, v.x) + SHIP_SPRITE_OFFSET;
+        this.ship.rotation = Phaser.Math.Angle.RotateTo(this.ship.rotation, targetRot, maxStep);
+      }
     }
     // Tir a Espace (maintenu = tir continu cadence) : vers la cible si verrouillee, sinon tout droit.
     if (this.keySpace && this.keySpace.isDown && !isTypingInField()) this.tryFire();

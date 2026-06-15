@@ -824,6 +824,15 @@ function applyTurretDamage(rt, turretId, dmg) {
   persistElementStates(rt);
   io.to(amiralRoom(rt.id)).emit('elements:update', { states: [publicElementState(rt, turretId)] });
 }
+// Degats au vaisseau amiral (tir ennemi). Plancher a 0 (pas de destruction definitive pour l'instant).
+function applyShipDamage(rt, dmg) {
+  const el = rt.elements.find(e => e.type === 'ship');
+  if (!el) return;
+  const state = rt.elementStates.get(el.id);
+  if (!state || dmg <= 0 || state.hp <= 0) return;
+  state.hp = Math.max(0, state.hp - dmg);
+  io.to(amiralRoom(rt.id)).emit('elements:update', { states: [publicElementState(rt, el.id)] });
+}
 function allElementStates(rt) {
   return rt.elements.map(e => publicElementState(rt, e.id));
 }
@@ -1331,6 +1340,7 @@ io.on('connection', (socket) => {
     io.to(amiralRoom(rt.id)).emit('elements:update', {
       activeElements: activeElementStatesForAmiral(rt.id),
       contributions: contributionsForAmiral(rt),
+      faction: { ...rt.factionResources }, // ressources de faction PARTAGEES (sync immediate)
       // Diffuse les etats de tourelles : leur puissance/range derive du nombre d'acteurs actifs.
       states: turretStatesPayload(rt)
     });
@@ -2362,7 +2372,7 @@ function enemyFireServer(rt, en, mode, targetId, cx, cy, day) {
   });
   if (mode === 'base') applyBaseDamage(rt, dmg);
   else if (mode === 'turret' && targetId) applyTurretDamage(rt, targetId, dmg);
-  // mode 'ship' : pas de degats au vaisseau (parite avec le comportement client d'origine)
+  else if (mode === 'ship') applyShipDamage(rt, dmg); // les ennemis attaquent aussi le vaisseau
 }
 
 // Cycle d'engagement d'un ennemi : orbite -> plongee (tir) -> degagement -> orbite.
@@ -2402,28 +2412,31 @@ function tickEnemyEngage(rt, combat, en, cx, cy, orbitR, dt, now, mode, targetId
 }
 
 // Deplacement + selection de cible d'un ennemi (priorite tourelle proche > vaisseau proche > base).
+// Choix de cible STICKY (evite les mouvements erratiques) :
+//  - on garde la tourelle visee tant qu'elle est vivante ;
+//  - on garde le vaisseau tant qu'il reste a portee (COMBAT_DETECT_RANGE), sinon on le LACHE ;
+//  - (re)choix : vaisseau si proche > tourelle la plus proche > base.
+function pickEnemyTarget(en, defenders) {
+  const shipT = defenders.find(d => d.kind === 'ship');
+  const shipDist = shipT ? Math.hypot(en.x - shipT.x, en.y - shipT.y) : Infinity;
+  if (en.engageRef === 'ship') {
+    if (shipT && shipDist < COMBAT_DETECT_RANGE) return shipT; // on reste sur le vaisseau
+  } else if (en.engageRef && en.engageRef !== 'base') {
+    const t = defenders.find(d => d.kind === 'turret' && d.id === en.engageRef);
+    if (t) return t; // tourelle encore vivante -> on reste dessus
+  }
+  if (shipT && shipDist < COMBAT_DETECT_RANGE) return shipT; // vaisseau a portee = cible prioritaire
+  let nt = null, nd = Infinity;
+  for (const d of defenders) if (d.kind === 'turret') { const dd = Math.hypot(en.x - d.x, en.y - d.y); if (dd < nd) { nd = dd; nt = d; } }
+  return nt || { kind: 'base' };
+}
 function tickEnemyServer(rt, combat, en, defenders, dt, now, day) {
-  let best = null, bestTurretDist = Infinity;
-  for (const t of defenders) {
-    if (t.kind !== 'turret') continue;
-    const d = Math.hypot(en.x - t.x, en.y - t.y);
-    if (d < bestTurretDist) { best = t; bestTurretDist = d; }
-  }
-  const shipT = defenders.find(t => t.kind === 'ship');
-  if (shipT) {
-    const sd = Math.hypot(en.x - shipT.x, en.y - shipT.y);
-    if (sd < COMBAT_DETECT_RANGE && sd < bestTurretDist) best = shipT;
-  }
-  let mode, cx, cy, orbitR, targetId = null;
-  if (best) {
-    mode = best.kind; cx = best.x; cy = best.y; orbitR = en.orbitRadius;
-    targetId = best.id || null;
-    const ref = best.kind === 'turret' ? best.id : 'ship';
-    if (en.engageRef !== ref) { en.engageRef = ref; en.engaging = false; }
-  } else {
-    if (en.engageRef !== 'base') { en.engageRef = 'base'; en.engaging = false; }
-    mode = 'base'; cx = BASE_X; cy = BASE_Y; orbitR = BASE_PERIMETER + en.orbitRadius;
-  }
+  const target = pickEnemyTarget(en, defenders);
+  const ref = target.kind === 'turret' ? target.id : target.kind; // turretId | 'ship' | 'base'
+  if (en.engageRef !== ref) { en.engageRef = ref; en.engaging = false; }
+  let mode = target.kind, cx, cy, orbitR, targetId = null;
+  if (target.kind === 'base') { cx = BASE_X; cy = BASE_Y; orbitR = BASE_PERIMETER + en.orbitRadius; }
+  else { cx = target.x; cy = target.y; orbitR = en.orbitRadius; targetId = target.id || null; }
   const distToCenter = Math.hypot(en.x - cx, en.y - cy);
   if (!en.engaging && distToCenter > orbitR + 6) {
     const dx = cx - en.x, dy = cy - en.y, dn = distToCenter || 1;
