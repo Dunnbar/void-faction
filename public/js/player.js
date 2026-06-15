@@ -26,8 +26,8 @@ function startBaseClock() {
   if (baseClockInterval) return;
   baseClockInterval = setInterval(tick, 1000);
 }
-const ZOOM_FACTOR_MIN = 0.25;  // plage de zoom reduite de moitie (vue plus large du champ de bataille)
-const ZOOM_FACTOR_MAX = 0.65;
+const ZOOM_FACTOR_MIN = 0.2;   // vue large du champ de bataille (0.2) jusqu'au zoom natif (1.0)
+const ZOOM_FACTOR_MAX = 1.0;
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
