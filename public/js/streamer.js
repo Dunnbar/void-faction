@@ -546,7 +546,13 @@ function wireSocketEvents() {
       }
     }
   });
-  socket.on('resource', () => { /* ressource de faction globale non affichee */ });
+  socket.on('resource', () => { /* ressource globale non affichee */ });
+  // Ressources PERSONNELLES de l'Amiral : son propre stock (ce qu'il mine / depense).
+  socket.on('resources:self', (data) => {
+    factionResources = { materiaux: data.materiaux || 0, radius: data.radius || 0 };
+    SharedScene.updateStatsPanel();
+    if (actionMenuElementId && !actionMenu.classList.contains('hidden')) openActionMenu(actionMenuElementId, null, true);
+  });
   socket.on('elements:update', (data) => {
     // Ne pas ecraser la liste active sur les broadcasts partiels (qui n'envoient que des states).
     if (Array.isArray(data.activeElements)) lastActiveElements = data.activeElements;
@@ -555,7 +561,6 @@ function wireSocketEvents() {
       // Fusion (pas de remplacement) : les broadcasts partiels (base, asteroides) ne doivent pas s'ecraser
       for (const s of data.states) elementStates.set(s.id, s);
     }
-    if (data.faction) factionResources = data.faction;
     const scene = game?.scene.getScene('main');
     if (scene && scene.scene.isActive()) {
       scene.refreshElementHighlights(lastActiveElements);

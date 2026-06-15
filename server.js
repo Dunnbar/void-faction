@@ -408,6 +408,11 @@ db.exec(`
     db.exec("ALTER TABLE user_progress ADD COLUMN xp_defensif INTEGER NOT NULL DEFAULT 0");
     db.exec("ALTER TABLE user_progress ADD COLUMN xp_utilitaire INTEGER NOT NULL DEFAULT 0");
   }
+  // Ressources PERSONNELLES du viewer (chacun garde ce qu'il mine, depense ce qu'il a).
+  if (cols.length && !cols.find(c => c.name === 'res_materiaux')) {
+    db.exec("ALTER TABLE user_progress ADD COLUMN res_materiaux INTEGER NOT NULL DEFAULT 0");
+    db.exec("ALTER TABLE user_progress ADD COLUMN res_radius INTEGER NOT NULL DEFAULT 0");
+  }
 }
 db.prepare("INSERT OR IGNORE INTO state (key, value) VALUES ('resource', '0')").run();
 
@@ -422,6 +427,9 @@ const stmtAllAmirals         = db.prepare('SELECT id, username, grid_x, grid_y, 
 const stmtSetAmiralShip      = db.prepare('UPDATE amirals SET ship_x = ?, ship_y = ?, ship_rot = ? WHERE id = ?');
 const stmtSetAmiralBornAt    = db.prepare('UPDATE amirals SET base_born_at = ? WHERE id = ?');
 const stmtSetAmiralResources = db.prepare('UPDATE amirals SET res_materiaux = ?, res_radius = ? WHERE id = ?');
+// Ressources PERSONNELLES des viewers (chacun garde ce qu'il mine).
+const stmtGetUserResources   = db.prepare('SELECT res_materiaux, res_radius FROM user_progress WHERE user_id = ?');
+const stmtSetUserResources   = db.prepare('UPDATE user_progress SET res_materiaux = ?, res_radius = ? WHERE user_id = ?');
 const stmtAmiralGridUsed     = db.prepare('SELECT 1 AS x FROM amirals WHERE grid_x = ? AND grid_y = ?');
 const stmtInsertAmiralSess   = db.prepare('INSERT INTO amiral_sessions (token, amiral_id, created_at) VALUES (?, ?, ?)');
 const stmtGetAmiralSess      = db.prepare('SELECT amiral_id FROM amiral_sessions WHERE token = ?');
@@ -513,8 +521,8 @@ function persistElementStates(rt) {
     if (!s) continue;
     try { stmtUpsertElementState.run(rt.id, el.id, s.hp, el.type === 'base' ? s.essence : null, (el.type === 'turret' && s.dead) ? 1 : 0); } catch (e) {}
   }
-  // Ressources de faction (minage) : persistees ici aussi, meme cadence que HP/essence.
-  try { stmtSetAmiralResources.run(Math.round(rt.factionResources.materiaux || 0), Math.round(rt.factionResources.radius || 0), rt.id); } catch (e) {}
+  // Les ressources sont desormais PERSONNELLES (par acteur) et persistees a la source
+  // (saveActorResources), plus ici.
 }
 
 // Amiral progression
@@ -584,8 +592,7 @@ function getOrCreateAmiralRuntime(amiral) {
     elements,
     elementById: Object.fromEntries(elements.map(e => [e.id, e])),
     elementStates,
-    // Ressources de faction restaurees depuis la DB (persistent entre redemarrages).
-    factionResources: { materiaux: amiral.res_materiaux || 0, radius: amiral.res_radius || 0 },
+    // Ressources : desormais PERSONNELLES par acteur (cf. actorResCache), plus de pool de faction.
     currentWave: null,
     asteroidGroups: makeFreshAsteroidGroups()
   };
@@ -649,7 +656,6 @@ function getDemoRuntime() {
     elements,
     elementById: Object.fromEntries(elements.map(e => [e.id, e])),
     elementStates,
-    factionResources: { materiaux: 0, radius: 0 },
     currentWave: null,
     asteroidGroups: makeFreshAsteroidGroups()
   };
@@ -735,17 +741,14 @@ function rebirthBase(rt) {
   state.essence = state.essenceMax;
   state.bornAt = Date.now();
   if (rt.id !== 0) { try { stmtSetAmiralBornAt.run(state.bornAt, rt.id); } catch (e) {} }
-  // Renaissance = RESET TOTAL : ressources a 0, tourelles + vaisseau pleine vie, gisements
-  // restaures, vague en cours annulee, toutes les actions coupees. Seuls les NIVEAUX des
-  // joueurs sont conserves (on ne touche pas a user_progress / xp).
-  rt.factionResources.materiaux = 0;
-  rt.factionResources.radius = 0;
-  if (rt.id !== 0) { try { stmtSetAmiralResources.run(0, 0, rt.id); } catch (e) {} }
+  // Renaissance = tourelles + vaisseau pleine vie, gisements restaures, vague en cours annulee,
+  // toutes les actions coupees. Les NIVEAUX et les RESSOURCES PERSONNELLES des joueurs sont
+  // conserves (les ressources minees appartiennent au joueur, pas a la base).
   for (const el of rt.elements) {
     const s = rt.elementStates.get(el.id);
     if (!s) continue;
     if (el.type === 'turret') { s.hp = s.hpMax; s.dead = false; }
-    else if (el.type === 'ship') { s.hp = s.hpMax; }
+    else if (el.type === 'ship') { s.hp = s.hpMax; s.dead = false; }
   }
   clearAllActionsForAmiral(rt);
   rt.currentWave = null;
@@ -756,8 +759,7 @@ function rebirthBase(rt) {
   io.to(amiralRoom(rt.id)).emit('base:reborn', { id: baseEl.id, state: publicElementState(rt, baseEl.id) });
   io.to(amiralRoom(rt.id)).emit('elements:update', {
     states: allElementStates(rt),
-    activeElements: activeElementStatesForAmiral(rt.id),
-    faction: { ...rt.factionResources }
+    activeElements: activeElementStatesForAmiral(rt.id)
   });
   logJournal(rt, 'base_reborn', `La base renaît — jour 0`);
   console.log(`[amiral ${rt.username}] base ${baseEl.id} renaissance (jour 0)`);
@@ -1265,7 +1267,7 @@ io.on('connection', (socket) => {
       : null,
     elements: rtForInit ? rtForInit.elements : [],
     elementStates: rtForInit ? allElementStates(rtForInit) : [],
-    factionResources: rtForInit ? { ...rtForInit.factionResources } : { materiaux: 0, radius: 0 },
+    factionResources: selfResourcesForSocket(socket), // stock PERSONNEL du socket connecte (materiaux/radius)
     activeAction: userActiveAction || null,
     actionDurationMs: ACTION_MAX_DURATION_MS,
     actionTickMs: ACTION_TICK_MS,
@@ -1321,11 +1323,12 @@ io.on('connection', (socket) => {
         return respond({ ok: false, error: 'astéroïdes détruits (respawn en cours)' });
       }
     }
-    // Ressources requises : reparation coute des Materiaux, remplir coute du Radius.
-    if (actionId === 'reparation' && (rt.factionResources.materiaux || 0) <= 0) {
+    // Ressources requises (stock PERSONNEL de l'acteur) : reparation coute des Materiaux, remplir du Radius.
+    const actorRes = getActorResources(actor);
+    if (actionId === 'reparation' && (actorRes.materiaux || 0) <= 0) {
       return respond({ ok: false, error: 'Pas assez de matériaux' });
     }
-    if (actionId === 'remplir' && (rt.factionResources.radius || 0) <= 0) {
+    if (actionId === 'remplir' && (actorRes.radius || 0) <= 0) {
       return respond({ ok: false, error: 'Pas assez de radius' });
     }
 
@@ -1345,7 +1348,6 @@ io.on('connection', (socket) => {
     io.to(amiralRoom(rt.id)).emit('elements:update', {
       activeElements: activeElementStatesForAmiral(rt.id),
       contributions: contributionsForAmiral(rt),
-      faction: { ...rt.factionResources }, // ressources de faction PARTAGEES (sync immediate)
       // Diffuse les etats de tourelles : leur puissance/range derive du nombre d'acteurs actifs.
       states: turretStatesPayload(rt)
     });
@@ -1526,7 +1528,8 @@ io.on('connection', (socket) => {
 // ============ Logique d'effet ============
 
 // amount = contribution de l'acteur (= son niveau dans la categorie, 1-3 ; 1 pour l'Amiral).
-function applyActionEffect(rt, actionId, element, amount = 1) {
+// actorRes = stock PERSONNEL de l'acteur { materiaux, radius } : minage le credite, reparation/remplir le debitent.
+function applyActionEffect(rt, actionId, element, amount = 1, actorRes = { materiaux: 0, radius: 0 }) {
   const state = rt.elementStates.get(element.id);
   if (!state) return false;
   // Astéroïde : verifier que le groupe n'est pas detruit
@@ -1544,9 +1547,9 @@ function applyActionEffect(rt, actionId, element, amount = 1) {
       return true;
     case 'reparation': {
       if (state.hp >= state.hpMax) return false;
-      // Cout : 1 Materiau par PV repare. Penurie -> 'no_resource' (l'action sera annulee).
-      if ((rt.factionResources.materiaux || 0) < amount) return 'no_resource';
-      rt.factionResources.materiaux -= amount;
+      // Cout : 1 Materiau par PV repare, pris sur le stock PERSONNEL. Penurie -> 'no_resource'.
+      if ((actorRes.materiaux || 0) < amount) return 'no_resource';
+      actorRes.materiaux -= amount;
       const wasDead = (element.type === 'turret' || element.type === 'ship') && state.dead;
       state.hp = Math.min(state.hp + amount, state.hpMax);
       // Tourelle/vaisseau en reparation : reactive des 50% HP (+ journal).
@@ -1558,15 +1561,15 @@ function applyActionEffect(rt, actionId, element, amount = 1) {
     }
     case 'remplir':
       if (state.essence >= state.essenceMax) return false;
-      // Cout : 1 Radius par point d'essence. Penurie -> 'no_resource'.
-      if ((rt.factionResources.radius || 0) < amount) return 'no_resource';
-      rt.factionResources.radius -= amount;
+      // Cout : 1 Radius par point d'essence, pris sur le stock PERSONNEL. Penurie -> 'no_resource'.
+      if ((actorRes.radius || 0) < amount) return 'no_resource';
+      actorRes.radius -= amount;
       state.essence = Math.min(state.essence + amount, state.essenceMax);
       return true;
     case 'minage':
-      // Produit des ressources proportionnellement au niveau UTILITAIRE du joueur.
-      if (state.subtype === 'materiaux') rt.factionResources.materiaux += amount;
-      else if (state.subtype === 'radius') rt.factionResources.radius += amount;
+      // Produit des ressources sur le stock PERSONNEL de l'acteur (proportionnel a son niveau UTILITAIRE).
+      if (state.subtype === 'materiaux') actorRes.materiaux += amount;
+      else if (state.subtype === 'radius') actorRes.radius += amount;
       return true;
     default:
       return false;
@@ -1796,6 +1799,48 @@ function notifyActorActionState(actor, payload) {
   }
 }
 
+// ===== Ressources PERSONNELLES par acteur =====
+// Chaque acteur (amiral ou viewer) garde ses propres materiaux/radius : ce qu'il mine est a lui,
+// il ne depense que son propre stock. Amiral -> colonnes amirals.res_* ; viewer -> user_progress.res_*.
+const actorResCache = new Map(); // "type:id" -> { materiaux, radius }
+function actorResKey(actor) { return actor.type + ':' + actor.id; }
+function loadActorResources(actor) {
+  if (actor.type === 'amiral') {
+    const a = stmtGetAmiralById.get(actor.id);
+    return { materiaux: a ? (a.res_materiaux || 0) : 0, radius: a ? (a.res_radius || 0) : 0 };
+  }
+  stmtEnsureProgress.run(actor.id);
+  const r = stmtGetUserResources.get(actor.id);
+  return { materiaux: r ? (r.res_materiaux || 0) : 0, radius: r ? (r.res_radius || 0) : 0 };
+}
+function getActorResources(actor) {
+  const k = actorResKey(actor);
+  let r = actorResCache.get(k);
+  if (!r) { r = loadActorResources(actor); actorResCache.set(k, r); }
+  return r;
+}
+function saveActorResources(actor, res) {
+  const mat = Math.max(0, Math.round(res.materiaux || 0));
+  const rad = Math.max(0, Math.round(res.radius || 0));
+  if (actor.type === 'amiral') { try { stmtSetAmiralResources.run(mat, rad, actor.id); } catch (e) {} }
+  else { stmtEnsureProgress.run(actor.id); try { stmtSetUserResources.run(mat, rad, actor.id); } catch (e) {} }
+}
+// Envoie a l'acteur (ses sockets) son propre solde de ressources.
+function notifyActorResources(actor) {
+  const res = getActorResources(actor);
+  const payload = { materiaux: res.materiaux || 0, radius: res.radius || 0 };
+  const set = actor.type === 'amiral' ? amiralSocketsById.get(actor.id) : socketsByUser.get(actor.id);
+  if (!set) return;
+  for (const s of set) s.emit('resources:self', payload);
+}
+// Solde a injecter dans l'init (le socket connecte voit SES propres ressources).
+function selfResourcesForSocket(socket) {
+  const actor = getSocketActor(socket);
+  if (!actor) return { materiaux: 0, radius: 0 };
+  const res = getActorResources(actor);
+  return { materiaux: res.materiaux || 0, radius: res.radius || 0 };
+}
+
 function settleActionGeneric(actor, action, now, rt) {
   const cap = action.started_at + ACTION_MAX_DURATION_MS;
   const settledThrough = Math.min(now, cap);
@@ -1813,11 +1858,18 @@ function settleActionGeneric(actor, action, now, rt) {
   let effect = 0;      // effet reellement contribue par cet acteur (PV repares / minerai mine / ...)
   if (element) {
     const amount = actorContribution(actor, action.category); // niveau du joueur (1-3), 1 pour l'Amiral
+    // Ressources PERSONNELLES de l'acteur : minage credite SON stock, reparation/remplir le debitent.
+    const actorRes = getActorResources(actor);
+    const matBefore = actorRes.materiaux, radBefore = actorRes.radius;
     for (let i = 0; i < delta; i++) {
-      const applied = applyActionEffect(rt, action.action_id, element, amount);
+      const applied = applyActionEffect(rt, action.action_id, element, amount, actorRes);
       if (applied === 'no_resource') { blocked = true; break; }
       if (!applied) break;
       effect += amount;
+    }
+    if (actorRes.materiaux !== matBefore || actorRes.radius !== radBefore) {
+      saveActorResources(actor, actorRes);
+      notifyActorResources(actor); // chaque acteur voit SON propre solde se mettre a jour
     }
   }
   return { delta, blocked, effect };
@@ -1916,8 +1968,7 @@ function tickActions() {
       io.to(amiralRoom(amiralId)).emit('elements:update', {
         activeElements: activeElementStatesForAmiral(amiralId),
         contributions: contributionsForAmiral(rt),
-        states: allElementStates(rt),
-        faction: { ...rt.factionResources }
+        states: allElementStates(rt)
       });
       // Gain de PV total ce tick (reparation) -> flash "+N" sur l'element, vu par toute la room.
       for (const el of rt.elements) {

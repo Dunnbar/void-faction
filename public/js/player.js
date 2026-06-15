@@ -1025,7 +1025,8 @@ function connectSocket() {
     }
     serverElements = Array.isArray(data.elements) ? data.elements : [];
     elementStates = new Map((data.elementStates || []).map(s => [s.id, s]));
-    factionResources = data.factionResources || { materiaux: 0, radius: 0 };
+    factionResources = data.factionResources || { materiaux: 0, radius: 0 }; // stock PERSONNEL
+    renderFactionResources();
     activeAction = data.activeAction || null;
     progress = data.progress || { puissance: 0, defensif: 0, utilitaire: 0, total: 0 };
     previousProgress = { ...progress };
@@ -1086,6 +1087,14 @@ function connectSocket() {
   });
 
   socket.on('resource', (data) => { if (resourceEl) resourceEl.textContent = data.resource; });
+  // Ressources PERSONNELLES : chaque joueur recoit SON propre solde (ce qu'il a mine / depense).
+  socket.on('resources:self', (data) => {
+    factionResources = { materiaux: data.materiaux || 0, radius: data.radius || 0 };
+    renderFactionResources();
+    SharedScene.updateStatsPanel();
+    // Rafraichit le menu d'action ouvert (etat "pas assez de ressources").
+    if (actionMenuElementId && actionMenu && !actionMenu.classList.contains('hidden')) openActionMenu(actionMenuElementId, null, true);
+  });
 
   socket.on('ship', (data) => {
     latestShipState = data;
@@ -1180,10 +1189,6 @@ function connectSocket() {
     if (Array.isArray(data.states)) {
       // Fusion (pas de remplacement) : les broadcasts partiels (base, asteroides) ne doivent pas s'ecraser
       for (const s of data.states) elementStates.set(s.id, s);
-    }
-    if (data.faction) {
-      factionResources = data.faction;
-      renderFactionResources();
     }
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) {
