@@ -754,9 +754,23 @@ function chatMsgHtml(m) {
        + `<span class="cm-text">${escapeHtml(m.message || '')}</span>`
        + `<span class="cm-time">${chatClock(m.at)}</span></div>`;
 }
+// Cle de jour (date locale) + libelle pour les separateurs de jour dans le chat.
+function chatDayKey(at) { const d = new Date(at); return `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`; }
+function chatDayLabel(at) {
+  const s = new Date(at).toLocaleDateString('fr-FR', { weekday: 'long', day: 'numeric', month: 'long' });
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
 function renderChat() {
   if (!chatListEl) return;
-  chatListEl.innerHTML = chat.map(chatMsgHtml).join('');
+  let html = '', lastDay = null;
+  for (const m of chat) {
+    if (m && m.at) {
+      const k = chatDayKey(m.at);
+      if (k !== lastDay) { html += `<div class="chat-day"><span>${escapeHtml(chatDayLabel(m.at))}</span></div>`; lastDay = k; }
+    }
+    html += chatMsgHtml(m);
+  }
+  chatListEl.innerHTML = html;
   chatListEl.scrollTop = chatListEl.scrollHeight;
 }
 function addChatMessage(m) {

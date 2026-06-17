@@ -253,6 +253,8 @@
     #chat .jr-head .icon { color: var(--c-frame); vertical-align: -2px; }
     .chat-list { max-height: 30vh; overflow-y: auto; display: flex; flex-direction: column; gap: 3px; padding: 6px 10px; }
     .chat-list:empty::after { content: "Aucun message. Lance la discussion !"; color: #5d7b9c; font-style: italic; }
+    .chat-day { display: flex; align-items: center; gap: 8px; margin: 8px 0 6px; color: #7f97ad; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; }
+    .chat-day::before, .chat-day::after { content: ''; flex: 1; height: 1px; background: rgba(127,151,173,0.3); }
     .chat-msg { line-height: 1.45; }
     .chat-msg .cm-lvl { display: inline-block; margin-right: 5px; padding: 0 5px; border-radius: 8px; font-size: 10px; font-weight: bold; color: #04121f; background: #6fc0ff; vertical-align: 1px; }
     .chat-msg .cm-lvl.lvl1 { background: #cd7f32; color: #1c0f00; }  /* bronze */
