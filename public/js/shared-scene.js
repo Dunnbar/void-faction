@@ -685,12 +685,15 @@
     scene._waveOrigin = null;
     if (scene._waveEdge) scene._waveEdge.setVisible(false);
   }
-  // A appeler chaque frame : place le marqueur sur le bord de l'ecran (independant du zoom).
+  // A appeler chaque frame : place le marqueur sur le bord de l'ecran, dans la direction de la
+  // vague. Le marqueur est un objet MONDE (pas scrollFactor 0) place au bord du worldView visible
+  // -> il colle reellement au bord quel que soit le zoom ; on contre-echelle pour garder une
+  // taille ecran constante.
   function updateWaveEdgeIndicator(scene) {
     const o = scene._waveOrigin;
     if (!scene._waveEdge) {
       // Logo "warning" : triangle jaune borde de noir avec un "!".
-      const c = scene.add.container(0, 0).setScrollFactor(0).setDepth(40).setVisible(false);
+      const c = scene.add.container(0, 0).setDepth(40).setVisible(false);
       const R = 19;
       const g = scene.add.graphics();
       g.fillStyle(0xffcc00, 0.95); g.lineStyle(3, 0x101010, 0.95);
@@ -698,25 +701,25 @@
       g.fillPath(); g.strokePath();
       const txt = scene.add.text(0, R * 0.12, '!', { fontFamily: 'Consolas, monospace', fontSize: '19px', color: '#101010', fontStyle: 'bold' }).setOrigin(0.5);
       c.add([g, txt]);
-      scene.tweens.add({ targets: c, scaleX: { from: 1, to: 1.18 }, scaleY: { from: 1, to: 1.18 }, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
+      c._pulse = 1;
+      scene.tweens.add({ targets: c, _pulse: 1.18, yoyo: true, repeat: -1, duration: 600, ease: 'Sine.easeInOut' });
       scene._waveEdge = c;
     }
     const marker = scene._waveEdge;
     if (!o) { marker.setVisible(false); return; }
     const cam = scene.cameras.main, v = cam.worldView;
-    const sx = (o.x - v.x) * cam.zoom, sy = (o.y - v.y) * cam.zoom;
-    const W = cam.width, H = cam.height, m = 30, cx = W / 2, cy = H / 2;
-    // Le marqueur reste TOUJOURS colle au bord de l'ecran, dans la direction de la vague
-    // (meme si la provenance est visible a l'ecran).
-    let ang = Math.atan2(sy - cy, sx - cx);
-    if (Math.abs(sx - cx) < 1e-6 && Math.abs(sy - cy) < 1e-6) ang = -Math.PI / 2; // origine au centre -> haut
-    const hw = W / 2 - m, hh = H / 2 - m;
+    const cx = v.centerX, cy = v.centerY;          // centre de la vue, en coordonnees MONDE
+    let ang = Math.atan2(o.y - cy, o.x - cx);
+    if (Math.abs(o.x - cx) < 1e-6 && Math.abs(o.y - cy) < 1e-6) ang = -Math.PI / 2; // origine au centre -> haut
+    const mWorld = 28 / cam.zoom;                  // marge ~28px ecran convertie en monde
+    const hw = v.width / 2 - mWorld, hh = v.height / 2 - mWorld;
     const tx = Math.abs(Math.cos(ang)) < 1e-6 ? Infinity : hw / Math.abs(Math.cos(ang));
     const ty = Math.abs(Math.sin(ang)) < 1e-6 ? Infinity : hh / Math.abs(Math.sin(ang));
     const t = Math.min(tx, ty);
     marker.setVisible(true);
     marker.x = cx + Math.cos(ang) * t;
     marker.y = cy + Math.sin(ang) * t;
+    marker.setScale((marker._pulse || 1) / cam.zoom); // taille ecran constante + pulsation
   }
 
   // Centre la vue sur un point monde (borne a la case courante). Utilise pour le double-clic zoom.
