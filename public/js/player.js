@@ -26,8 +26,8 @@ function startBaseClock() {
   if (baseClockInterval) return;
   baseClockInterval = setInterval(tick, 1000);
 }
-const ZOOM_FACTOR_MIN = 0.4;   // vue large du champ de bataille (0.4) jusqu'au zoom max (0.65)
-const ZOOM_FACTOR_MAX = 0.65;
+const ZOOM_FACTOR_MIN = 0.4;   // vue large du champ de bataille (0.4) jusqu'au zoom max (1.0 = une case plein ecran)
+const ZOOM_FACTOR_MAX = 1.0;
 const ACTION_MAX_DURATION_MS_DEFAULT = 60 * 60 * 1000;
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
@@ -1411,7 +1411,7 @@ class MainScene extends Phaser.Scene {
     // Systeme de "cases" : le viewer voit une case a la fois (une case entiere tient a
     // l'ecran a userZoomFactor=1). La camera ne suit PAS automatiquement le vaisseau ;
     // le viewer se deplace librement et utilise la minimap pour rejoindre le streameur.
-    this._userZoomFactor = 0.5; // demarre dezoome (vue ~2x plus large que la case)
+    this._userZoomFactor = 0.7; // demarre a mi-zoom (molette pour s'eloigner/s'approcher)
     this.applyFitZoom();
     SharedScene.updateCaseCamera(this, this.ship ? this.ship.x : BASE_X, this.ship ? this.ship.y : BASE_Y);
     this._cameraInitFromShip = false; // recadre une 1re fois sur le vaisseau des reception de sa position

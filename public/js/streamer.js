@@ -26,8 +26,8 @@ function startBaseClock() {
   if (baseClockInterval) return;
   baseClockInterval = setInterval(tick, 1000);
 }
-const ZOOM_FACTOR_MIN = 0.4;   // vue large du champ de bataille (0.4) jusqu'au zoom max (0.65)
-const ZOOM_FACTOR_MAX = 0.65;
+const ZOOM_FACTOR_MIN = 0.4;   // vue large du champ de bataille (0.4) jusqu'au zoom max (1.0 = une case plein ecran)
+const ZOOM_FACTOR_MAX = 1.0;
 
 let amiralToken = localStorage.getItem('voidfaction:amiralToken') || null;
 let socket = null;
@@ -1015,7 +1015,7 @@ class MainScene extends Phaser.Scene {
     // Caméra : systeme de "cases". La camera reste centree sur la case courante
     // (WORLD_W x WORLD_H) et bascule sur la voisine quand le vaisseau franchit une
     // frontiere (= sort de l'ecran). Pas de follow continu, pas de derive au zoom.
-    this._userZoomFactor = 0.5; // demarre dezoome (vue ~2x plus large que la case)
+    this._userZoomFactor = 0.7; // demarre a mi-zoom (molette pour s'eloigner/s'approcher)
     this.applyFitZoom();
     SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y); // centrage initial sur la case du vaisseau
     // (Minimap retiree : le monde tient sur un seul ecran, plus de navigation multi-cases.)
