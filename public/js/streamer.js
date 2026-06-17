@@ -26,7 +26,7 @@ function startBaseClock() {
   if (baseClockInterval) return;
   baseClockInterval = setInterval(tick, 1000);
 }
-const ZOOM_FACTOR_MIN = 0.4;   // vue large du champ de bataille (0.4) jusqu'au zoom max (1.0 = une case plein ecran)
+const ZOOM_FACTOR_MIN = 0.25;  // vue large du champ de bataille (0.25) jusqu'au zoom max (1.0 = une case plein ecran)
 const ZOOM_FACTOR_MAX = 1.0;
 
 let amiralToken = localStorage.getItem('voidfaction:amiralToken') || null;
