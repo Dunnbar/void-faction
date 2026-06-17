@@ -463,10 +463,37 @@ function renderDashboard(data) {
   const esc = (s) => String(s).replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c]));
   list.innerHTML = users.map(u => {
     const lv = u.levels || { puissance:1, defensif:1, utilitaire:1 };
-    return `<div class="dash-row ${u.online ? 'online' : 'offline'}"><span class="dot"></span>`
+    const banBtn = u.banned
+      ? `<button class="dash-act unban" data-uid="${u.id}" data-act="unban" title="Réintégrer ce joueur">Débannir</button>`
+      : `<button class="dash-act ban" data-uid="${u.id}" data-act="ban" title="Bannir (chat + actions)">Bannir</button>`;
+    const resetBtn = `<button class="dash-act reset" data-uid="${u.id}" data-act="reset" data-name="${esc(u.username)}" title="Remettre ses niveaux à zéro">Reset niv.</button>`;
+    return `<div class="dash-row ${u.online ? 'online' : 'offline'}${u.banned ? ' banned' : ''}"><span class="dot"></span>`
       + `<span class="name">${esc(u.username)}</span>`
-      + `<span class="lv"><span class="p">P${lv.puissance}</span> <span class="d">D${lv.defensif}</span> <span class="u">U${lv.utilitaire}</span></span></div>`;
+      + `<span class="lv"><span class="p">P${lv.puissance}</span> <span class="d">D${lv.defensif}</span> <span class="u">U${lv.utilitaire}</span></span>`
+      + `<span class="dash-acts">${banBtn}${resetBtn}</span></div>`;
   }).join('');
+}
+// Actions du panel communaute (delegation) : bannir / debannir / reset niveaux.
+function wireDashboardActions() {
+  const list = document.getElementById('dashList');
+  if (!list || list._wired) return;
+  list._wired = true;
+  list.addEventListener('click', (e) => {
+    const btn = e.target.closest('.dash-act');
+    if (!btn) return;
+    const uid = parseInt(btn.dataset.uid, 10);
+    const act = btn.dataset.act;
+    if (!uid) return;
+    if (act === 'reset') {
+      if (!confirm(`Remettre à zéro les niveaux de ${btn.dataset.name || 'ce joueur'} ?`)) return;
+      socket.emit('amiral:reset_levels', { userId: uid }, () => {});
+    } else if (act === 'ban') {
+      if (!confirm('Bannir ce joueur (chat + actions) ?')) return;
+      socket.emit('chat:moderate', { userId: uid, action: 'ban' }, () => {});
+    } else if (act === 'unban') {
+      socket.emit('chat:moderate', { userId: uid, action: 'unban' }, () => {});
+    }
+  });
 }
 
 function wireSocketEvents() {
@@ -668,7 +695,7 @@ function wireSocketEvents() {
     localStorage.removeItem('voidfaction:amiralToken');
     location.reload();
   });
-  socket.on('dashboard', (data) => renderDashboard(data));
+  socket.on('dashboard', (data) => { renderDashboard(data); wireDashboardActions(); });
   socket.on('action:state', (data) => {
     activeAction = data?.activeAction || null;
     renderActiveAction();

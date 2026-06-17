@@ -445,6 +445,8 @@ const stmtDeleteSession      = db.prepare('DELETE FROM sessions WHERE token = ?'
 
 const stmtEnsureProgress = db.prepare('INSERT OR IGNORE INTO user_progress (user_id) VALUES (?)');
 const stmtGetProgress    = db.prepare('SELECT puissance, defensif, utilitaire, total FROM user_progress WHERE user_id = ?');
+// Remise a zero des niveaux/XP d'un joueur (action Amiral). Conserve les ressources personnelles.
+const stmtResetProgress  = db.prepare('UPDATE user_progress SET puissance = 0, defensif = 0, utilitaire = 0, total = 0, xp_puissance = 0, xp_defensif = 0, xp_utilitaire = 0 WHERE user_id = ?');
 const stmtIncPuissance   = db.prepare('UPDATE user_progress SET puissance = puissance + ?, total = total + ? WHERE user_id = ?');
 const stmtIncDefensif    = db.prepare('UPDATE user_progress SET defensif  = defensif  + ?, total = total + ? WHERE user_id = ?');
 const stmtIncUtilitaire  = db.prepare('UPDATE user_progress SET utilitaire = utilitaire + ?, total = total + ? WHERE user_id = ?');
@@ -1494,7 +1496,31 @@ io.on('connection', (socket) => {
     }
     const uname = stmtGetUserById.get(targetUserId)?.username || `#${targetUserId}`;
     console.log(`[amiral ${socket.data.amiralUsername}] moderation : ${uname} -> ${label}`);
+    pushAmiralDashboard(amiralId); // le panel communaute reflete l'etat banni/reintegre
     reply({ ok: true, action });
+  });
+
+  // Reset des niveaux d'un membre de SA communaute (reservee a l'Amiral). XP + niveaux a zero.
+  socket.on('amiral:reset_levels', (data, cb) => {
+    const reply = (p) => { if (typeof cb === 'function') cb(p); };
+    if (!socket.data.amiralId) return reply({ ok: false, error: 'auth' });
+    const amiralId = socket.data.amiralId;
+    const targetUserId = parseInt(data?.userId, 10);
+    if (!targetUserId) return reply({ ok: false, error: 'no_target' });
+    const target = stmtGetUserById.get(targetUserId);
+    if (!target || target.amiral_id !== amiralId) return reply({ ok: false, error: 'not_member' });
+    stmtEnsureProgress.run(targetUserId);
+    try { stmtResetProgress.run(targetUserId); } catch (e) {}
+    xpEffectAccum.delete(targetUserId); // coupe l'XP de paliers accumulee en memoire (DEF/UTI)
+    // Notifie la cible connectee : ses barres de niveaux/XP repassent a zero en direct.
+    const sockets = socketsByUser.get(targetUserId);
+    if (sockets) {
+      const levels = userLevels(targetUserId), xp = userXp(targetUserId);
+      for (const s of sockets) s.emit('levels', { levels, xp });
+    }
+    pushAmiralDashboard(amiralId);
+    console.log(`[amiral ${socket.data.amiralUsername}] reset niveaux : ${target.username || ('#' + targetUserId)}`);
+    reply({ ok: true });
   });
 
   socket.on('disconnect', () => {
@@ -1693,7 +1719,8 @@ function amiralDashboard(amiralId) {
     const online = !!(set && set.size > 0);
     if (online) connected++;
     const lv = userLevels(u.id);
-    return { username: u.username, online, levels: { puissance: lv.PUISSANCE, defensif: lv.DEFENSIF, utilitaire: lv.UTILITAIRE } };
+    return { id: u.id, username: u.username, online, banned: isBannedFromBase(amiralId, u.id),
+             levels: { puissance: lv.PUISSANCE, defensif: lv.DEFENSIF, utilitaire: lv.UTILITAIRE } };
   });
   // Connectes d'abord, puis par niveau total decroissant
   users.sort((a, b) => (b.online - a.online) ||

@@ -232,6 +232,14 @@
     #profileMenu .dash-row .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     #profileMenu .dash-row .lv { font-size: 10px; letter-spacing: 0.5px; font-variant-numeric: tabular-nums; }
     #profileMenu .dash-row .lv .p { color: #ff8a9c; } #profileMenu .dash-row .lv .d { color: #8ac0ff; } #profileMenu .dash-row .lv .u { color: #ffe08a; }
+    #profileMenu .dash-row.banned .name { color: #ff6b6b; text-decoration: line-through; }
+    #profileMenu .dash-acts { display: flex; gap: 4px; flex-shrink: 0; }
+    #profileMenu .dash-act { font-size: 10px; padding: 2px 6px; border-radius: 4px; border: 1px solid #45506a; background: #1b2436; color: #cdd9e6; cursor: pointer; line-height: 1.3; white-space: nowrap; }
+    #profileMenu .dash-act:hover { background: #26334d; }
+    #profileMenu .dash-act.ban { border-color: #7a3b3b; color: #ff9d9d; }
+    #profileMenu .dash-act.ban:hover { background: #3a1f1f; }
+    #profileMenu .dash-act.unban { border-color: #3b7a4f; color: #9deeb4; }
+    #profileMenu .dash-act.reset { border-color: #7a6a3b; color: #ffe08a; }
     #profileMenu .dash-empty { font-size: 11px; color: #6e8197; font-style: italic; }
     #profileMenu .pm-logout {
       margin-top: 6px; background: transparent; border: 1px solid #f55; color: #f88;
