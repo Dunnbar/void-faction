@@ -194,22 +194,6 @@ function playWaveSound(type) {
   try { const a = base.cloneNode(); a.volume = vol; a.play().catch(() => {}); } catch (e) {}
 }
 
-// Retrospective : capture le canvas Phaser, le reduit (~480px, JPEG) et l'envoie au serveur.
-function captureSnapshot() {
-  const scene = (typeof game !== 'undefined' && game) ? game.scene.getScene('main') : null;
-  if (!scene || !scene.scene.isActive() || !game.renderer || !game.renderer.snapshot) return;
-  try {
-    game.renderer.snapshot((image) => {
-      try {
-        if (!image || !image.width) return;
-        const W = 480, H = Math.max(1, Math.round(W * (image.height / image.width)));
-        const c = document.createElement('canvas'); c.width = W; c.height = H;
-        c.getContext('2d').drawImage(image, 0, 0, W, H);
-        if (socket) socket.emit('snapshot:store', { dataUrl: c.toDataURL('image/jpeg', 0.6) });
-      } catch (e) {}
-    });
-  } catch (e) {}
-}
 const actionChip = document.getElementById('actionChip');   // pastille "action en cours" (barre de ressources)
 const actionGlyph = document.getElementById('actionGlyph');  // cercle teinte par categorie
 const actionIco = document.getElementById('actionIco');      // image de l'icone d'action
@@ -357,6 +341,12 @@ function showWaveBanner(wave, warningRemainingMs) {
   };
   update();
   waveBannerInterval = setInterval(update, 1000);
+}
+// Cache immediatement le banner de vague (ex. vague repoussee avant la fin de la fenetre).
+function hideWaveBanner() {
+  const banner = document.getElementById('waveBanner');
+  if (waveBannerInterval) { clearInterval(waveBannerInterval); waveBannerInterval = null; }
+  if (banner) { banner.classList.add('hidden'); banner.classList.remove('warning', 'active'); }
 }
 
 function formatWaveCountdown(ms) {
@@ -628,49 +618,6 @@ journalBtn?.addEventListener('click', () => { togglePanel('journal'); suppressHi
 chatBtn?.addEventListener('click', () => { togglePanel('chat'); suppressHint(chatBtn); });
 [journalBtn, chatBtn].forEach(b => b?.addEventListener('mouseleave', () => b.classList.remove('suppress-hint')));
 
-// ====== Retrospective 12h : reglette temporelle sur les captures de la base ======
-(function () {
-  const btn = document.getElementById('snapshotBtn');
-  const panel = document.getElementById('snapshotPanel');
-  if (!btn || !panel) return;
-  const img = document.getElementById('snapImg');
-  const empty = document.getElementById('snapEmpty');
-  const slider = document.getElementById('snapSlider');
-  const timeLabel = document.getElementById('snapTimeLabel');
-  const countLabel = document.getElementById('snapCount');
-  let snaps = [];
-  const fmt = (t) => { const d = new Date(t); const hh = String(d.getHours()).padStart(2, '0'); const mm = String(d.getMinutes()).padStart(2, '0'); return `${hh}:${mm}`; };
-  function showIndex(i) {
-    if (!snaps.length) return;
-    i = Math.max(0, Math.min(snaps.length - 1, i));
-    const s = snaps[i];
-    img.src = s.url; img.classList.add('shown');
-    timeLabel.textContent = fmt(s.t);
-    countLabel.textContent = `${i + 1}/${snaps.length}`;
-  }
-  function open() {
-    panel.classList.remove('hidden');
-    suppressHint(btn);
-    if (!socket) return;
-    socket.emit('snapshot:list', (resp) => {
-      snaps = (resp && Array.isArray(resp.snapshots)) ? resp.snapshots : [];
-      if (!snaps.length) {
-        empty.style.display = ''; img.classList.remove('shown'); img.removeAttribute('src');
-        slider.max = 0; slider.value = 0; timeLabel.textContent = '—'; countLabel.textContent = '';
-        return;
-      }
-      empty.style.display = 'none';
-      slider.min = 0; slider.max = snaps.length - 1; slider.value = snaps.length - 1;
-      showIndex(snaps.length - 1); // demarre sur la plus recente
-    });
-  }
-  function close() { panel.classList.add('hidden'); }
-  btn.addEventListener('click', () => { panel.classList.contains('hidden') ? open() : close(); });
-  btn.addEventListener('mouseleave', () => btn.classList.remove('suppress-hint'));
-  document.getElementById('snapClose')?.addEventListener('click', close);
-  slider?.addEventListener('input', () => showIndex(parseInt(slider.value, 10) || 0));
-  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') close(); });
-})();
 chatForm?.addEventListener('submit', (e) => {
   e.preventDefault();
   const text = (chatInput?.value || '').trim();
@@ -1165,10 +1112,9 @@ function connectSocket() {
   socket.on('wave:repelled', () => {
     const scene = game.scene.getScene('main');
     if (scene && scene.scene.isActive()) { SharedScene.clearAllEnemies(scene); if (typeof scene.hideWaveWarnIcon === 'function') scene.hideWaveWarnIcon(); }
+    hideWaveBanner(); hideCaptain(); // la vague est finie : on retire la banniere + le commandant
     try { showVictory(); } catch (e) {}
   });
-  // Retrospective : le serveur nous demande une capture du canvas (cadence ~12 min).
-  socket.on('snapshot:capture', () => captureSnapshot());
 
   // Mise a jour des niveaux (gain d'XP a une vague)
   socket.on('levels', (data) => {

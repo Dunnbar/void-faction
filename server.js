@@ -205,9 +205,6 @@ function initStateFor(el) {
 const dataDir = process.env.DATA_DIR || path.join(__dirname, 'data');
 fs.mkdirSync(dataDir, { recursive: true });
 const dbFilePath = path.join(dataDir, 'voidfaction.db');
-// Captures d'ecran periodiques (retrospective 12h) : un dossier par Amiral.
-const snapshotsDir = path.join(dataDir, 'snapshots');
-fs.mkdirSync(snapshotsDir, { recursive: true });
 const dbExistedBeforeBoot = fs.existsSync(dbFilePath);
 let dbSizeBeforeBoot = 0;
 try { dbSizeBeforeBoot = dbExistedBeforeBoot ? fs.statSync(dbFilePath).size : 0; } catch {}
@@ -1048,9 +1045,6 @@ app.use(express.static(path.join(__dirname, 'public'), {
   }
 }));
 
-// Images de retrospective servies statiquement (cache court).
-app.use('/snapshots', express.static(snapshotsDir, { maxAge: '1h' }));
-
 app.get('/api/amiraux', (_req, res) => {
   // Renvoie TOUS les amiraux (online + offline) pour permettre l'inscription joueur
   // meme si l'Amiral n'est pas connecte au moment du signup
@@ -1410,31 +1404,6 @@ io.on('connection', (socket) => {
     if (!data || typeof data.x !== 'number' || typeof data.y !== 'number' || typeof data.angle !== 'number') return;
     if (!Number.isFinite(data.x) || !Number.isFinite(data.y) || !Number.isFinite(data.angle)) return;
     resolveShipFire(rt, { x: data.x, y: data.y, angle: data.angle, targetId: data.targetId ? String(data.targetId) : null });
-  });
-
-  // Retrospective : depot d'une capture d'ecran (seul le socket sollicite par snapshotTick).
-  socket.on('snapshot:store', (data) => {
-    const amiralId = socket.data.amiralId || socket.data.watchedAmiralId;
-    if (!amiralId) return;
-    const rt = amiralsRuntime.get(amiralId);
-    if (!rt || rt.id === 0) return;
-    if (socket.id !== rt._snapReqSocket || Date.now() - (rt._snapReqAt || 0) > 30000) return; // non sollicite
-    if (!data || typeof data.dataUrl !== 'string') return;
-    const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(data.dataUrl);
-    if (!m) return;
-    const buf = Buffer.from(m[1], 'base64');
-    if (!buf.length || buf.length > SNAPSHOT_MAX_BYTES) return;
-    const dir = snapshotDirFor(amiralId);
-    try { fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, Date.now() + '.jpg'), buf); } catch (e) { return; }
-    rt._snapReqSocket = null;
-    pruneSnapshots(dir);
-  });
-
-  // Retrospective : liste des captures (12h) de la base regardee.
-  socket.on('snapshot:list', (cb) => {
-    if (typeof cb !== 'function') return;
-    const amiralId = socket.data.amiralId || socket.data.watchedAmiralId;
-    cb({ snapshots: amiralId ? listSnapshots(amiralId) : [] });
   });
 
   // "Recommencer" : seul l'Amiral relance sa base apres destruction (HP/essence/jour reinitialises).
@@ -2646,50 +2615,6 @@ function combatTick() {
   }
 }
 setInterval(combatTick, COMBAT_TICK_MS);
-
-// ============================================================================
-// RETROSPECTIVE : captures d'ecran periodiques (12h glissantes)
-// Un seul client par base (amiral en priorite, sinon un viewer) capture son canvas
-// toutes les SNAPSHOT_INTERVAL_MS ; le serveur stocke l'image et purge au-dela de 12h.
-// ============================================================================
-const SNAPSHOT_INTERVAL_MS  = 12 * 60 * 1000;       // cadence de capture (~12 min -> ~60 images/12h)
-const SNAPSHOT_RETENTION_MS = 12 * 60 * 60 * 1000;  // duree conservee (12h)
-const SNAPSHOT_MAX_BYTES    = 400 * 1024;           // garde-fou taille image
-
-function snapshotDirFor(amiralId) { return path.join(snapshotsDir, String(amiralId)); }
-function pruneSnapshots(dir) {
-  let files; try { files = fs.readdirSync(dir); } catch (e) { return; }
-  const cutoff = Date.now() - SNAPSHOT_RETENTION_MS;
-  for (const f of files) {
-    const ts = parseInt(f, 10);
-    if (Number.isFinite(ts) && ts < cutoff) { try { fs.unlinkSync(path.join(dir, f)); } catch (e) {} }
-  }
-}
-function listSnapshots(amiralId) {
-  let files; try { files = fs.readdirSync(snapshotDirFor(amiralId)); } catch (e) { return []; }
-  const cutoff = Date.now() - SNAPSHOT_RETENTION_MS;
-  return files.map(f => parseInt(f, 10)).filter(t => Number.isFinite(t) && t >= cutoff)
-    .sort((a, b) => a - b).map(t => ({ t, url: `/snapshots/${amiralId}/${t}.jpg` }));
-}
-function pickCapturer(rt) {
-  const room = io.sockets.adapter.rooms.get(amiralRoom(rt.id));
-  if (!room || room.size === 0) return null;
-  if (rt.socketId && room.has(rt.socketId)) return rt.socketId; // l'amiral en priorite
-  return room.values().next().value;
-}
-function snapshotTick() {
-  const now = Date.now();
-  for (const rt of amiralsRuntime.values()) {
-    if (rt.id === 0) continue;
-    if (now - (rt._lastSnapAt || 0) < SNAPSHOT_INTERVAL_MS) continue;
-    const sid = pickCapturer(rt);
-    if (!sid) continue;
-    rt._lastSnapAt = now;
-    rt._snapReqSocket = sid; rt._snapReqAt = now;  // seul ce socket pourra deposer l'image
-    io.to(sid).emit('snapshot:capture');
-  }
-}
-setInterval(snapshotTick, 60 * 1000);
 
 server.listen(PORT, () => {
   console.log(`VoidFaction écoute sur le port ${PORT}`);
