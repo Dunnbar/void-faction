@@ -374,6 +374,19 @@
     #profileMenu .pm-action:hover { background: var(--c-frame); color: #04101e; }
     #profileMenu .pm-action.logout { border-color: #f55; color: #f88; }
     #profileMenu .pm-action.logout:hover { background: #f55; color: #000; }
+    #profileMenu .pm-action.reset { border-color: #7a6a3b; color: #ffe08a; }
+    #profileMenu .pm-action.reset:hover { background: #ffe08a; color: #04101e; }
+    #profileMenu .pm-action.reset.hidden { display: none; }
+    /* Modal de confirmation generique */
+    #confirmModal { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; background: rgba(2,6,14,0.72); }
+    #confirmModal.hidden { display: none; }
+    #confirmModal .confirm-box { max-width: 340px; }
+    #confirmModal .confirm-actions { display: flex; gap: 10px; margin-top: 16px; }
+    #confirmModal .confirm-actions button { flex: 1; padding: 9px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 13px; }
+    #confirmModal .cm-cancel { background: #1b2436; color: #cdd9e6; border: 1px solid #45506a; }
+    #confirmModal .cm-cancel:hover { background: #26334d; }
+    #confirmModal .cm-ok { background: #7a3b3b; color: #ffd9d9; border: 1px solid #b86b6b; }
+    #confirmModal .cm-ok:hover { background: #9a4b4b; }
 
     /* Ecran "base detruite" (viewer : info + attente, pas d'action possible) */
     #baseDeadOverlay {
@@ -918,6 +931,7 @@
   <div id="profileMenu" class="hidden">
     <div class="pm-name" id="userLine"><span id="userLabel">Visiteur</span></div>
     <div class="pm-levels-hint" id="pmLevelsHint">Gagne de l'XP en agissant : Attaque en combat, Défense/Utilitaire avec le temps.</div>
+    <button class="pm-action reset hidden" id="pmResetLevels" type="button">Réinitialiser mes niveaux</button>
     <button class="pm-action" id="pmAuthAction" type="button">Connexion</button>
   </div>
 
@@ -993,6 +1007,17 @@
         <button type="submit" id="signupSubmit">Créer un compte</button>
       </form>
       <p id="authError"></p>
+    </div>
+  </div>
+
+  <div id="confirmModal" class="hidden">
+    <div class="modal-box confirm-box">
+      <h2 id="confirmTitle">Confirmation</h2>
+      <p class="subtitle" id="confirmMsg"></p>
+      <div class="confirm-actions">
+        <button id="confirmCancel" type="button" class="cm-cancel">Annuler</button>
+        <button id="confirmOk" type="button" class="cm-ok">Confirmer</button>
+      </div>
     </div>
   </div>
 

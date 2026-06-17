@@ -1523,6 +1523,22 @@ io.on('connection', (socket) => {
     reply({ ok: true });
   });
 
+  // Le joueur peut reinitialiser SES PROPRES niveaux (XP + niveaux a zero). Confirmation cote client.
+  socket.on('user:reset_levels', (_data, cb) => {
+    const reply = (p) => { if (typeof cb === 'function') cb(p); };
+    const uid = socket.data.userId;
+    if (!uid) return reply({ ok: false, error: 'auth' });
+    stmtEnsureProgress.run(uid);
+    try { stmtResetProgress.run(uid); } catch (e) {}
+    xpEffectAccum.delete(uid);
+    const levels = userLevels(uid), xp = userXp(uid);
+    const set = socketsByUser.get(uid);
+    if (set) for (const s of set) s.emit('levels', { levels, xp });
+    if (socket.data.userAmiralId) pushAmiralDashboard(socket.data.userAmiralId); // l'amiral voit la maj
+    console.log(`[joueur ${socket.data.username || uid}] a reinitialise ses niveaux`);
+    reply({ ok: true });
+  });
+
   socket.on('disconnect', () => {
     if (socket.data.amiralId) {
       const rt = amiralsRuntime.get(socket.data.amiralId);

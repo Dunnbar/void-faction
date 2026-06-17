@@ -269,6 +269,9 @@ function updateUserLine() {
   // Les barres d'XP (toujours visibles sous le profil) ne concernent que les joueurs connectes.
   const xpPanel = document.getElementById('xpPanel');
   if (xpPanel) xpPanel.classList.toggle('hidden', !(authenticated && username));
+  // Bouton "Réinitialiser mes niveaux" : reserve aux joueurs connectes.
+  const pmReset = document.getElementById('pmResetLevels');
+  if (pmReset) pmReset.classList.toggle('hidden', !(authenticated && username));
   if (authenticated && username) {
     userLabelEl.textContent = username;
     userLineEl.classList.remove('anon');
@@ -928,6 +931,29 @@ authBtn.addEventListener('click', (e) => {
 document.getElementById('pmAuthAction').addEventListener('click', () => {
   profileMenu.classList.add('hidden');
   doAuthAction();
+});
+// Modal de confirmation generique (fallback sur confirm() natif si le markup manque).
+function showConfirm(message, onOk, title) {
+  const modal = document.getElementById('confirmModal');
+  const msgEl = document.getElementById('confirmMsg');
+  const okBtn = document.getElementById('confirmOk');
+  const cancelBtn = document.getElementById('confirmCancel');
+  if (!modal || !msgEl || !okBtn || !cancelBtn) { if (window.confirm(message)) onOk(); return; }
+  if (title) document.getElementById('confirmTitle').textContent = title;
+  msgEl.textContent = message;
+  const close = () => { modal.classList.add('hidden'); okBtn.onclick = null; cancelBtn.onclick = null; };
+  okBtn.onclick = () => { close(); onOk(); };
+  cancelBtn.onclick = close;
+  modal.classList.remove('hidden');
+}
+const pmResetBtn = document.getElementById('pmResetLevels');
+if (pmResetBtn) pmResetBtn.addEventListener('click', () => {
+  profileMenu.classList.add('hidden');
+  showConfirm(
+    'Remettre tous tes niveaux (Attaque, Défense, Utilitaire) à zéro ? Tes ressources minées sont conservées. Action irréversible.',
+    () => socket.emit('user:reset_levels', {}, () => {}),
+    'Réinitialiser mes niveaux'
+  );
 });
 document.addEventListener('click', (e) => {
   if (profileMenu.classList.contains('hidden')) return;
