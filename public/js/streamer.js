@@ -1290,7 +1290,7 @@ class MainScene extends Phaser.Scene {
     this.bgLayer01 = this.add.image(w / 2, h / 2, 'bg-01')
       .setOrigin(0.5).setScrollFactor(0).setDepth(-100);
     // Voile sombre semi-transparent : attenue la nebuleuse pour que les elements ressortent.
-    this._bgDim = this.add.rectangle(w / 2, h / 2, 8000, 8000, 0x04060a, 0.4).setScrollFactor(0).setDepth(-99);
+    this._bgDim = this.add.rectangle(w / 2, h / 2, 8000, 8000, 0x04060a, 0.6).setScrollFactor(0).setDepth(-99);
     // (Planete parallax retiree : elle faisait tache sur le fond.)
     this.updateParallaxBackground();
   }
