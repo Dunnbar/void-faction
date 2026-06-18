@@ -830,9 +830,10 @@ document.addEventListener('click', (e) => {
 
 const SHIP_ASSET = '/assets/PNG/Ship_01/Ship_LVL_1.png';
 const SHIP_SCALE = 0.035; // vaisseau Amiral discret, ne masque pas la base
-const ENEMY_LEVELS = [1];
+const ENEMY_LEVELS = [1, 2];
 const ENEMY_ASSETS = {
-  1: '/assets/PNG/Ship_02/Ship_LVL_1.png'
+  1: '/assets/PNG/Ship_02/Ship_LVL_1.png',
+  2: '/assets/PNG/Ship_02/Ship_LVL_2.png'  // 2e vaisseau : utilise pour le boss des vagues dures
 };
 const ENEMY_SCALE = 0.045;
 
@@ -1760,8 +1761,8 @@ class MainScene extends Phaser.Scene {
 
   // Fabrique d'un sprite ennemi (l'etat/mouvement vient du serveur, via SharedScene.reconcileEnemies).
   createEnemySprite(e) {
-    const level = 1;
     const boss = !!e.boss;
+    const level = boss ? 2 : 1; // le boss (gros vaisseau, vague dure) utilise le 2e vaisseau
     const sprite = this.add.sprite(e.x, e.y, `enemy${level}-fr-000`)
       .setScale(ENEMY_SCALE * (boss ? 2.6 : 1)).setOrigin(0.5, 0.36).setDepth(boss ? 9 : 8);
     sprite.play(`enemy${level}-thrust`);
@@ -1783,8 +1784,8 @@ class MainScene extends Phaser.Scene {
 
   playEnemyExplosion(x, y, level) {
     if (window.SFX) SFX.play(this, 'explosion', x, y);
-    const lvl = 1;
-    const ex = this.add.sprite(x, y, `enemy${lvl}-ex-000`).setScale(ENEMY_SCALE * 2.2).setDepth(9);
+    const lvl = ENEMY_LEVELS.includes(level) ? level : 1;
+    const ex = this.add.sprite(x, y, `enemy${lvl}-ex-000`).setScale(ENEMY_SCALE * (lvl >= 2 ? 5 : 2.2)).setDepth(9);
     ex.play(`enemy${lvl}-explode`);
     ex.once('animationcomplete', () => ex.destroy());
   }
@@ -1864,7 +1865,7 @@ class MainScene extends Phaser.Scene {
     } else {
       if (this._shipWasDead) { this.ship.clearTint(); this._shipWasDead = false; }
     const shipCapacite = (elementStates.get('ship-1')?.capacite) || 0;
-    const MAX_SPEED = 70 + shipCapacite * 12;   // px/s (70 de base + 12 par niveau de capacite) — vaisseau plus lent
+    const MAX_SPEED = 45 + shipCapacite * 8;   // px/s (45 de base + 8 par niveau de capacite) — vaisseau plus lent
     const APPROACH_DECEL = 150;      // px/s² (force de freinage théorique)
     const STIFFNESS = 6;             // raideur du correcteur vitesse
     const STOP_DIST = 4;             // px : on s'arrête net si proche ET lent
