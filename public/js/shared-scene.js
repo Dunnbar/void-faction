@@ -637,6 +637,7 @@
         bolt.destroy();
         const flash = scene.add.circle(to.x, to.y, 7, 0xffffff, 0.95).setDepth(12);
         scene.tweens.add({ targets: flash, scale: 2.6, alpha: 0, duration: 220, ease: 'Quad.easeOut', onComplete: () => flash.destroy() });
+        if (window.SFX) SFX.play(scene, 'impact', to.x, to.y); // son de degats (10 sons aleatoires) a l'impact
       }
     });
   }

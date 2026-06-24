@@ -1098,8 +1098,7 @@ function connectSocket() {
   socket.on('combat:tracer', (t) => {
     const scene = game.scene.getScene('main');
     if (!scene || !scene.scene.isActive() || !t) return;
-    SharedScene.drawTracer(scene, t.from, t.to, t.kind);
-    if (window.SFX) SFX.play(scene, t.kind === 'enemy' ? 'shot-enemy' : t.kind === 'ship' ? 'shot-ship' : 'shot-turret', t.from.x, t.from.y);
+    SharedScene.drawTracer(scene, t.from, t.to, t.kind); // le son de degats est joue a l'impact (drawTracer)
     if (t.kind === 'turret' && t.turretId && scene.elementSprites) {
       const sp = scene.elementSprites.get(t.turretId);
       const st = elementStates.get(t.turretId);
@@ -1563,7 +1562,13 @@ class MainScene extends Phaser.Scene {
     this.updateTurretAim(delta);   // les tourelles suivent l'ennemi vise
     SharedScene.spinBase(this, delta); // la base tourne lentement (s'arrete sans essence)
     SharedScene.updateWaveEdgeIndicator(this); // "!" de provenance de la vague colle au bord
-    if (window.SFX) SFX.updateAmbience(this, this.enemyById ? this.enemyById.size : 0);
+    if (window.SFX) {
+      SFX.updateAmbience(this, this.enemyById ? this.enemyById.size : 0);
+      // Bruits de fond de PV faibles (base 50/25%, vaisseau 25%).
+      const bs = elementStates.get(this.baseElementId || 'base-1');
+      const ss = elementStates.get('ship-1');
+      SFX.updateHpAmbience(bs && bs.hpMax ? bs.hp / bs.hpMax : null, ss && ss.hpMax ? ss.hp / ss.hpMax : null);
+    }
     // Le viewer suit la case du streameur, toujours centree (comme le streameur sur la sienne).
     if (this.ship) SharedScene.updateCaseCamera(this, this.ship.x, this.ship.y);
     if (this._minimap) SharedScene.drawMinimap(this._minimap, this, this.ship ? this.ship.x : null, this.ship ? this.ship.y : null);

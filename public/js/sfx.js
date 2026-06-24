@@ -42,8 +42,8 @@
     applyMusicVolume();
   }
 
-  // Musique de fond : boucle d'ambiance, demarree au 1er geste utilisateur (autoplay bloque sinon).
-  const MUSIC_SRC = '/assets/sounds/Sci Fi Weapons/Bonus Dystopia Ambience and Drone/AMBIENCE_SPACECRAFT_INTERIOR_LOOP.wav';
+  // Musique/bruit de fond CONSTANT : "Hyper Vitesse", boucle demarree au 1er geste utilisateur.
+  const MUSIC_SRC = '/assets/sounds/v2/ambiance-loop.wav';
   let musicEl = null;
   function ensureMusicEl() {
     if (musicEl || typeof Audio === 'undefined') return musicEl;
@@ -59,7 +59,7 @@
   }
 
   // Echantillons de test (joues directement, hors moteur Phaser, pour marcher sur les 2 pages).
-  const FX_TEST_SRC       = '/assets/sounds/Sci Fi Weapons/Weapons/Classic Laser Gun A/LASRGun_Classic Laser Gun A Fire_01.wav';
+  const FX_TEST_SRC       = '/assets/sounds/v2/damage-1.wav';
   const ANNOUNCE_TEST_SRC = '/assets/sounds/vague_normale.mp3';
   function testChannel(ch) {
     if (isMuted()) return;
@@ -117,16 +117,15 @@
   // maxVoices : nb max d'instances simultanees | pitch : variation aleatoire (+/-)
   // src peut etre une chaine OU un tableau (variation : un echantillon tire au hasard).
   const FX = '/assets/sounds/fx/';
-  // Laser du vaisseau du streameur : 6 echantillons "Classic Laser Gun A" tires au hasard.
-  const LASER = '/assets/sounds/Sci Fi Weapons/Weapons/Classic Laser Gun A/LASRGun_Classic Laser Gun A Fire_';
-  const SHIP_LASERS = ['01', '02', '03', '04', '05', '06'].map(n => LASER + n + '.wav');
+  // Sons de degats (impacts) : 10 echantillons tires au hasard a chaque tir qui touche.
+  const DAMAGE_HITS = Array.from({ length: 10 }, (_, i) => `/assets/sounds/v2/damage-${i + 1}.wav`);
   const MANIFEST = {
-    'shot-ship':   { src: SHIP_LASERS, volume: 0.50, throttleMs: 55,  maxVoices: 4, pitch: 0.07 },
+    'shot-ship':   { src: '', volume: 0.50, throttleMs: 55,  maxVoices: 4, pitch: 0.07 }, // tirs coupes
     'shot-turret': { src: '', volume: 0.45, throttleMs: 70,  maxVoices: 4, pitch: 0.08 }, // coupe
     'shot-enemy':  { src: '', volume: 0.40, throttleMs: 80,  maxVoices: 4, pitch: 0.09 }, // coupe
-    'impact':      { src: '', volume: 0.50, throttleMs: 45,  maxVoices: 5, pitch: 0.12 }, // pas encore choisi
+    'impact':      { src: DAMAGE_HITS, volume: 0.55, throttleMs: 45, maxVoices: 6, pitch: 0.12 }, // degats (10 sons aleatoires)
     'explosion':   { src: '', volume: 0.70, throttleMs: 120, maxVoices: 3, pitch: 0.10 }, // pas encore choisi
-    'ambience':    { src: '', volume: 0.60, loop: true },   // boucle de bataille (vue dezoomee)
+    'ambience':    { src: '', volume: 0.60, loop: true },   // (ancienne boucle de bataille : coupee)
     // Evenements ponctuels (joues NON-spatiaux -> toujours audibles).
     'turret-reactivate':     { src: FX + 'turret_reactivate.wav',     volume: 0.6,  throttleMs: 200, maxVoices: 2, pitch: 0.05 },
     'action-select':         { src: FX + 'action_select.wav',         volume: 0.5,  throttleMs: 90,  maxVoices: 2, pitch: 0.05 },
@@ -228,5 +227,35 @@
     ambienceSnd.setVolume(cur + (target - cur) * 0.05); // fondu doux
   }
 
-  window.SFX = { preload, play, updateAmbience, MANIFEST, getVol, setVol, setMuted, isMuted, startMusic, testChannel, initSoundMenu };
+  // ===== Bruits de fond declenches par seuil de PV (base / vaisseau) =====
+  // Boucles HTML Audio (non spatiales) qui s'activent quand les PV passent sous un seuil.
+  // base : < 50% -> drone 50% ; < 25% -> drone 25% (plus urgent). vaisseau : < 25% -> drone 25%.
+  const HP_AMBIENCE = {
+    base50: { src: '/assets/sounds/v2/base-hp-50.wav', vol: 0.55, el: null },
+    base25: { src: '/assets/sounds/v2/base-hp-25.wav', vol: 0.65, el: null },
+    ship25: { src: '/assets/sounds/v2/ship-hp-25.wav', vol: 0.6,  el: null }
+  };
+  function ensureLoopEl(o) {
+    if (o.el || typeof Audio === 'undefined') return o.el;
+    try { o.el = new Audio(o.src); o.el.loop = true; o.el.preload = 'auto'; o.el.volume = 0; } catch (e) {}
+    return o.el;
+  }
+  function setLoopActive(o, active) {
+    const el = ensureLoopEl(o);
+    if (!el) return;
+    const target = (active && !isMuted()) ? o.vol * getVol('fx') : 0;
+    el.volume = target;
+    if (target > 0) { if (el.paused) el.play().catch(() => {}); }
+    else if (!el.paused) { try { el.pause(); el.currentTime = 0; } catch (e) {} }
+  }
+  // A appeler regulierement (chaque frame) avec les ratios de PV 0-1 (null si inconnu/non affiche).
+  function updateHpAmbience(basePct, shipPct) {
+    const b = (typeof basePct === 'number' && isFinite(basePct)) ? basePct : null;
+    const s = (typeof shipPct === 'number' && isFinite(shipPct)) ? shipPct : null;
+    setLoopActive(HP_AMBIENCE.base50, b != null && b < 0.50 && b >= 0.25);
+    setLoopActive(HP_AMBIENCE.base25, b != null && b < 0.25);
+    setLoopActive(HP_AMBIENCE.ship25, s != null && s < 0.25);
+  }
+
+  window.SFX = { preload, play, updateAmbience, updateHpAmbience, MANIFEST, getVol, setVol, setMuted, isMuted, startMusic, testChannel, initSoundMenu };
 })();
