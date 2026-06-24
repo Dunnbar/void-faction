@@ -1781,10 +1781,12 @@ class MainScene extends Phaser.Scene {
     return sprite;
   }
 
-  playEnemyExplosion(x, y, level) {
+  playEnemyExplosion(x, y, level, rotation, boss) {
     if (window.SFX) SFX.play(this, 'explosion', x, y);
     const lvl = ENEMY_LEVELS.includes(level) ? level : 1;
-    const ex = this.add.sprite(x, y, `enemy${lvl}-ex-000`).setScale(ENEMY_SCALE * (lvl >= 2 ? 5 : 2.2)).setDepth(9);
+    // Explosion proportionnelle au vaisseau (plus de "bloom" geant) + orientee comme lui (pas de snap vers le haut).
+    const ex = this.add.sprite(x, y, `enemy${lvl}-ex-000`).setScale(ENEMY_SCALE * (boss ? 2.8 : 1.4)).setDepth(9);
+    if (typeof rotation === 'number') ex.setRotation(rotation);
     ex.play(`enemy${lvl}-explode`);
     ex.once('animationcomplete', () => ex.destroy());
   }

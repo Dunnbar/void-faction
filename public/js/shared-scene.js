@@ -575,7 +575,7 @@
     const sp = scene.enemyById.get(id);
     if (!sp) return;
     scene.enemyById.delete(id);
-    if (explode && typeof scene.playEnemyExplosion === 'function') scene.playEnemyExplosion(sp.x, sp.y, sp._level || 1);
+    if (explode && typeof scene.playEnemyExplosion === 'function') scene.playEnemyExplosion(sp.x, sp.y, sp._level || 1, sp.rotation, !!sp._boss);
     if (sp._hpBar) { try { sp._hpBar.destroy(); } catch (e) {} }
     if (scene.lockedEnemy === sp && typeof scene.clearLock === 'function') scene.clearLock();
     try { sp.destroy(); } catch (e) {}
