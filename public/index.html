@@ -294,33 +294,22 @@
     .bar.DEFENSIF   .head .name, .bar.DEFENSIF   .head .icon  { color: var(--c-defensif); }
     .bar.UTILITAIRE .head .name, .bar.UTILITAIRE .head .icon  { color: var(--c-utilitaire); }
 
-    /* Bouton profil / connexion (image asset, top-right) */
-    .auth-image-btn {
-      position: fixed; top: 14px; right: 14px; z-index: 20;
-      width: 130px; height: 132px; padding: 0; border: 0;
-      background: url('/assets/PNG/User%20interfaces/landing%20Screen/guest%20btn.png') no-repeat center;
-      background-size: contain;
-      cursor: pointer;
-      display: flex; align-items: flex-end; justify-content: center;
-      filter: drop-shadow(0 0 6px rgba(74, 175, 255, 0.5));
-      transition: transform 0.05s ease;
+    /* Bouton profil / connexion (style coherent avec la page amiral, top-right) */
+    #authBtn {
+      position: fixed; top: 12px; right: 12px; z-index: 20;
+      background: rgba(0, 20, 40, 0.92); border: 1px solid var(--c-frame); color: #cfe3ff;
+      border-radius: 6px; padding: 8px 14px; font-family: 'Consolas', monospace;
+      font-weight: bold; letter-spacing: 1px; cursor: pointer;
+      box-shadow: 0 0 12px rgba(74, 175, 255, 0.3);
     }
-    .auth-image-btn:hover { filter: drop-shadow(0 0 10px rgba(74, 175, 255, 0.8)); }
-    .auth-image-btn:active,
-    .auth-image-btn.pressed {
-      background-image: url('/assets/PNG/User%20interfaces/landing%20Screen/guest%20btn%20pressed.png');
-      transform: translateY(1px);
-    }
-    .auth-image-btn .auth-label {
-      font-family: 'Consolas', monospace; font-size: 12px; font-weight: bold;
-      color: #fff; text-shadow: 0 1px 2px rgba(0,0,0,0.9);
-      padding-bottom: 14px; pointer-events: none;
-      max-width: 110px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    #authBtn:hover { background: rgba(74, 175, 255, 0.15); }
+    #authBtn .auth-label {
+      pointer-events: none; max-width: 130px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom;
     }
 
     /* Menu profil (deroulant sous le bouton, haut-droite) */
     #profileMenu {
-      position: fixed; top: 150px; right: 14px; z-index: 60; width: 250px;
+      position: fixed; top: 52px; right: 12px; z-index: 60; width: 250px;
       background: rgba(6, 16, 30, 0.97); border: 1px solid var(--c-frame); border-radius: 8px;
       padding: 14px 16px; font-family: 'Consolas', monospace;
       box-shadow: 0 0 24px rgba(74, 175, 255, 0.35);
@@ -422,7 +411,7 @@
     .pm-xp { display: flex; flex-direction: column; gap: 9px; margin: 6px 0 2px; }
     /* Panneau XP toujours visible sous le bouton profil (haut-droite) */
     #xpPanel {
-      position: fixed; top: 150px; right: 16px; z-index: 19; width: 150px; margin: 0;
+      position: fixed; top: 56px; right: 16px; z-index: 19; width: 150px; margin: 0;
       background: rgba(8, 16, 28, 0.72); border: 1px solid #2a3b52; border-radius: 8px;
       padding: 8px 10px; box-shadow: 0 4px 16px rgba(0,0,0,0.4);
     }
@@ -442,25 +431,19 @@
     .xpbar.UTILITAIRE .xp-fill { background: var(--c-utilitaire); }
 
     /* Bouton son (image asset, a gauche du bouton profil) */
-    .sound-btn {
-      position: fixed; top: 22px; right: 158px; z-index: 20;
-      width: 70px; height: 70px; padding: 0; border: 0;
-      background: url('/assets/PNG/User%20interfaces/game%20play%20area%20Ui/sound%20on.png') no-repeat center;
-      background-size: contain;
-      cursor: pointer;
-      filter: drop-shadow(0 0 6px rgba(74, 175, 255, 0.5));
-      transition: transform 0.05s ease;
+    /* Bouton son (identique a la page amiral, a gauche du bouton profil) */
+    #soundBtn {
+      position: fixed; top: 12px; right: 116px; z-index: 20;
+      background: rgba(0, 20, 40, 0.92); border: 1px solid #3aa; color: #8fe;
+      border-radius: 6px; padding: 8px 12px; font-size: 15px; line-height: 1; cursor: pointer;
+      box-shadow: 0 0 12px rgba(40, 200, 160, 0.25);
     }
-    .sound-btn:hover { filter: drop-shadow(0 0 10px rgba(74, 175, 255, 0.8)); }
-    .sound-btn:active { transform: translateY(1px); }
-    .sound-btn.sound-on { background-image: url('/assets/PNG/User%20interfaces/game%20play%20area%20Ui/sound%20on.png'); }
-    .sound-btn.sound-on:active { background-image: url('/assets/PNG/User%20interfaces/game%20play%20area%20Ui/sound%20on%20pressed.png'); }
-    .sound-btn.sound-off { background-image: url('/assets/PNG/User%20interfaces/game%20play%20area%20Ui/sound%20off%20.png'); }
-    .sound-btn.sound-off:active { background-image: url('/assets/PNG/User%20interfaces/game%20play%20area%20Ui/sound%20off%20pressed.png'); }
+    #soundBtn:hover { background: rgba(40, 200, 160, 0.15); }
+    #soundBtn.sound-off { border-color: #c55; color: #f99; box-shadow: none; opacity: 0.85; }
 
     /* Menu de reglages du son (musique / annonces / fx) */
     #soundMenu {
-      position: fixed; top: 92px; right: 100px; z-index: 60;
+      position: fixed; top: 52px; right: 12px; z-index: 60;
       width: 250px; padding: 14px 16px;
       background: rgba(12, 20, 32, 0.97); border: 1px solid #2a3b52; border-radius: 10px;
       box-shadow: 0 10px 30px rgba(0,0,0,0.55); color: #cdd9e6;
@@ -867,7 +850,7 @@
 
 
   <!-- Bouton son (a gauche du bouton profil) : ouvre le menu de reglages -->
-  <button id="soundBtn" class="sound-btn sound-on" type="button" title="Réglages du son"></button>
+  <button id="soundBtn" class="sound-on" type="button" title="Réglages du son">🔊</button>
   <div id="soundMenu" class="hidden">
     <div class="sm-title">Réglages du son</div>
     <label class="sm-mute"><input type="checkbox" id="soundMute"> Couper tout le son</label>
@@ -877,9 +860,7 @@
   </div>
 
   <!-- Bouton profil / connexion (top-right) -->
-  <button id="authBtn" class="auth-image-btn" type="button" title="Profil">
-    <span class="auth-label" id="authBtnLabel">Connexion</span>
-  </button>
+  <button id="authBtn" type="button" title="Profil">⚙ <span class="auth-label" id="authBtnLabel">Connexion</span></button>
   <!-- Barres d'XP TOUJOURS visibles, sous le bouton profil -->
   <div id="xpPanel" class="pm-xp">
     <div class="xpbar PUISSANCE">
