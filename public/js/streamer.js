@@ -1872,7 +1872,7 @@ class MainScene extends Phaser.Scene {
     } else {
       if (this._shipWasDead) { this.ship.clearTint(); this._shipWasDead = false; }
     const shipCapacite = (elementStates.get('ship-1')?.capacite) || 0;
-    const MAX_SPEED = 45 + shipCapacite * 8;   // px/s (45 de base + 8 par niveau de capacite) — vaisseau plus lent
+    const MAX_SPEED = 11 + shipCapacite * 2;   // px/s (vitesse divisee par 4 — vaisseau tres lent)
     const APPROACH_DECEL = 150;      // px/s² (force de freinage théorique)
     const STIFFNESS = 6;             // raideur du correcteur vitesse
     const STOP_DIST = 4;             // px : on s'arrête net si proche ET lent
@@ -1923,8 +1923,8 @@ class MainScene extends Phaser.Scene {
     // Orientation : vers la cible verrouillee si présente, sinon dans le SENS DU DEPLACEMENT.
     const maxStep = 9 * ((delta || 16) / 1000);
     if (this.lockedEnemy && this.lockedEnemy.active) {
-      const targetRot = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.lockedEnemy.x, this.lockedEnemy.y) + SHIP_SPRITE_OFFSET;
-      this.ship.rotation = Phaser.Math.Angle.RotateTo(this.ship.rotation, targetRot, maxStep);
+      // Cible verrouillee : la tete du vaisseau reste pointee sur l'ennemi, MEME en deplacement (snap direct).
+      this.ship.rotation = Phaser.Math.Angle.Between(this.ship.x, this.ship.y, this.lockedEnemy.x, this.lockedEnemy.y) + SHIP_SPRITE_OFFSET;
       if (this.lockReticle) { this.lockReticle.x = this.lockedEnemy.x; this.lockReticle.y = this.lockedEnemy.y; }
     } else {
       const v = this.ship.body && this.ship.body.velocity;

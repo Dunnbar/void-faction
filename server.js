@@ -51,7 +51,7 @@ const WAVE_CHECK_INTERVAL_MS = 60 * 1000;
 const WAVE_PROBABILITY = 0.35;
 const WAVE_WARNING_MS = 40 * 60 * 1000;  // 40 min de preavis avant l'arrivee des ennemis
 const COMBAT_WINDOW_MS = 15 * 60 * 1000; // delai avant la 1re verif de resolution (hors-ligne) ; PAS de deadline en ligne
-const ENEMY_SPEED = 40;
+const ENEMY_SPEED = 10;  // px/s (vitesse divisee par 4)
 const ENEMY_MIN = 3;
 const ENEMY_MAX = 6;
 const ENEMY_LEVELS_AVAILABLE = [1];
@@ -1243,7 +1243,7 @@ io.on('connection', (socket) => {
   }
   // Le visiteur anonyme rejoint la room de l'Amiral observé pour voir les events en live
   // (sauf demo runtime qui n'a pas de room dédiée)
-  if (rtForInit && rtForInit.id !== 0 && !socket.data.amiralId && !socket.data.userAmiralId) {
+  if (rtForInit && (rtForInit.id !== 0 || process.env.DEMO_WAR === '1') && !socket.data.amiralId && !socket.data.userAmiralId) {
     socket.join(amiralRoom(rtForInit.id));
   }
   // Base actuellement observee : sert de cible pour le chat communautaire.
