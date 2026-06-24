@@ -396,6 +396,10 @@ db.exec(`
     db.exec("ALTER TABLE amirals ADD COLUMN res_materiaux INTEGER NOT NULL DEFAULT 0");
     db.exec("ALTER TABLE amirals ADD COLUMN res_radius INTEGER NOT NULL DEFAULT 0");
   }
+  // Lien du stream de l'amiral (affiche aux viewers dans leur menu profil).
+  if (!cols.find(c => c.name === 'stream_url')) {
+    db.exec("ALTER TABLE amirals ADD COLUMN stream_url TEXT");
+  }
 }
 // XP par categorie (niveaux viewer) sur user_progress
 {
@@ -419,8 +423,9 @@ const stmtSetState           = db.prepare('UPDATE state SET value = ? WHERE key 
 
 const stmtInsertAmiral       = db.prepare('INSERT INTO amirals (username, password_hash, created_at, grid_x, grid_y) VALUES (?, ?, ?, ?, ?)');
 const stmtGetAmiralByName    = db.prepare('SELECT id, username, password_hash, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at FROM amirals WHERE username = ?');
-const stmtGetAmiralById      = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at, res_materiaux, res_radius FROM amirals WHERE id = ?');
-const stmtAllAmirals         = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at, res_materiaux, res_radius FROM amirals');
+const stmtGetAmiralById      = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at, res_materiaux, res_radius, stream_url FROM amirals WHERE id = ?');
+const stmtAllAmirals         = db.prepare('SELECT id, username, grid_x, grid_y, ship_x, ship_y, ship_rot, base_born_at, res_materiaux, res_radius, stream_url FROM amirals');
+const stmtSetAmiralStream    = db.prepare('UPDATE amirals SET stream_url = ? WHERE id = ?');
 const stmtSetAmiralShip      = db.prepare('UPDATE amirals SET ship_x = ?, ship_y = ?, ship_rot = ? WHERE id = ?');
 const stmtSetAmiralBornAt    = db.prepare('UPDATE amirals SET base_born_at = ? WHERE id = ?');
 const stmtSetAmiralResources = db.prepare('UPDATE amirals SET res_materiaux = ?, res_radius = ? WHERE id = ?');
@@ -567,6 +572,19 @@ function amiralFromToken(token) {
 // Map<amiral_id, AmiralRuntime>
 const amiralsRuntime = new Map();
 
+// Valide/normalise un lien de stream. Renvoie '' (efface), une URL http(s) sure, ou null (invalide).
+function sanitizeStreamUrl(raw) {
+  let u = String(raw || '').trim();
+  if (!u) return '';
+  if (u.length > 300) u = u.slice(0, 300);
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u; // tolere "twitch.tv/xxx"
+  try {
+    const p = new URL(u);
+    if (p.protocol !== 'http:' && p.protocol !== 'https:') return null;
+    return p.href;
+  } catch (e) { return null; }
+}
+
 function getOrCreateAmiralRuntime(amiral) {
   let rt = amiralsRuntime.get(amiral.id);
   if (rt) return rt;
@@ -578,6 +596,7 @@ function getOrCreateAmiralRuntime(amiral) {
     username: amiral.username,
     gridX: amiral.grid_x,
     gridY: amiral.grid_y,
+    streamUrl: amiral.stream_url || '', // lien du stream affiche aux viewers
     socketId: null,
     online: false,
     baseDead: false,
@@ -1243,7 +1262,7 @@ io.on('connection', (socket) => {
   }
   // Le visiteur anonyme rejoint la room de l'Amiral observé pour voir les events en live
   // (sauf demo runtime qui n'a pas de room dédiée)
-  if (rtForInit && (rtForInit.id !== 0 || process.env.DEMO_WAR === '1') && !socket.data.amiralId && !socket.data.userAmiralId) {
+  if (rtForInit && rtForInit.id !== 0 && !socket.data.amiralId && !socket.data.userAmiralId) {
     socket.join(amiralRoom(rtForInit.id));
   }
   // Base actuellement observee : sert de cible pour le chat communautaire.
@@ -1253,8 +1272,8 @@ io.on('connection', (socket) => {
     resource: getResource(),
     ship: rtForInit ? rtForInit.ship : null,
     user: socket.data.userId ? { username: socket.data.username } : null,
-    amiral: socket.data.amiralId ? { username: socket.data.amiralUsername, gridX: rtForInit?.gridX, gridY: rtForInit?.gridY, isOwn: true } : null,
-    watchedAmiral: rtForInit && rtForInit.username ? { username: rtForInit.username, gridX: rtForInit.gridX, gridY: rtForInit.gridY, online: !!rtForInit.online } : null,
+    amiral: socket.data.amiralId ? { username: socket.data.amiralUsername, gridX: rtForInit?.gridX, gridY: rtForInit?.gridY, isOwn: true, streamUrl: rtForInit?.streamUrl || '' } : null,
+    watchedAmiral: rtForInit && rtForInit.username ? { username: rtForInit.username, gridX: rtForInit.gridX, gridY: rtForInit.gridY, online: !!rtForInit.online, streamUrl: rtForInit.streamUrl || '' } : null,
     history: rtForInit ? recentHistoryForAmiral(rtForInit.id) : [],
     journal: rtForInit ? recentJournalForAmiral(rtForInit.id) : [],
     chat: rtForInit && rtForInit.id !== 0 ? recentChatForAmiral(rtForInit.id) : [],
@@ -1490,6 +1509,20 @@ io.on('connection', (socket) => {
     pushAmiralDashboard(amiralId);
     console.log(`[amiral ${socket.data.amiralUsername}] reset niveaux : ${target.username || ('#' + targetUserId)}`);
     reply({ ok: true });
+  });
+
+  // L'amiral definit le lien vers son stream (affiche aux viewers). '' efface le lien.
+  socket.on('amiral:set_stream', (data, cb) => {
+    const reply = (p) => { if (typeof cb === 'function') cb(p); };
+    if (!socket.data.amiralId) return reply({ ok: false, error: 'auth' });
+    const url = sanitizeStreamUrl(data && data.url);
+    if (url === null) return reply({ ok: false, error: 'lien invalide' });
+    const rt = amiralsRuntime.get(socket.data.amiralId);
+    try { stmtSetAmiralStream.run(url, socket.data.amiralId); } catch (e) {}
+    if (rt) rt.streamUrl = url;
+    io.to(amiralRoom(socket.data.amiralId)).emit('stream:url', { url }); // viewers mis a jour en direct
+    console.log(`[amiral ${socket.data.amiralUsername}] lien stream = ${url || '(vide)'}`);
+    reply({ ok: true, url });
   });
 
   // Le joueur peut reinitialiser SES PROPRES niveaux (XP + niveaux a zero). Confirmation cote client.

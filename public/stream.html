@@ -244,6 +244,12 @@
     #profileMenu .dash-act.unban { border-color: #3b7a4f; color: #9deeb4; }
     #profileMenu .dash-act.reset { border-color: #7a6a3b; color: #ffe08a; }
     #profileMenu .dash-empty { font-size: 11px; color: #6e8197; font-style: italic; }
+    #profileMenu .pm-stream { display: flex; gap: 6px; }
+    #profileMenu .pm-stream input { flex: 1; min-width: 0; background: #0c1320; border: 1px solid #2c3a52; border-radius: 4px; color: #cdd9e6; font-size: 12px; padding: 5px 7px; }
+    #profileMenu .pm-stream input:focus { outline: none; border-color: var(--c-frame); }
+    #profileMenu .pm-stream button { background: #1b2436; border: 1px solid #45506a; border-radius: 4px; color: #cdd9e6; font-size: 12px; padding: 0 12px; cursor: pointer; }
+    #profileMenu .pm-stream button:hover { background: #26334d; }
+    #profileMenu .pm-stream-note { font-size: 10px; color: #6e8197; margin-top: 4px; }
     #profileMenu .pm-logout {
       margin-top: 6px; background: transparent; border: 1px solid #f55; color: #f88;
       border-radius: 5px; padding: 7px; font-family: inherit; font-size: 12px; cursor: pointer; letter-spacing: 1px;
@@ -505,6 +511,12 @@
     <div class="pm-name" id="pmName">AMIRAL</div>
     <div class="pm-title">Viewers — <span id="dashConnected">0</span> en ligne / <span id="dashTotal">0</span> inscrits</div>
     <div class="pm-dash" id="dashList"><span class="dash-empty">Aucun viewer inscrit.</span></div>
+    <div class="pm-title">Lien du stream</div>
+    <div class="pm-stream">
+      <input id="streamUrlInput" type="text" placeholder="https://twitch.tv/ton_pseudo" autocomplete="off" spellcheck="false">
+      <button id="streamUrlSave" type="button">OK</button>
+    </div>
+    <div class="pm-stream-note" id="streamUrlNote">Visible par tes viewers dans leur menu profil.</div>
     <div class="pm-title">Commandes</div>
     <div class="pm-cmd">Clic droit — déplacer le vaisseau<br>Clic — agir sur un élément<br>Molette — zoom &nbsp;|&nbsp; Glisser — déplacer la vue</div>
     <button class="pm-logout" id="pmLogout" type="button">Déconnexion</button>

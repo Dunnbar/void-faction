@@ -123,6 +123,22 @@ document.getElementById('pmLogout').addEventListener('click', () => {
 document.getElementById('bdRestart')?.addEventListener('click', () => {
   if (socket) socket.emit('streamer:rebirth');
 });
+// Enregistre le lien du stream (affiche aux viewers).
+{
+  const saveBtn = document.getElementById('streamUrlSave');
+  const input = document.getElementById('streamUrlInput');
+  const note = document.getElementById('streamUrlNote');
+  const save = () => {
+    if (!socket || !input) return;
+    socket.emit('amiral:set_stream', { url: input.value }, (res) => {
+      if (!note) return;
+      if (res && res.ok) { input.value = res.url || ''; note.textContent = res.url ? 'Lien enregistré ✓' : 'Lien retiré.'; note.style.color = '#9deeb4'; }
+      else { note.textContent = (res && res.error) || 'Erreur'; note.style.color = '#ff9d9d'; }
+    });
+  };
+  if (saveBtn) saveBtn.addEventListener('click', save);
+  if (input) input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); save(); } });
+}
 
 function connectAmiralSocket() {
   if (socket) try { socket.disconnect(); } catch {}
@@ -541,6 +557,7 @@ function wireSocketEvents() {
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
     { const a = document.getElementById('profileBtnName'); if (a) a.textContent = amiralDisplayName; }
     { const a = document.getElementById('pmName'); if (a) a.textContent = amiralDisplayName; }
+    { const si = document.getElementById('streamUrlInput'); if (si) si.value = data.amiral?.streamUrl || ''; }
     const sceneForLabel = game?.scene.getScene('main');
     if (sceneForLabel && sceneForLabel.shipLabel) sceneForLabel.shipLabel.setText(amiralDisplayName);
     if (data.world) {

@@ -360,6 +360,15 @@ function formatWaveCountdown(ms) {
   return `${s}s`;
 }
 
+// Lien vers le stream de l'amiral observe (menu profil). Securise : http(s) uniquement.
+function setStreamLink(url) {
+  const a = document.getElementById('streamLink');
+  if (!a) return;
+  const safe = (typeof url === 'string' && /^https?:\/\//i.test(url)) ? url : '';
+  if (safe) { a.href = safe; a.classList.remove('hidden'); }
+  else { a.removeAttribute('href'); a.classList.add('hidden'); }
+}
+
 function renderFactionResources() {
   const m = document.getElementById('factionMateriaux');
   const r = document.getElementById('factionRadius');
@@ -1055,6 +1064,7 @@ function connectSocket() {
     setChatBlock(data.chatBlocked || null);
     amiralDisplayName = data.watchedAmiral?.username || data.amiral?.username || 'AMIRAL';
     amiralIsOnline = data.watchedAmiral?.online !== false;
+    setStreamLink(data.watchedAmiral?.streamUrl || data.amiral?.streamUrl || '');
     if (data.ship) latestShipState = data.ship; // memorise pour l'appliquer au (re)demarrage de la scene
     // Vague en cours memorisee : appliquee ici si la scene est prete, sinon dans create().
     pendingWave = data.currentWave || null;
@@ -1075,6 +1085,8 @@ function connectSocket() {
   });
 
   socket.on('resource', (data) => { if (resourceEl) resourceEl.textContent = data.resource; });
+  // Lien du stream mis a jour en direct par l'amiral.
+  socket.on('stream:url', (d) => setStreamLink(d && d.url));
   // Ressources PERSONNELLES : chaque joueur recoit SON propre solde (ce qu'il a mine / depense).
   socket.on('resources:self', (data) => {
     factionResources = { materiaux: data.materiaux || 0, radius: data.radius || 0 };

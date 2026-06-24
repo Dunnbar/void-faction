@@ -358,6 +358,9 @@
     #profileMenu .pm-action.reset { border-color: #7a6a3b; color: #ffe08a; }
     #profileMenu .pm-action.reset:hover { background: #ffe08a; color: #04101e; }
     #profileMenu .pm-action.reset.hidden { display: none; }
+    #profileMenu .pm-action.stream { display: block; text-align: center; text-decoration: none; border-color: #7a3b6a; color: #e89dff; }
+    #profileMenu .pm-action.stream:hover { background: #e89dff; color: #04101e; }
+    #profileMenu .pm-action.stream.hidden { display: none; }
     /* Modal de confirmation generique */
     #confirmModal { position: fixed; inset: 0; z-index: 1200; display: flex; align-items: center; justify-content: center; background: rgba(2,6,14,0.72); }
     #confirmModal.hidden { display: none; }
@@ -894,6 +897,7 @@
   </div>
   <div id="profileMenu" class="hidden">
     <div class="pm-name" id="userLine"><span id="userLabel">Visiteur</span></div>
+    <a id="streamLink" class="pm-action stream hidden" target="_blank" rel="noopener noreferrer">▶ Voir le stream</a>
     <div class="pm-levels-hint" id="pmLevelsHint">Gagne de l'XP en agissant : Attaque en combat, Défense/Utilitaire avec le temps.</div>
     <button class="pm-action reset hidden" id="pmResetLevels" type="button">Réinitialiser mes niveaux</button>
     <button class="pm-action" id="pmAuthAction" type="button">Connexion</button>
