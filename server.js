@@ -2501,14 +2501,18 @@ function tickEnemyEngage(rt, combat, en, cx, cy, orbitR, dt, now, mode, targetId
   if (en.phase === 'peel') {
     en.rotation = angleRotateTo(en.rotation, dirAway + en.peelSide * (Math.PI / 4), turn * 1.1);
     moveFwd(step * 1.8);
-    if (distT >= orbitR) { en.phase = 'cruise'; en.lastFireAt = now; en.orbitAngle = bearing; }
+    if (distT >= orbitR) { en.phase = 'cruise'; en.lastFireAt = now; en.orbitAngle = bearing; en.curR = distT; }
     return;
   }
-  // cruise : orbite reguliere avec legere fluctuation du rayon
+  // cruise : orbite reguliere avec legere fluctuation du rayon.
+  // Le rayon est EASE depuis la distance courante vers orbitR : evite de "teleporter" l'ennemi
+  // au loin quand il change de cible (ex. tourelle detruite -> il vise la base, rayon bien plus grand).
   en.orbitAngle += en.orbitSpeed * dt;
-  const r = orbitR + Math.sin(now * 0.0011 + en.wobblePhase) * (orbitR * 0.14);
-  en.x = cx + Math.cos(en.orbitAngle) * r;
-  en.y = cy + Math.sin(en.orbitAngle) * r;
+  const targetR = orbitR + Math.sin(now * 0.0011 + en.wobblePhase) * (orbitR * 0.14);
+  if (en.curR == null) en.curR = distT;
+  en.curR += (targetR - en.curR) * Math.min(1, dt * 2);
+  en.x = cx + Math.cos(en.orbitAngle) * en.curR;
+  en.y = cy + Math.sin(en.orbitAngle) * en.curR;
   const tangent = en.orbitAngle + (en.orbitSpeed > 0 ? Math.PI / 2 : -Math.PI / 2) + Math.PI / 2;
   en.rotation = angleRotateTo(en.rotation, tangent, turn);
   if (now - en.lastFireAt >= COMBAT_ENEMY_FIRE_MS) { en.phase = 'dive'; en.firedThisRun = false; en.peelSide = Math.random() < 0.5 ? 1 : -1; }
@@ -2547,7 +2551,7 @@ function tickEnemyServer(rt, combat, en, defenders, dt, now, day) {
     en.x += (dx / dn) * stp; en.y += (dy / dn) * stp;
     en.rotation = Math.atan2(dy, dx) + Math.PI / 2;
   } else {
-    if (!en.engaging) { en.engaging = true; en.orbitAngle = Math.atan2(en.y - cy, en.x - cx); en.phase = 'cruise'; }
+    if (!en.engaging) { en.engaging = true; en.orbitAngle = Math.atan2(en.y - cy, en.x - cx); en.curR = distToCenter; en.phase = 'cruise'; }
     if (!en.lastFireAt) en.lastFireAt = now - Math.random() * COMBAT_ENEMY_FIRE_MS;
     tickEnemyEngage(rt, combat, en, cx, cy, orbitR, dt, now, mode, targetId, day);
   }
