@@ -294,9 +294,13 @@
     .bar.DEFENSIF   .head .name, .bar.DEFENSIF   .head .icon  { color: var(--c-defensif); }
     .bar.UTILITAIRE .head .name, .bar.UTILITAIRE .head .icon  { color: var(--c-utilitaire); }
 
-    /* Bouton profil / connexion (style coherent avec la page amiral, top-right) */
-    #authBtn {
+    /* Boutons son + profil regroupes en haut-droite (flex => pas de chevauchement) */
+    #topRightBtns {
       position: fixed; top: 12px; right: 12px; z-index: 20;
+      display: flex; align-items: flex-start; gap: 8px;
+    }
+    /* Bouton profil / connexion (style coherent avec la page amiral) */
+    #authBtn {
       background: rgba(0, 20, 40, 0.92); border: 1px solid var(--c-frame); color: #cfe3ff;
       border-radius: 6px; padding: 8px 14px; font-family: 'Consolas', monospace;
       font-weight: bold; letter-spacing: 1px; cursor: pointer;
@@ -433,7 +437,6 @@
     /* Bouton son (image asset, a gauche du bouton profil) */
     /* Bouton son (identique a la page amiral, a gauche du bouton profil) */
     #soundBtn {
-      position: fixed; top: 12px; right: 116px; z-index: 20;
       background: rgba(0, 20, 40, 0.92); border: 1px solid #3aa; color: #8fe;
       border-radius: 6px; padding: 8px 12px; font-size: 15px; line-height: 1; cursor: pointer;
       box-shadow: 0 0 12px rgba(40, 200, 160, 0.25);
@@ -849,8 +852,11 @@
   </div>
 
 
-  <!-- Bouton son (a gauche du bouton profil) : ouvre le menu de reglages -->
-  <button id="soundBtn" class="sound-on" type="button" title="Réglages du son">🔊</button>
+  <!-- Boutons son + profil (top-right, cote a cote ; flex => jamais de chevauchement) -->
+  <div id="topRightBtns">
+    <button id="soundBtn" class="sound-on" type="button" title="Réglages du son">🔊</button>
+    <button id="authBtn" type="button" title="Profil">⚙ <span class="auth-label" id="authBtnLabel">Connexion</span></button>
+  </div>
   <div id="soundMenu" class="hidden">
     <div class="sm-title">Réglages du son</div>
     <label class="sm-mute"><input type="checkbox" id="soundMute"> Couper tout le son</label>
@@ -859,8 +865,6 @@
     <div class="sm-row"><span class="sm-lbl">Effets (FX)</span><input type="range" id="volFx" class="sm-slider" min="0" max="100"><button class="sm-test" data-ch="fx" type="button" title="Tester">▶</button></div>
   </div>
 
-  <!-- Bouton profil / connexion (top-right) -->
-  <button id="authBtn" type="button" title="Profil">⚙ <span class="auth-label" id="authBtnLabel">Connexion</span></button>
   <!-- Barres d'XP TOUJOURS visibles, sous le bouton profil -->
   <div id="xpPanel" class="pm-xp">
     <div class="xpbar PUISSANCE">
